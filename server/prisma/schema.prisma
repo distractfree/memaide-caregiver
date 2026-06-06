@@ -1,0 +1,222 @@
+// This is your Prisma schema file.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Caregiver {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  patients Patient[]
+
+  @@map("caregivers")
+}
+
+model Patient {
+  id          String    @id @default(uuid())
+  caregiverId String
+  name        String
+  phoneNumber String?
+  deviceId    String?   @unique
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  caregiver      Caregiver       @relation(fields: [caregiverId], references: [id], onDelete: Cascade)
+  reminders      Reminder[]
+  reminderEvents ReminderEvent[]
+  helpContacts   HelpContact[]
+  helpEvents     HelpEvent[]
+  beacons        Beacon[]
+  beaconEvents   BeaconEvent[]
+  vitalEvents    VitalEvent[]
+  streamSessions StreamSession[]
+  aiSessions     AiSession[]
+
+  @@map("patients")
+}
+
+model Reminder {
+  id          String   @id @default(cuid())
+  patientId   String
+  type        String
+  description String
+  timeOfDay   String
+  frequency   String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  patient Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  events  ReminderEvent[]
+
+  @@map("reminders")
+}
+
+model ReminderEvent {
+  id             String    @id @default(cuid())
+  reminderId     String
+  patientId      String
+  scheduledAt    DateTime
+  deliveredAt    DateTime?
+  acknowledgedAt DateTime?
+  status         String
+  sourceDevice   String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  reminder Reminder @relation(fields: [reminderId], references: [id], onDelete: Cascade)
+  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("reminder_events")
+}
+
+model HelpContact {
+  id             String   @id @default(cuid())
+  patientId      String
+  whatsappNumber String
+  label          String   @default("Primary caregiver")
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("help_contacts")
+}
+
+model HelpEvent {
+  id             String   @id @default(cuid())
+  patientId      String
+  triggeredAt    DateTime
+  sourceDevice   String
+  whatsappNumber String
+  status         String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  patient        Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  streamSessions StreamSession[]
+  aiSessions     AiSession[]
+
+  @@map("help_events")
+}
+
+model Beacon {
+  id                 String   @id @default(cuid())
+  patientId          String
+  roomName           String
+  beaconUuid         String
+  major              Int?
+  minor              Int?
+  thresholdDistanceM Float    @default(3.0)
+  dwellSeconds       Int      @default(5)
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  patient Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  events  BeaconEvent[]
+
+  @@map("beacons")
+}
+
+model BeaconEvent {
+  id                 String    @id @default(cuid())
+  patientId          String
+  beaconId           String
+  roomName           String
+  detectedAt         DateTime
+  exitedAt           DateTime?
+  dwellSeconds       Int?
+  estimatedDistanceM Float?
+  sourceDevice       String    @default("phone")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  beacon  Beacon  @relation(fields: [beaconId], references: [id], onDelete: Cascade)
+
+  @@map("beacon_events")
+}
+
+model VitalEvent {
+  id           String   @id @default(cuid())
+  patientId    String
+  timestamp    DateTime
+  heartRate    Int?
+  motionState  String?
+  stepCount    Int?
+  sourceDevice String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("vital_events")
+}
+
+model StreamSession {
+  id          String    @id @default(cuid())
+  patientId   String
+  helpEventId String?
+  startedAt   DateTime?
+  endedAt     DateTime?
+  source      String
+  status      String
+  viewerUrl   String?
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  patient   Patient    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  helpEvent HelpEvent? @relation(fields: [helpEventId], references: [id], onDelete: SetNull)
+
+  @@map("stream_sessions")
+}
+
+model AiSession {
+  id                    String    @id @default(cuid())
+  patientId             String
+  helpEventId           String?
+  status                String    @default("active")
+  startedAt             DateTime  @default(now())
+  endedAt               DateTime?
+  caregiverJoinedAt     DateTime?
+  backupSuggestedAt     DateTime?
+  backupNotifiedAt      DateTime?
+  emergencySuggestedAt  DateTime?
+  summary               String?
+  metadata              Json?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  patient   Patient    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  helpEvent HelpEvent? @relation(fields: [helpEventId], references: [id], onDelete: SetNull)
+  messages  AiSessionMessage[]
+
+  @@map("ai_sessions")
+}
+
+model AiSessionMessage {
+  id          String   @id @default(cuid())
+  aiSessionId String
+  senderType  String
+  message     String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  aiSession AiSession @relation(fields: [aiSessionId], references: [id], onDelete: Cascade)
+
+  @@map("ai_session_messages")
+}
+
