@@ -10,11 +10,13 @@ requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.6",
     "openai>=1.40",
-    "anthropic>=0.40",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+# Optional automated eval judge (Claude). Not needed for the default export-only flow.
+judge = ["anthropic>=0.40"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

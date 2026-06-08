@@ -17,7 +17,7 @@ realtime + frame describer + TTS + WebSocket server) is Milestone 2.
 ```bash
 python -m venv .venv
 .venv\Scripts\python -m pip install -e ".[dev]"
-copy .env.example .env   # then fill in OPENAI_API_KEY and ANTHROPIC_API_KEY
+# Then create a .env file in the repo root that sets OPENAI_API_KEY.
 ```
 
 ## Test
@@ -25,10 +25,18 @@ copy .env.example .env   # then fill in OPENAI_API_KEY and ANTHROPIC_API_KEY
 .venv\Scripts\python -m pytest -v
 ```
 
-## Evaluate (needs API keys)
+## Evaluate (needs only OPENAI_API_KEY)
+
+Runs every dataset conversation through the agent and writes transcripts to `eval_out/`
+(JSON + a self-contained markdown that includes the scoring rubric). Paste the markdown
+into a chat to score it against the rubric — no Anthropic key needed.
+
 ```bash
 .venv\Scripts\python -m memaide.eval.run_eval
 ```
+
+Optional automated API judge (Claude): `pip install -e ".[judge]"`, set `ANTHROPIC_API_KEY`,
+then use `memaide.eval.run_case` with `memaide.eval.judge.Judge`.
 
 ## Integration notes for the backend team
 - Construct one `AgentSession` per Help-button session; call `start()` (agent speaks
