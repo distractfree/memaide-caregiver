@@ -5,6 +5,8 @@ patients. This package is text-driven and fully testable; live audio/video (gpt-
 realtime + frame describer + TTS + WebSocket server) is Milestone 2.
 
 ## Layout
+See [docs/architecture.md](docs/architecture.md) for module diagrams and data flow.
+
 - `memaide.schemas` — pydantic data contracts (the backend integration surface).
 - `memaide.agent.brain` — `AgentBrain.respond()` → structured `AgentDecision` (gpt-4o-mini).
 - `memaide.agent.session` — `AgentSession` turn loop → `SessionRecord`.
