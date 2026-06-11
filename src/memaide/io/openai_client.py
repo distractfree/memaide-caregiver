@@ -1,5 +1,3 @@
-"""Thin async wrapper over the OpenAI SDK returning parsed JSON objects."""
-
 import json
 from typing import Any
 

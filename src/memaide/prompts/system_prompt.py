@@ -1,5 +1,3 @@
-"""Build the agent system prompt, including injected patient context."""
-
 from memaide.prompts.few_shot import format_few_shot
 from memaide.schemas import PatientContext
 

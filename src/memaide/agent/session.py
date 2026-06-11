@@ -1,5 +1,3 @@
-"""Session orchestration: opening line, turn loop, transcript, and stop record."""
-
 from datetime import datetime, timezone
 from typing import Any, Callable
 

@@ -1,5 +1,3 @@
-"""Few-shot example exchanges embedded directly into the system prompt."""
-
 import json
 
 FEW_SHOT_EXAMPLES = [

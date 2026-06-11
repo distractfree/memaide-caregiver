@@ -1,5 +1,3 @@
-"""Pydantic data contracts shared across the agent and with the backend."""
-
 from __future__ import annotations
 
 from datetime import datetime, timezone

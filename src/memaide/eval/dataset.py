@@ -1,5 +1,3 @@
-"""Representative patient conversations used to evaluate the agent."""
-
 from pydantic import BaseModel
 
 from memaide.schemas import PatientContext, VisionContext

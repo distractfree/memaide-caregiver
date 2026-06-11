@@ -1,5 +1,3 @@
-"""Evaluate transcripts with Claude Opus as judge."""
-
 import json
 from typing import Any
 
@@ -58,6 +56,7 @@ class AnthropicJSONClient:
         if client is not None:
             self._client = client
         else:
+            # pyrefly: ignore [missing-import]
             from anthropic import AsyncAnthropic
 
             self._client = AsyncAnthropic(api_key=api_key or config.ANTHROPIC_API_KEY)

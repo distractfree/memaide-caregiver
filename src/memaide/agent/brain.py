@@ -1,5 +1,3 @@
-"""The agent brain: turns transcript + vision context into an AgentDecision."""
-
 from typing import Any
 
 from memaide.prompts.system_prompt import build_system_prompt

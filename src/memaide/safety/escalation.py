@@ -1,8 +1,3 @@
-"""LLM-independent, rule-based escalation check.
-
-Runs in parallel with the brain and can fire before the model responds.
-"""
-
 from memaide import config
 from memaide.schemas import EscalationDecision, VisionContext
 
@@ -19,11 +14,12 @@ class EscalationMonitor:
         self.critical_flags = critical_flags or config.CRITICAL_VISION_FLAGS
 
     def check(
-        self,
+        self, 
         latest_patient_text: str | None,
         vision: VisionContext | None,
         seconds_since_last_patient_speech: float = 0.0,
-    ) -> EscalationDecision:
+        ) -> EscalationDecision:
+        """Check for escalation conditions."""
         triggered: list[str] = []
 
         text = (latest_patient_text or "").lower()

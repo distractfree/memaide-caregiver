@@ -48,3 +48,20 @@ then use `memaide.eval.run_case` with `memaide.eval.judge.Judge`.
   progressively from `session.transcript` if needed.
 - Provide `PatientContext` from the patient record at session start.
 - Replace `StubVisionCheck` with a real `VisionCheck` implementation to feed vision flags.
+
+
+
+
+File Notes: 
+Brain.py: The agent brain: turns transcript + vision context into an AgentDecision.
+Session.py: Session orchestration: opening line, turn loop, transcript, and stop record.
+Schemas.py: Pydantic data contracts shared across the agent and with the backend.
+Escalation.py: LLM-independent, rule-based escalation check.
+Config.py: Central configuration: model names, thresholds, and env-derived secrets.
+prompts.py: LLM system prompt and few-shot examples.
+Openai_client.py: Thin async wrapper over the OpenAI SDK returning parsed JSON objects.
+Run_eval.py: Run the agent over the eval dataset and export transcripts for scoring.
+Dataset.py: Representative patient conversations used to evaluate the agent.
+few_shot.py: Few-shot example exchanges embedded directly into the system prompt.
+System_prompt.py: Build the agent system prompt, including injected patient context.
+
