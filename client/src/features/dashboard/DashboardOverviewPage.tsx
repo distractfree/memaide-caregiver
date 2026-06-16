@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
-  Activity,
   ArrowUpRight,
   BarChart3,
   Bell,
@@ -22,16 +20,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/features/auth/AuthContext'
 import { usePatients } from '@/features/patients/PatientContext'
-import { api } from '@/services/apiClient'
 import { formatDate, formatPhone, initialsFromName } from '@/utils/formatting'
-import { cn } from '@/utils/cn'
-
-type HealthState =
-  | { status: 'checking' }
-  | { status: 'online'; environment: string; lastChecked: Date }
-  | { status: 'offline'; lastChecked: Date }
-
-const HEALTH_POLL_MS = 30_000
 
 interface AvailableModule {
   title: string
@@ -94,29 +83,6 @@ const AVAILABLE_MODULES: AvailableModule[] = [
 export function DashboardOverviewPage() {
   const { caregiver, logout } = useAuth()
   const { selectedPatient, patients, status: patientStatus, refresh: refreshPatients } = usePatients()
-  const [health, setHealth] = useState<HealthState>({ status: 'checking' })
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function check() {
-      try {
-        const result = await api.health()
-        if (!cancelled) {
-          setHealth({ status: 'online', environment: result.environment, lastChecked: new Date() })
-        }
-      } catch {
-        if (!cancelled) setHealth({ status: 'offline', lastChecked: new Date() })
-      }
-    }
-
-    void check()
-    const id = window.setInterval(check, HEALTH_POLL_MS)
-    return () => {
-      cancelled = true
-      window.clearInterval(id)
-    }
-  }, [])
 
   return (
     <div className="flex flex-col gap-6">
@@ -140,8 +106,8 @@ export function DashboardOverviewPage() {
         </div>
       </div>
 
-      {/* Top row: caregiver + patient + backend status */}
-      <div className="grid gap-gutter lg:grid-cols-3">
+      {/* Top row: caregiver + patient */}
+      <div className="grid gap-gutter lg:grid-cols-2">
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
           <Card className="h-full flex flex-col gap-4">
             <div className="flex items-center justify-between">
@@ -203,49 +169,9 @@ export function DashboardOverviewPage() {
               <p className="text-sm text-on-surface-variant">
                 {patientStatus === 'loading'
                   ? 'Loading patients…'
-                  : 'No patients available yet. Patients can be added in Task 2.'}
+                  : 'No patients available yet. Add a patient from the Patients page.'}
               </p>
             )}
-          </Card>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.1 }}>
-          <Card className="h-full flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <Badge tone="accent">Backend</Badge>
-              <Activity className="h-4 w-4 text-on-surface-variant" />
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span
-                className={cn(
-                  'h-2.5 w-2.5 rounded-full',
-                  health.status === 'online' && 'bg-green-500 shadow-[0_0_0_4px_rgba(34,197,94,0.15)]',
-                  health.status === 'offline' && 'bg-error shadow-[0_0_0_4px_rgba(186,26,26,0.15)]',
-                  health.status === 'checking' && 'bg-outline animate-pulse',
-                )}
-              />
-              <div className="leading-tight">
-                <p className="text-sm font-semibold text-on-surface">
-                  {health.status === 'online'
-                    ? 'Backend online'
-                    : health.status === 'offline'
-                      ? 'Backend unavailable'
-                      : 'Checking backend…'}
-                </p>
-                <p className="text-[11px] text-text-muted">
-                  {health.status === 'online'
-                    ? `env: ${health.environment}`
-                    : 'http://localhost:4000/api/health'}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-auto text-[11px] text-text-muted">
-              {health.status !== 'checking' && (
-                <span>Last checked {health.lastChecked.toLocaleTimeString()}</span>
-              )}
-            </div>
           </Card>
         </motion.div>
       </div>

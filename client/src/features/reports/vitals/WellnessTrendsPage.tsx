@@ -161,7 +161,7 @@ export function WellnessTrendsPage() {
       ) : showFatalError ? (
         <ErrorState
           title="Unable to load wellness report"
-          message={error ?? 'Something went wrong while contacting the backend.'}
+          message={error ?? 'Something went wrong. Please try again.'}
           onRetry={() => void loadReport(selectedPatientId, filters)}
         />
       ) : report ? (

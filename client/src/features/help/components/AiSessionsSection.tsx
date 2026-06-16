@@ -72,7 +72,7 @@ export function AiSessionsSection({ patientId }: AiSessionsSectionProps) {
       ) : status === 'error' && sessions.length === 0 ? (
         <ErrorState
           title="Unable to load AI sessions"
-          message={error ?? 'Something went wrong while contacting the backend.'}
+          message={error ?? 'Something went wrong. Please try again.'}
           onRetry={loadSessions}
         />
       ) : (

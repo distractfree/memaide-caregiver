@@ -185,7 +185,7 @@ export function ReminderFormModal({
             <p className="text-[12px] text-error font-medium">{fieldErrors.description}</p>
           ) : (
             <p className="text-[12px] text-text-muted">
-              Caregiver-facing copy. Acknowledgment reporting is added in Task 4.
+              This description appears in the patient app.
             </p>
           )}
         </div>

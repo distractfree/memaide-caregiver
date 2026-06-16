@@ -1,8 +1,6 @@
 import { type FormEvent, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Lock, ShieldCheck } from 'lucide-react'
-import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
+import { ShieldCheck, Loader2, AlertCircle } from 'lucide-react'
 import { useAdminAuth } from './AdminAuthContext'
 import { ApiClientError } from '@/services/apiClient'
 
@@ -23,7 +21,7 @@ export function AdminLoginPage() {
       if (err instanceof ApiClientError) {
         setErrorMessage(err.message)
       } else {
-        setErrorMessage('Sign in failed. Please try again.')
+        setErrorMessage('Sign in failed. Please check your password and try again.')
       }
     } finally {
       setSubmitting(false)
@@ -31,58 +29,59 @@ export function AdminLoginPage() {
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-background p-6 sm:p-10">
+    <div className="adm-login-wrapper admin-portal">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="w-full max-w-md rounded-3xl bg-surface-container-lowest shadow-card border border-outline-variant/30 p-8 sm:p-10"
+        className="adm-login-card"
       >
-        <div className="mb-8 flex justify-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/10 shadow-sm border border-accent/20">
-            <ShieldCheck className="h-6 w-6 text-accent-dark" />
+        {/* Shield icon */}
+        <div className="adm-login-icon">
+          <ShieldCheck className="h-6 w-6" />
+        </div>
+
+        {/* Title */}
+        <h2 className="adm-login-title">Admin Portal</h2>
+        <p className="adm-login-subtitle">Secure access for authorized personnel only</p>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit}>
+          <div className="adm-login-input-group">
+            <label htmlFor="adm-password" className="adm-login-label">Password</label>
+            <input
+              id="adm-password"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              className="adm-login-input"
+            />
           </div>
-        </div>
-
-        <div className="mb-7 text-center">
-          <h2 className="text-2xl font-semibold tracking-tight text-on-surface">
-            Admin Portal
-          </h2>
-          <p className="mt-2 text-sm text-on-surface-variant">
-            Caregiver coordination oversight for the student MVP.
-          </p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <Input
-            label="Admin Password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            leftIcon={<Lock className="h-4 w-4" />}
-            placeholder="••••••••"
-          />
 
           {errorMessage && (
-            <div
-              role="alert"
-              className="rounded-xl border border-error/30 bg-error-container/60 px-3 py-2 text-sm text-error font-medium"
-            >
-              {errorMessage}
+            <div className="adm-login-error" role="alert">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              <span>{errorMessage}</span>
             </div>
           )}
 
-          <Button type="submit" loading={submitting} fullWidth size="lg" className="mt-2">
-            Sign in
-          </Button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="adm-btn-navy full-width"
+          >
+            {submitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : null}
+            <span>Sign In</span>
+          </button>
         </form>
 
-        <div className="mt-7 flex justify-center">
-           <p className="text-xs text-text-muted text-center">
-             MemAide is a care-coordination tool.<br/>It is not a medical device.
-           </p>
+        <div className="adm-login-footer">
+          MemAide is a care-coordination tool.<br />It is not a medical device.
         </div>
       </motion.div>
     </div>

@@ -167,7 +167,7 @@ export function StreamStatusPage() {
       ) : showFatalError ? (
         <ErrorState
           title="Unable to load stream status"
-          message={error ?? 'Something went wrong while contacting the backend.'}
+          message={error ?? 'Something went wrong. Please try again.'}
           onRetry={() => void loadData(selectedPatientId, filters)}
         />
       ) : (

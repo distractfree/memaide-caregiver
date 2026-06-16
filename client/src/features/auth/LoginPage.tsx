@@ -1,16 +1,14 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Activity, HeartPulse, Lock, LogIn, Mail, Sparkles, User, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useAuth } from '@/features/auth/AuthContext'
-import { api, ApiClientError } from '@/services/apiClient'
+import { ApiClientError } from '@/services/apiClient'
 
 const DEMO_EMAIL = 'demo@memaide.local'
 const DEMO_PASSWORD = 'Password123!'
-
-type BackendDot = 'unknown' | 'online' | 'offline'
 
 export function LoginPage() {
   const { login, register, isAuthenticated, isBootstrapping } = useAuth()
@@ -22,22 +20,6 @@ export function LoginPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [backendDot, setBackendDot] = useState<BackendDot>('unknown')
-
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        await api.health()
-        if (!cancelled) setBackendDot('online')
-      } catch {
-        if (!cancelled) setBackendDot('offline')
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   if (isBootstrapping) return null
   if (isAuthenticated) return <Navigate to="/" replace />
@@ -296,26 +278,6 @@ export function LoginPage() {
             )}
           </form>
 
-          <div className="mt-7 flex items-center justify-between text-xs text-text-muted">
-            <span>Backend</span>
-            <span className="inline-flex items-center gap-1.5">
-              <span
-                className={
-                  backendDot === 'online'
-                    ? 'h-1.5 w-1.5 rounded-full bg-green-500'
-                    : backendDot === 'offline'
-                      ? 'h-1.5 w-1.5 rounded-full bg-error'
-                      : 'h-1.5 w-1.5 rounded-full bg-outline'
-                }
-              />
-              {backendDot === 'online'
-                ? 'Online'
-                : backendDot === 'offline'
-                  ? 'Unavailable'
-                  : 'Checking…'}
-              <span className="text-text-muted/70">· localhost:4000</span>
-            </span>
-          </div>
         </motion.div>
       </div>
     </div>

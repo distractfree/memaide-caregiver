@@ -211,7 +211,7 @@ export function BeaconsPage() {
       ) : status === 'error' ? (
         <ErrorState
           title="Unable to load beacons"
-          message={error ?? 'Something went wrong while contacting the backend.'}
+          message={error ?? 'Something went wrong. Please try again.'}
           onRetry={() => void loadBeacons(selectedPatientId)}
         />
       ) : (

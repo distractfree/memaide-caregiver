@@ -106,7 +106,7 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}): Promis
       body: body !== undefined ? JSON.stringify(body) : undefined,
     })
   } catch {
-    throw new ApiClientError(0, 'NETWORK', 'Unable to reach the MemAide server. Check that the backend is running.')
+    throw new ApiClientError(0, 'NETWORK', 'Unable to connect to MemAide. Please check your connection and try again.')
   }
 
   let parsed: unknown = null

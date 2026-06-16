@@ -75,7 +75,7 @@ export function HelpContactCard({
       ) : status === 'error' ? (
         <ErrorState
           title="Unable to load help contact"
-          message={error ?? 'Something went wrong while contacting the backend.'}
+          message={error ?? 'Something went wrong. Please try again.'}
           onRetry={onRetry}
         />
       ) : editing ? (

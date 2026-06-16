@@ -1,22 +1,44 @@
 import { useEffect, useState } from 'react'
-import { ShieldAlert } from 'lucide-react'
-import { Modal } from '@/components/ui/Modal'
-import { Button } from '@/components/ui/Button'
+import { AlertTriangle, CheckCircle, X } from 'lucide-react'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { formatDateTime } from '@/utils/formatting'
 import { adminApi } from '../adminApi'
+import { createPortal } from 'react-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 
 interface AdminAiSessionDetailModalProps {
   sessionId: string | null
   onClose: () => void
 }
 
+function getTimelineClass(role: string): string {
+  switch (role) {
+    case 'user':
+      return 'patient'
+    case 'system':
+      return 'system'
+    default:
+      return 'assistant'
+  }
+}
+
+function getTimelineLabel(role: string): string {
+  switch (role) {
+    case 'user':
+      return 'Patient'
+    case 'system':
+      return 'System'
+    default:
+      return 'Assistant'
+  }
+}
+
 export function AdminAiSessionDetailModal({ sessionId, onClose }: AdminAiSessionDetailModalProps) {
   const [session, setSession] = useState<any | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
-  
+
   useEffect(() => {
     if (!sessionId) {
       setSession(null)
@@ -26,15 +48,16 @@ export function AdminAiSessionDetailModal({ sessionId, onClose }: AdminAiSession
 
     let cancelled = false
     setStatus('loading')
-    
-    adminApi.getAiSessionById(sessionId)
-      .then(data => {
+
+    adminApi
+      .getAiSessionById(sessionId)
+      .then((data) => {
         if (!cancelled) {
           setSession(data)
           setStatus('ready')
         }
       })
-      .catch(err => {
+      .catch((err) => {
         if (!cancelled) {
           setError(err.message || 'Failed to load session details.')
           setStatus('error')
@@ -46,70 +69,211 @@ export function AdminAiSessionDetailModal({ sessionId, onClose }: AdminAiSession
     }
   }, [sessionId])
 
-  return (
-    <Modal
-      open={!!sessionId}
-      onClose={onClose}
-      title="Admin View: AI Support Session Details"
-      description={session ? `Started at ${formatDateTime(session.startedAt)}` : ''}
-      size="lg"
-    >
-      {status === 'loading' && <div className="py-12"><LoadingState label="Loading session..." /></div>}
-      {status === 'error' && <div className="py-12"><ErrorState message={error || 'Error'} onRetry={onClose} /></div>}
-      {status === 'ready' && session && (
-        <div className="flex flex-col gap-6 mt-4">
-          <div className="rounded-xl border border-warning/30 bg-warning-container/30 p-4">
-            <p className="text-xs text-warning-dark">
-              <strong>Admin Read-Only:</strong> You are viewing a scripted support session timeline. No modifications are permitted.
-            </p>
-          </div>
-          <div className="flex items-center gap-4 border-b border-outline-variant/30 pb-4">
-            <div>
-              <p className="text-xs font-semibold text-text-muted uppercase">Status</p>
-              <p className="text-sm font-medium text-on-surface capitalize">{session.status.replace('_', ' ')}</p>
-            </div>
-            {session.caregiverJoinedAt && (
-              <div>
-                <p className="text-xs font-semibold text-text-muted uppercase">Caregiver Joined</p>
-                <p className="text-sm font-medium text-on-surface">{formatDateTime(session.caregiverJoinedAt)}</p>
-              </div>
-            )}
-            {session.emergencySuggestedAt && (
-              <div>
-                <p className="text-xs font-semibold text-error uppercase flex items-center gap-1"><ShieldAlert className="w-3 h-3"/> Emergency Suggested</p>
-                <p className="text-sm font-medium text-error">{formatDateTime(session.emergencySuggestedAt)}</p>
-              </div>
-            )}
-          </div>
+  if (typeof document === 'undefined') return null
 
-          <div className="flex-1 overflow-y-auto max-h-[50vh] pr-2">
-            {session.messages && session.messages.length > 0 ? (
-              <div className="flex flex-col gap-4">
-                {session.messages.map((msg: any) => (
-                  <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                    <div className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${
-                      msg.role === 'user' 
-                        ? 'bg-primary text-white rounded-br-none' 
-                        : msg.role === 'system'
-                        ? 'bg-surface-dim text-text-muted text-xs italic border border-outline-variant/30 rounded-bl-none'
-                        : 'bg-surface-container text-on-surface rounded-bl-none'
-                    }`}>
-                      {msg.content}
-                    </div>
-                    <span className="text-[10px] text-text-muted mt-1 px-1">{formatDateTime(msg.createdAt)}</span>
+  return createPortal(
+    <AnimatePresence>
+      {!!sessionId && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            key="adm-modal-backdrop"
+            className="fixed inset-0 z-[60]"
+            style={{ backgroundColor: 'rgba(15, 23, 42, 0.6)' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            onClick={onClose}
+          />
+
+          {/* Modal */}
+          <div
+            className="fixed inset-0 z-[61] flex items-center justify-center"
+            style={{ padding: 16, pointerEvents: 'none' }}
+          >
+            <motion.div
+              key="adm-modal-panel"
+              style={{
+                width: '100%',
+                maxWidth: 640,
+                maxHeight: '90vh',
+                overflowY: 'auto',
+                backgroundColor: '#FFFFFF',
+                borderRadius: 16,
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+                pointerEvents: 'auto',
+              }}
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97, y: 4 }}
+              transition={{ duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div
+                style={{
+                  padding: 24,
+                  borderBottom: '1px solid #E2E8F0',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div>
+                  <h2 style={{ fontSize: 18, fontWeight: 600, color: '#0F172A', margin: 0 }}>
+                    AI Session Details
+                  </h2>
+                  {session && (
+                    <p style={{ fontSize: 14, color: '#475569', marginTop: 4 }}>
+                      Started at {formatDateTime(session.startedAt)}
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={onClose}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 8,
+                    color: '#475569',
+                    borderRadius: 8,
+                    transition: 'background-color 0.2s',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div style={{ padding: 24 }}>
+                {status === 'loading' && (
+                  <div style={{ padding: '48px 0', textAlign: 'center' }}>
+                    <LoadingState label="Loading session..." />
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-text-muted italic text-center py-8">No messages recorded for this session.</p>
-            )}
-          </div>
+                )}
 
-          <div className="border-t border-outline-variant/30 pt-4 flex justify-end gap-3">
-            <Button variant="outline" onClick={onClose}>Close</Button>
+                {status === 'error' && (
+                  <div style={{ padding: '48px 0' }}>
+                    <ErrorState message={error || 'Error'} onRetry={onClose} />
+                  </div>
+                )}
+
+                {status === 'ready' && session && (
+                  <>
+                    {/* Status badges */}
+                    <div className="adm-modal-section">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                        <span
+                          className={`adm-badge ${session.status === 'active' ? 'adm-badge-active' : 'adm-badge-closed'}`}
+                        >
+                          {session.status === 'active' ? 'Active' : session.status.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
+                        </span>
+                        {session.emergencySuggestedAt && (
+                          <span className="adm-badge adm-badge-emergency">
+                            <AlertTriangle className="h-3 w-3" />
+                            Emergency Suggested
+                          </span>
+                        )}
+                        {!session.emergencySuggestedAt && (
+                          <span className="adm-badge adm-badge-no-emergency">
+                            <CheckCircle className="h-3 w-3" />
+                            No Emergency
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Metadata grid */}
+                    <div className="adm-modal-section">
+                      <div className="adm-modal-grid">
+                        <div>
+                          <p className="adm-modal-field-label">Patient</p>
+                          <p className="adm-modal-field-value">{session.patientName || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="adm-modal-field-label">Caregiver</p>
+                          <p className="adm-modal-field-value">{session.caregiverName || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="adm-modal-field-label">Started</p>
+                          <p className="adm-modal-field-value">{formatDateTime(session.startedAt)}</p>
+                        </div>
+                        <div>
+                          <p className="adm-modal-field-label">Messages</p>
+                          <p className="adm-modal-field-value">{session.messageCount ?? session.messages?.length ?? 0}</p>
+                        </div>
+                        {session.caregiverJoinedAt && (
+                          <div>
+                            <p className="adm-modal-field-label">Caregiver Joined</p>
+                            <p className="adm-modal-field-value">{formatDateTime(session.caregiverJoinedAt)}</p>
+                          </div>
+                        )}
+                        {session.emergencySuggestedAt && (
+                          <div>
+                            <p className="adm-modal-field-label" style={{ color: '#DC2626' }}>Emergency Suggested At</p>
+                            <p className="adm-modal-field-value" style={{ color: '#DC2626' }}>
+                              {formatDateTime(session.emergencySuggestedAt)}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* High-risk banner */}
+                    {session.emergencySuggestedAt && (
+                      <div className="adm-modal-section">
+                        <div className="adm-alert-banner">
+                          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                          High-risk language detected. Caregiver review recommended.
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Message Timeline */}
+                    <div className="adm-modal-section" style={{ borderBottom: 'none', marginBottom: 0, paddingBottom: 0 }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 600, color: '#0F172A', marginBottom: 16 }}>
+                        Message Timeline
+                      </h3>
+                      {session.messages && session.messages.length > 0 ? (
+                        <div className="adm-timeline" style={{ maxHeight: '40vh', overflowY: 'auto', paddingRight: 4 }}>
+                          {session.messages.map((msg: any) => (
+                            <div
+                              key={msg.id}
+                              className={`adm-timeline-item ${getTimelineClass(msg.role)}`}
+                            >
+                              <p className="adm-timeline-label">{getTimelineLabel(msg.role)}</p>
+                              <p className="adm-timeline-text">{msg.content}</p>
+                              <p style={{ fontSize: 10, opacity: 0.6, marginTop: 8 }}>
+                                {formatDateTime(msg.createdAt)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p style={{ fontSize: 14, color: '#94A3B8', fontStyle: 'italic', textAlign: 'center', padding: '32px 0' }}>
+                          No messages recorded for this session.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: 16, marginTop: 24, display: 'flex', justifyContent: 'flex-end' }}>
+                      <button className="adm-table-action" onClick={onClose} style={{ padding: '8px 16px' }}>
+                        Close
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </motion.div>
           </div>
-        </div>
+        </>
       )}
-    </Modal>
+    </AnimatePresence>,
+    document.body,
   )
 }

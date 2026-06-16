@@ -156,7 +156,7 @@ export function PatientsPage() {
       ) : status === 'error' ? (
         <ErrorState
           title="Unable to load patients"
-          message={error ?? 'Something went wrong while contacting the backend.'}
+          message={error ?? 'Something went wrong. Please try again.'}
           onRetry={() => void refresh()}
         />
       ) : patients.length === 0 ? (

@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
-  Activity,
   BarChart3,
   Bell,
   CheckCircle2,
@@ -14,7 +13,6 @@ import {
   Mail,
   Radar,
   Radio,
-  RefreshCw,
   Settings,
   ShieldCheck,
   User2,
@@ -27,18 +25,8 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { useAuth } from '@/features/auth/AuthContext'
 import { usePatients } from '@/features/patients/PatientContext'
-import { api, ApiClientError } from '@/services/apiClient'
-import type { HealthStatus } from '@/types/domain'
 import { cn } from '@/utils/cn'
-import { formatDate, formatDateTime, formatPhone, initialsFromName } from '@/utils/formatting'
-
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000').replace(/\/$/, '')
-const FRONTEND_ORIGIN = window.location.origin
-
-type HealthState =
-  | { status: 'checking'; lastChecked: Date | null; data: HealthStatus | null; error: string | null }
-  | { status: 'online'; lastChecked: Date; data: HealthStatus; error: null }
-  | { status: 'offline'; lastChecked: Date; data: HealthStatus | null; error: string }
+import { formatDate, formatPhone, initialsFromName } from '@/utils/formatting'
 
 interface ModuleItem {
   label: string
@@ -69,42 +57,6 @@ const SAFETY_NOTES = [
 export function SettingsPage() {
   const { caregiver, status: authStatus, logout } = useAuth()
   const { selectedPatient, patients, status: patientStatus, error: patientError } = usePatients()
-  const [health, setHealth] = useState<HealthState>({
-    status: 'checking',
-    lastChecked: null,
-    data: null,
-    error: null,
-  })
-
-  const checkHealth = useCallback(async () => {
-    setHealth((current) => ({
-      status: 'checking',
-      lastChecked: current.lastChecked,
-      data: current.data,
-      error: null,
-    }))
-
-    try {
-      const data = await api.health()
-      setHealth({ status: 'online', lastChecked: new Date(), data, error: null })
-    } catch (err) {
-      const message =
-        err instanceof ApiClientError
-          ? err.message
-          : 'Unable to reach the MemAide server. Check that the backend is running.'
-      setHealth((current) => ({
-        status: 'offline',
-        lastChecked: new Date(),
-        data: current.data,
-        error: message,
-      }))
-    }
-  }, [])
-
-  useEffect(() => {
-    const id = window.setTimeout(() => void checkHealth(), 0)
-    return () => window.clearTimeout(id)
-  }, [checkHealth])
 
   const patientSummary = useMemo(() => {
     if (patientStatus === 'loading') return 'Loading patient context'
@@ -136,14 +88,7 @@ export function SettingsPage() {
         />
       </div>
 
-      <div className="grid gap-gutter xl:grid-cols-5">
-        <div className="xl:col-span-2">
-          <SystemStatusCard health={health} onCheck={checkHealth} />
-        </div>
-        <div className="xl:col-span-3">
-          <ModuleStatusCard />
-        </div>
-      </div>
+      <ModuleStatusCard />
 
       <ProductSafetyCard />
     </motion.div>
@@ -158,7 +103,7 @@ function PageHeader() {
       </Badge>
       <h1 className="text-3xl font-semibold tracking-tight text-on-surface">Settings</h1>
       <p className="text-sm text-on-surface-variant max-w-2xl">
-        Review caregiver portal account, connection, and project status.
+        Review caregiver portal account, patient context, and available sections.
       </p>
     </div>
   )
@@ -209,8 +154,7 @@ function AccountCard({
 
       <div className="mt-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs leading-relaxed text-text-muted">
-          Profile changes are not available in this prototype because the backend exposes no
-          caregiver settings update endpoint.
+          Profile changes are not available in this version.
         </p>
         <Button
           variant="outline"
@@ -304,68 +248,6 @@ function SelectedPatientCard({
   )
 }
 
-function SystemStatusCard({
-  health,
-  onCheck,
-}: {
-  health: HealthState
-  onCheck: () => Promise<void>
-}) {
-  const isChecking = health.status === 'checking'
-  const isOnline = health.status === 'online'
-
-  return (
-    <Card className="flex h-full flex-col gap-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <Badge tone={isOnline ? 'success' : health.status === 'offline' ? 'danger' : 'muted'} dot>
-            Backend {isOnline ? 'online' : health.status === 'offline' ? 'offline' : 'checking'}
-          </Badge>
-          <h2 className="mt-3 text-lg font-semibold text-on-surface">System status</h2>
-        </div>
-        <span
-          className={cn(
-            'flex h-10 w-10 items-center justify-center rounded-2xl',
-            isOnline ? 'bg-green-100 text-green-700' : 'bg-surface-container-high text-on-surface-variant',
-          )}
-        >
-          <Activity className={cn('h-4 w-4', isChecking && 'animate-pulse')} />
-        </span>
-      </div>
-
-      <dl className="grid gap-3 text-sm">
-        <DetailItem label="API base URL" value={API_BASE_URL} mono />
-        <DetailItem label="Frontend origin" value={FRONTEND_ORIGIN} mono />
-        <DetailItem label="Service" value={health.data?.service ?? 'Not confirmed'} />
-        <DetailItem label="Environment" value={health.data?.environment ?? 'Not confirmed'} />
-        <DetailItem label="Server timestamp" value={formatDateTime(health.data?.timestamp)} />
-        <DetailItem
-          label="Last checked"
-          value={health.lastChecked ? health.lastChecked.toLocaleTimeString() : 'Not checked yet'}
-        />
-      </dl>
-
-      {health.status === 'offline' && (
-        <div role="status" className="rounded-xl border border-error/30 bg-error-container/50 px-3 py-2 text-sm text-error">
-          {health.error}
-        </div>
-      )}
-
-      <div className="mt-auto">
-        <Button
-          variant="outline"
-          size="sm"
-          loading={isChecking}
-          leftIcon={<RefreshCw className="h-4 w-4" />}
-          onClick={() => void onCheck()}
-        >
-          Check again
-        </Button>
-      </div>
-    </Card>
-  )
-}
-
 function ModuleStatusCard() {
   return (
     <Card className="flex h-full flex-col gap-5">
@@ -376,7 +258,7 @@ function ModuleStatusCard() {
           </Badge>
           <h2 className="mt-3 text-lg font-semibold text-on-surface">Available sections</h2>
           <p className="mt-1 text-sm text-on-surface-variant">
-            Task 1-10 sidebar modules are wired to real portal pages.
+            Quick links to caregiver portal sections for the selected patient.
           </p>
         </div>
         <Badge tone="success" dot>
@@ -399,7 +281,7 @@ function ModuleStatusCard() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-on-surface">{item.label}</p>
-                  <p className="text-[11px] text-text-muted">{item.route}</p>
+                  <p className="text-[11px] text-text-muted">Open section</p>
                 </div>
                 <Badge tone="success">Available</Badge>
               </div>
@@ -422,9 +304,8 @@ function ProductSafetyCard() {
           <Badge tone="muted">Product positioning</Badge>
           <h2 className="mt-3 text-lg font-semibold text-on-surface">Safety wording</h2>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-on-surface-variant">
-            MemAide / GuardiaNova is a caregiver coordination prototype for independent living
-            support. It is not a medical device, emergency system, or replacement for WhatsApp
-            camera feed.
+            MemAide / GuardiaNova is a caregiver coordination tool for independent living support.
+            It is not a medical device, emergency system, or replacement for WhatsApp camera feed.
           </p>
         </div>
       </div>

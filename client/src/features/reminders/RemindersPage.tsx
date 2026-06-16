@@ -194,7 +194,7 @@ export function RemindersPage() {
       ) : status === 'error' ? (
         <ErrorState
           title="Unable to load reminders"
-          message={error ?? 'Something went wrong while contacting the backend.'}
+          message={error ?? 'Something went wrong. Please try again.'}
           onRetry={() => void loadReminders(selectedPatientId)}
         />
       ) : (
@@ -304,7 +304,7 @@ function PageHeader({
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-on-surface">Reminders</h1>
         <p className="mt-1 text-sm text-on-surface-variant max-w-2xl">
           Create and manage reminder schedules for the selected patient. Schedules surface
-          gently in the patient app — acknowledgment reporting arrives in Task 4.
+          gently in the patient app, with acknowledgment trends available in reports.
         </p>
       </div>
       <Button

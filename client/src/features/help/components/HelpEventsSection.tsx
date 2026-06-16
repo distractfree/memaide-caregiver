@@ -51,7 +51,7 @@ export function HelpEventsSection({
       ) : status === 'error' && events.length === 0 ? (
         <ErrorState
           title="Unable to load help events"
-          message={error ?? 'Something went wrong while contacting the backend.'}
+          message={error ?? 'Something went wrong. Please try again.'}
           onRetry={onRetry}
         />
       ) : (

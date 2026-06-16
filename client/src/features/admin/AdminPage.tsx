@@ -8,7 +8,7 @@ export function AdminPage() {
 
   if (isBootstrapping) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="admin-portal" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <LoadingState label="Loading admin portal..." />
       </div>
     )

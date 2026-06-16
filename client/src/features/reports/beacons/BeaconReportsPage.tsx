@@ -156,7 +156,7 @@ export function BeaconReportsPage() {
       ) : showFatalError ? (
         <ErrorState
           title="Unable to load beacon report"
-          message={error ?? 'Something went wrong while contacting the backend.'}
+          message={error ?? 'Something went wrong. Please try again.'}
           onRetry={() => void loadReport(selectedPatientId, filters)}
         />
       ) : report ? (

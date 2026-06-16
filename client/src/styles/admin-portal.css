@@ -1,0 +1,1006 @@
+/*
+ * Admin Portal Design System
+ * Navy / teal / slate healthcare admin palette.
+ * All rules scoped under `.admin-portal` to prevent caregiver-page contamination.
+ */
+
+/* ── Color tokens (CSS custom properties) ── */
+.admin-portal {
+  --adm-bg: #F8FAFC;
+  --adm-bg-secondary: #EEF2F7;
+  --adm-card-bg: #FFFFFF;
+  --adm-card-elevated: #FBFCFE;
+  --adm-border: #E2E8F0;
+  --adm-border-strong: #CBD5E1;
+  --adm-text-primary: #0F172A;
+  --adm-text-secondary: #475569;
+  --adm-text-muted: #94A3B8;
+  --adm-navy: #0B3A5B;
+  --adm-navy-hover: #082F49;
+  --adm-teal: #0F766E;
+  --adm-success: #10B981;
+  --adm-warning: #F59E0B;
+  --adm-danger: #EF4444;
+  --adm-brand-orange: #F26522;
+
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Inter', sans-serif;
+  color: var(--adm-text-primary);
+  background-color: var(--adm-bg);
+  line-height: 1.6;
+}
+
+/* ── Layout shell ── */
+.admin-portal {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Admin Header ── */
+.adm-header {
+  background-color: var(--adm-card-bg);
+  border-bottom: 1px solid var(--adm-border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  padding: 20px 32px;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.adm-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.adm-header h1 {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  color: var(--adm-text-primary);
+  margin: 0;
+}
+
+.adm-header-subtitle {
+  font-size: 14px;
+  color: var(--adm-text-secondary);
+  margin-top: 4px;
+}
+
+.adm-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.adm-admin-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background-color: var(--adm-bg);
+  border: 1px solid var(--adm-border);
+  border-radius: 9999px;
+}
+
+.adm-admin-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, var(--adm-navy) 0%, var(--adm-teal) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.adm-admin-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--adm-text-primary);
+}
+
+/* ── Admin Logout Button ── */
+.adm-logout-btn {
+  padding: 6px 14px;
+  background: none;
+  border: 1px solid var(--adm-border-strong);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--adm-text-secondary);
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adm-logout-btn:hover {
+  background-color: var(--adm-bg);
+}
+
+/* ── Content Area ── */
+.adm-content {
+  padding: 32px;
+  flex: 1;
+}
+
+@media (max-width: 768px) {
+  .adm-content {
+    padding: 16px;
+  }
+  .adm-header {
+    padding: 16px;
+  }
+}
+
+/* ── Hero Panel ── */
+.adm-hero {
+  background: linear-gradient(135deg, var(--adm-navy) 0%, var(--adm-navy-hover) 100%);
+  border-radius: 24px;
+  padding: 32px;
+  color: white;
+  margin-bottom: 32px;
+  position: relative;
+  overflow: hidden;
+}
+
+.adm-hero::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 384px;
+  height: 384px;
+  background: white;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.1;
+  pointer-events: none;
+}
+
+.adm-hero-content {
+  position: relative;
+  z-index: 10;
+}
+
+.adm-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #ECFDF5;
+  color: var(--adm-teal);
+  padding: 8px 12px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 16px;
+  border: 1px solid #CCFBF1;
+}
+
+.adm-hero h2 {
+  font-size: 32px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: white;
+}
+
+.adm-hero-text {
+  font-size: 16px;
+  color: #E0E7FF;
+  margin-bottom: 24px;
+  max-width: 640px;
+}
+
+.adm-hero-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.adm-hero-kpi {
+  background-color: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  padding: 16px;
+  min-width: 120px;
+}
+
+.adm-hero-kpi-label {
+  font-size: 12px;
+  color: #BFE7FF;
+  margin-bottom: 8px;
+}
+
+.adm-hero-kpi-value {
+  font-size: 24px;
+  font-weight: 600;
+  color: white;
+}
+
+/* ── Metric Cards ── */
+.adm-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+@media (max-width: 1024px) {
+  .adm-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .adm-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.adm-metric-card {
+  background-color: var(--adm-card-bg);
+  border: 1px solid var(--adm-border);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s;
+}
+
+.adm-metric-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.adm-metric-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.adm-metric-icon-tile {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background-color: var(--adm-bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--adm-navy);
+  flex-shrink: 0;
+}
+
+.adm-metric-icon-tile svg {
+  width: 20px;
+  height: 20px;
+}
+
+.adm-metric-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: #ECFDF5;
+  color: var(--adm-success);
+  padding: 4px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid #D1FAE5;
+  white-space: nowrap;
+}
+
+.adm-metric-trend.warning {
+  background-color: #FEF2F2;
+  color: var(--adm-danger);
+  border-color: #FECACA;
+}
+
+.adm-metric-label {
+  font-size: 12px;
+  color: var(--adm-text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.adm-metric-value {
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--adm-text-primary);
+  margin-bottom: 12px;
+  line-height: 1.1;
+}
+
+.adm-metric-bottom-line {
+  height: 4px;
+  background: linear-gradient(90deg, var(--adm-navy) 0%, var(--adm-teal) 100%);
+  border-radius: 2px;
+  opacity: 0.2;
+}
+
+/* ── Card ── */
+.adm-card {
+  background-color: var(--adm-card-bg);
+  border: 1px solid var(--adm-border);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.adm-card-header {
+  padding: 24px;
+  border-bottom: 1px solid var(--adm-border);
+}
+
+.adm-card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--adm-text-primary);
+  margin: 0;
+}
+
+.adm-card-subtitle {
+  font-size: 14px;
+  color: var(--adm-text-secondary);
+  margin-top: 4px;
+}
+
+.adm-card-body {
+  padding: 24px;
+}
+
+/* ── Table ── */
+.adm-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.adm-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 600px;
+}
+
+.adm-table th {
+  padding: 12px 20px;
+  text-align: left;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  color: var(--adm-text-secondary);
+  border-bottom: 1px solid var(--adm-border);
+  white-space: nowrap;
+}
+
+.adm-table td {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--adm-border);
+  font-size: 14px;
+  color: var(--adm-text-primary);
+}
+
+.adm-table tbody tr {
+  transition: background-color 0.15s;
+}
+
+.adm-table tbody tr:hover {
+  background-color: var(--adm-bg);
+}
+
+.adm-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ── Table avatar ── */
+.adm-table-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--adm-navy) 0%, var(--adm-teal) 100%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.adm-table-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--adm-text-primary);
+  white-space: nowrap;
+}
+
+/* ── Badge ── */
+.adm-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.adm-badge-enabled {
+  background-color: #ECFDF5;
+  color: #10B981;
+  border-color: #D1FAE5;
+}
+
+.adm-badge-disabled {
+  background-color: #F3F4F6;
+  color: #6B7280;
+  border-color: #E5E7EB;
+}
+
+.adm-badge-active {
+  background-color: #EFF6FF;
+  color: #0284C7;
+  border-color: #BAE6FD;
+}
+
+.adm-badge-closed {
+  background-color: #F3F4F6;
+  color: #6B7280;
+  border-color: #E5E7EB;
+}
+
+.adm-badge-emergency {
+  background-color: #FEF2F2;
+  color: #DC2626;
+  border-color: #FECACA;
+}
+
+.adm-badge-no-emergency {
+  background-color: #ECFDF5;
+  color: #10B981;
+  border-color: #D1FAE5;
+}
+
+.adm-badge-resolved {
+  background-color: #F0FDF4;
+  color: #15803D;
+  border-color: #BBF7D0;
+}
+
+.adm-badge-caregiver-joined {
+  background-color: #EFF6FF;
+  color: #0369A1;
+  border-color: #BAE6FD;
+}
+
+/* ── Table Action Button ── */
+.adm-table-action {
+  padding: 6px 12px;
+  background: none;
+  border: 1px solid var(--adm-border-strong);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--adm-text-secondary);
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.adm-table-action:hover {
+  background-color: var(--adm-bg);
+  color: var(--adm-navy);
+}
+
+/* ── Navy primary button ── */
+.adm-btn-navy {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+  background-color: var(--adm-navy);
+  color: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.adm-btn-navy:hover {
+  background-color: var(--adm-navy-hover);
+}
+
+.adm-btn-navy:disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.adm-btn-navy.full-width {
+  width: 100%;
+}
+
+/* ── Safety panel ── */
+.adm-safety-panel .adm-card-body {
+  padding: 24px;
+}
+
+.adm-safety-score {
+  background: linear-gradient(135deg, var(--adm-bg-secondary) 0%, var(--adm-bg) 100%);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.adm-safety-score-label {
+  font-size: 12px;
+  color: var(--adm-text-muted);
+  margin-bottom: 8px;
+}
+
+.adm-safety-score-number {
+  font-size: 40px;
+  font-weight: 700;
+  color: var(--adm-navy);
+  line-height: 1;
+}
+
+.adm-safety-score-max {
+  font-size: 14px;
+  color: var(--adm-text-secondary);
+  margin-left: 4px;
+}
+
+.adm-safety-bar {
+  width: 100%;
+  height: 8px;
+  background-color: var(--adm-border);
+  border-radius: 4px;
+  margin-top: 12px;
+  overflow: hidden;
+}
+
+.adm-safety-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--adm-navy) 0%, var(--adm-teal) 100%);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.adm-safety-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.adm-safety-item {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid;
+}
+
+.adm-safety-item.high {
+  background-color: #FEF2F2;
+  border-color: #FECACA;
+}
+
+.adm-safety-item.medium {
+  background-color: #FFFBEB;
+  border-color: #FCD34D;
+}
+
+.adm-safety-item.low {
+  background-color: #ECFDF5;
+  border-color: #D1FAE5;
+}
+
+.adm-safety-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.adm-safety-item.high .adm-safety-item-title { color: #7F1D1D; }
+.adm-safety-item.medium .adm-safety-item-title { color: #78350F; }
+.adm-safety-item.low .adm-safety-item-title { color: #065F46; }
+
+.adm-safety-item-detail {
+  font-size: 12px;
+}
+
+.adm-safety-item.high .adm-safety-item-detail { color: #991B1B; }
+.adm-safety-item.medium .adm-safety-item-detail { color: #92400E; }
+.adm-safety-item.low .adm-safety-item-detail { color: #047857; }
+
+.adm-safety-recommendation {
+  background-color: #EFF6FF;
+  border: 1px solid #BAE6FD;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.adm-safety-recommendation-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0C4A6E;
+  margin-bottom: 4px;
+}
+
+.adm-safety-recommendation-text {
+  font-size: 12px;
+  color: #0369A1;
+}
+
+/* ── Main grid ── */
+.adm-main-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 32px;
+}
+
+.adm-left-column {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  min-width: 0;
+}
+
+.adm-right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+@media (max-width: 1024px) {
+  .adm-main-grid {
+    grid-template-columns: 1fr;
+  }
+  .adm-right-column {
+    order: -1;
+  }
+}
+
+/* ── Admin login page ── */
+.adm-login-wrapper {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--adm-bg);
+  padding: 24px;
+}
+
+.adm-login-card {
+  width: 100%;
+  max-width: 400px;
+  background-color: var(--adm-card-bg);
+  border: 1px solid var(--adm-border);
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  padding: 32px;
+}
+
+.adm-login-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background-color: var(--adm-navy);
+  color: white;
+  margin: 0 auto 24px;
+}
+
+.adm-login-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--adm-text-primary);
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.adm-login-subtitle {
+  font-size: 14px;
+  color: var(--adm-text-secondary);
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.adm-login-input-group {
+  margin-bottom: 24px;
+}
+
+.adm-login-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--adm-text-primary);
+  margin-bottom: 8px;
+}
+
+.adm-login-input {
+  width: 100%;
+  padding: 10px 16px;
+  border: 1px solid var(--adm-border);
+  border-radius: 12px;
+  background-color: var(--adm-bg);
+  font-size: 14px;
+  color: var(--adm-text-primary);
+  transition: border-color 0.2s;
+  outline: none;
+}
+
+.adm-login-input::placeholder {
+  color: var(--adm-text-muted);
+}
+
+.adm-login-input:focus {
+  border-color: var(--adm-navy);
+  box-shadow: 0 0 0 3px rgba(11, 58, 91, 0.1);
+}
+
+.adm-login-error {
+  background-color: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #DC2626;
+}
+
+.adm-login-footer {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--adm-text-muted);
+}
+
+/* ── Modal overrides for admin ── */
+.adm-modal-section {
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--adm-border);
+}
+
+.adm-modal-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.adm-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.adm-modal-field-label {
+  font-size: 12px;
+  color: var(--adm-text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.adm-modal-field-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--adm-text-primary);
+}
+
+.adm-alert-banner {
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #FECACA;
+  background-color: #FEF2F2;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #DC2626;
+}
+
+/* ── Timeline ── */
+.adm-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.adm-timeline-item {
+  padding: 16px;
+  border-radius: 8px;
+}
+
+.adm-timeline-item.patient {
+  background-color: var(--adm-navy);
+  color: white;
+}
+
+.adm-timeline-item.assistant {
+  background-color: #F3F4F6;
+  color: #1F2937;
+}
+
+.adm-timeline-item.system {
+  background-color: #FFFBEB;
+  color: #78350F;
+  border: 1px solid #FCD34D;
+}
+
+.adm-timeline-label {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.75;
+  margin-bottom: 8px;
+}
+
+.adm-timeline-text {
+  font-size: 14px;
+}
+
+/* ── Caregiver detail ── */
+.adm-profile-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--adm-navy) 0%, var(--adm-teal) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 20px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.adm-detail-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.adm-detail-field-label {
+  font-size: 12px;
+  color: var(--adm-text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.adm-detail-field-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--adm-text-primary);
+}
+
+/* ── Patient context panel ── */
+.adm-context-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.adm-context-icon {
+  color: var(--adm-navy);
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.adm-context-label {
+  font-size: 12px;
+  color: var(--adm-text-muted);
+  font-weight: 500;
+}
+
+.adm-context-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--adm-text-primary);
+}
+
+.adm-safety-note {
+  background-color: #FFFBEB;
+  border: 1px solid #FCD34D;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.adm-safety-note-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #78350F;
+  margin-bottom: 4px;
+}
+
+.adm-safety-note-text {
+  font-size: 12px;
+  color: #92400E;
+}
+
+/* ── Patient card in caregiver detail ── */
+.adm-patient-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  background-color: var(--adm-bg);
+  border-radius: 8px;
+  border: 1px solid var(--adm-border);
+  transition: background-color 0.15s;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.adm-patient-row:hover {
+  background-color: var(--adm-bg-secondary);
+}
+
+/* ── Back button ── */
+.adm-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--adm-navy);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  padding: 4px 0;
+  transition: opacity 0.2s;
+}
+
+.adm-back-btn:hover {
+  opacity: 0.8;
+}
+
+/* ── Loading spinner override ── */
+.adm-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+  color: var(--adm-text-muted);
+  font-size: 14px;
+}
+
+/* ── Responsive cleanup ── */
+@media (max-width: 640px) {
+  .adm-hero h2 {
+    font-size: 22px;
+  }
+  .adm-hero {
+    padding: 24px;
+  }
+  .adm-header h1 {
+    font-size: 22px;
+  }
+}
