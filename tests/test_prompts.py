@@ -3,14 +3,31 @@ from memaide.prompts.system_prompt import build_system_prompt
 from memaide.schemas import PatientContext
 
 
+def _turns(ex):
+    """Flatten an example into its turn(s); single-turn examples are their own turn."""
+    return ex.get("turns") or [ex]
+
+
 def test_few_shot_has_examples_with_required_keys():
-    assert 3 <= len(FEW_SHOT_EXAMPLES) <= 10
+    assert 3 <= len(FEW_SHOT_EXAMPLES) <= 12
+    turn_keys = {"patient", "reply_text", "wants_escalation", "handoff_ready", "intent"}
     for ex in FEW_SHOT_EXAMPLES:
-        assert set(ex) >= {"situation", "patient", "reply_text", "wants_escalation",
-                           "handoff_ready", "intent"}
-    # at least one escalation example and one non-escalation example
-    assert any(ex["wants_escalation"] for ex in FEW_SHOT_EXAMPLES)
-    assert any(not ex["wants_escalation"] for ex in FEW_SHOT_EXAMPLES)
+        assert "situation" in ex
+        for turn in _turns(ex):
+            assert set(turn) >= turn_keys
+    # at least one escalation turn and one non-escalation turn
+    all_turns = [t for ex in FEW_SHOT_EXAMPLES for t in _turns(ex)]
+    assert any(t["wants_escalation"] for t in all_turns)
+    assert any(not t["wants_escalation"] for t in all_turns)
+
+
+def test_few_shot_includes_a_multi_turn_example():
+    multi = [ex for ex in FEW_SHOT_EXAMPLES if len(_turns(ex)) > 1]
+    assert multi, "expected at least one multi-turn example"
+    # a multi-turn example should render every one of its turns
+    text = format_few_shot()
+    for turn in multi[0]["turns"]:
+        assert turn["patient"] in text
 
 
 def test_format_few_shot_renders_json_replies():
