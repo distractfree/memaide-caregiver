@@ -1,0 +1,875 @@
+[
+  {
+    "name": "fall_with_pain",
+    "focus": "distress",
+    "escalated": true,
+    "expected_escalation": true,
+    "escalation_correct": true,
+    "transcript": [
+      {
+        "role": "agent",
+        "text": "Hi, I'm here to help. Can you tell me what's wrong?",
+        "ts": "2026-06-17T21:50:38.607067Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I fell in the kitchen and I can't get up.",
+        "ts": "2026-06-17T21:50:38.607108Z",
+        "scene_label": "person_on_floor"
+      },
+      {
+        "role": "agent",
+        "text": "Oh Sam, I\u2019m so sorry. You fell and you can\u2019t get up. I\u2019m getting emergency help for you right now, and I\u2019m staying right here with you. Try to stay as still as you can. Can you tell me if you feel any pain anywhere\u2014like your head, hip, or chest? I'm going to call emergency services (911) for you now.",
+        "ts": "2026-06-17T21:50:39.895463Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "My hip really hurts.",
+        "ts": "2026-06-17T21:50:39.895488Z",
+        "scene_label": "person_on_floor"
+      },
+      {
+        "role": "agent",
+        "text": "Oh Sam, I\u2019m sorry\u2014hip pain after a fall is serious. I\u2019m getting emergency help right now, and I\u2019m staying with you. Try not to move your hip. Take slow breaths. Can you tell me if you feel dizzy or if you hit your head at all? I'm going to call emergency services (911) for you now.",
+        "ts": "2026-06-17T21:50:41.249517Z",
+        "scene_label": null
+      }
+    ]
+  },
+  {
+    "name": "chest_tightness",
+    "focus": "distress",
+    "escalated": true,
+    "expected_escalation": true,
+    "escalation_correct": true,
+    "transcript": [
+      {
+        "role": "agent",
+        "text": "Hi, I'm here to help. Can you tell me what's wrong?",
+        "ts": "2026-06-17T21:50:41.249670Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "My chest feels really tight and I'm sweating.",
+        "ts": "2026-06-17T21:50:41.249677Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Sam, thank you for telling me. I\u2019m taking this seriously. I\u2019m getting emergency help for you right now. Please sit down and try to stay still. Take slow breaths with me\u2014inhale\u2026 and out. Are you having any trouble breathing or pain going to your arm, back, or jaw? I'm going to call emergency services (911) for you now.",
+        "ts": "2026-06-17T21:50:42.760061Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "It's not getting any better.",
+        "ts": "2026-06-17T21:50:42.760086Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Sam, I\u2019m really sorry. Since it\u2019s not getting better, I\u2019m calling emergency help right now. Please stay seated and try not to move. Loosen anything tight around your neck. Take slow breaths with me\u2014inhale\u2026 and out. Are you able to speak full sentences? I'm going to call emergency services (911) for you now.",
+        "ts": "2026-06-17T21:50:44.091220Z",
+        "scene_label": null
+      }
+    ]
+  },
+  {
+    "name": "disoriented_at_home",
+    "focus": "confusion",
+    "escalated": false,
+    "expected_escalation": false,
+    "escalation_correct": true,
+    "transcript": [
+      {
+        "role": "agent",
+        "text": "Hi, I'm here to help. Can you tell me what's wrong?",
+        "ts": "2026-06-17T21:50:44.091383Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I don't know where I am. Whose house is this?",
+        "ts": "2026-06-17T21:50:44.091391Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "It\u2019s okay, Rosie. You\u2019re safe. You\u2019re in your home. I\u2019m here with you now. Take a slow breath with me. Can you tell me what you were doing right before you pressed Help?",
+        "ts": "2026-06-17T21:50:45.024095Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "Oh. Is my daughter coming?",
+        "ts": "2026-06-17T21:50:45.024118Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Yes, Rosie. Your daughter and a caregiver have been alerted, and they may join soon. I\u2019m here with you until they arrive. Would you like to tell me your daughter\u2019s name, so I can confirm who\u2019s coming?",
+        "ts": "2026-06-17T21:50:46.223916Z",
+        "scene_label": null
+      }
+    ]
+  },
+  {
+    "name": "medication_check",
+    "focus": "medication",
+    "escalated": false,
+    "expected_escalation": false,
+    "escalation_correct": true,
+    "transcript": [
+      {
+        "role": "agent",
+        "text": "Hi, I'm here to help. Can you tell me what's wrong?",
+        "ts": "2026-06-17T21:50:46.224111Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "Did I already take my blood pressure pill this morning?",
+        "ts": "2026-06-17T21:50:46.224118Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Let\u2019s check together, Rosie. Can you look at your pill box for me? Is the section for this morning open and empty, or still closed?",
+        "ts": "2026-06-17T21:50:47.879627Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "The morning box is open and empty.",
+        "ts": "2026-06-17T21:50:47.879651Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Okay, Rosie. If the morning box is open and empty, it usually means you already took it. Would you like to check the label or the next box for the next dose time?",
+        "ts": "2026-06-17T21:50:48.703870Z",
+        "scene_label": null
+      }
+    ]
+  },
+  {
+    "name": "lonely_text_input",
+    "focus": "emotional",
+    "escalated": false,
+    "expected_escalation": false,
+    "escalation_correct": true,
+    "transcript": [
+      {
+        "role": "agent",
+        "text": "Hi, I'm here to help. Can you tell me what's wrong?",
+        "ts": "2026-06-17T21:50:48.704082Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I just felt scared and wanted someone here.",
+        "ts": "2026-06-17T21:50:48.704092Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Oh, Rosie\u2014I\u2019m really glad you pressed the Help button. I\u2019m here with you now, and you\u2019re not alone. Take a slow breath in\u2026 and out. What was making you feel scared right then?",
+        "ts": "2026-06-17T21:50:50.147246Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "Thank you. I feel a little better.",
+        "ts": "2026-06-17T21:50:50.147269Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "I\u2019m glad you\u2019re feeling a little better, Rosie. Let\u2019s check in gently\u2014are you safe right now? Are you in your usual room, and can you see where you are?",
+        "ts": "2026-06-17T21:50:51.685031Z",
+        "scene_label": null
+      }
+    ]
+  },
+  {
+    "name": "borderline_dizziness_seated",
+    "focus": "borderline",
+    "escalated": false,
+    "expected_escalation": false,
+    "escalation_correct": true,
+    "transcript": [
+      {
+        "role": "agent",
+        "text": "Hi, I'm here to help. Can you tell me what's wrong?",
+        "ts": "2026-06-17T21:50:51.685236Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I stood up from my chair a minute ago and the room felt like it tilted, so I sat straight back down.",
+        "ts": "2026-06-17T21:50:51.685244Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Sam, that sounds scary. Are you feeling dizzy right now, or is it better since you sat down?",
+        "ts": "2026-06-17T21:50:52.602217Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "No, there's no pain anywhere. My chest is fine and I'm breathing normally.",
+        "ts": "2026-06-17T21:50:52.602242Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Okay, thank you. Since you\u2019re not in pain and your breathing is normal, that\u2019s reassuring. Let\u2019s check one thing at a time.\nAre you still feeling dizzy or tilted right now, or do you feel steady?",
+        "ts": "2026-06-17T21:50:53.818619Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I don't feel sick to my stomach either. It was just that swimmy feeling for a few seconds.",
+        "ts": "2026-06-17T21:50:53.818642Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Got it, Sam. A brief swimmy feeling when you stood up can happen, especially when you change positions. I\u2019m glad it passed.\nRight now, are you feeling steady and okay while you\u2019re sitting?",
+        "ts": "2026-06-17T21:50:54.740413Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "Now that I'm sitting still it's already settling down.",
+        "ts": "2026-06-17T21:50:54.740437Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Good, Sam. I\u2019m really glad it\u2019s settling.\nLet\u2019s make sure you\u2019re safe for the next few minutes. Please stay seated, and keep your feet flat on the floor.\nDo you feel steady enough to tell me where you are right now\u2014living room, bedroom, or kitchen?",
+        "ts": "2026-06-17T21:50:55.968361Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I had breakfast, but you're right, I haven't drunk much today. It's been a warm one.",
+        "ts": "2026-06-17T21:50:55.968385Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "That makes sense, Sam. Warm weather and not drinking much can cause that lightheaded, swimmy feeling when you stand.\n\nFor now, please keep sitting with your feet flat.\n\nWhen you can, take a few sips of water. Is there a glass or bottle near you?",
+        "ts": "2026-06-17T21:50:57.197864Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "Alright, I've got my water here on the side table. I'll have a good few sips.",
+        "ts": "2026-06-17T21:50:57.197887Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Perfect, Sam. Take a few good sips now, and then just a little more slowly.\n\nI\u2019m going to stay with you. While we wait, can you tell me\u2014did you stand up quickly, or did you pause before you got up?",
+        "ts": "2026-06-17T21:50:58.228023Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "That does feel better. My head's clear again and the room's holding still.",
+        "ts": "2026-06-17T21:50:58.228049Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "I\u2019m so glad, Sam. Clear head, and the room is holding still\u2014that\u2019s good.\n\nLet\u2019s keep you safe for a moment. Please stay seated for a few minutes, and keep your feet flat.\n\nAfter that, when you stand again, would you be able to stand slowly\u2014pause for a few seconds before you start walking?",
+        "ts": "2026-06-17T21:50:59.347744Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I'll stay put for a few minutes like you say, and stand up nice and slow next time.",
+        "ts": "2026-06-17T21:50:59.347767Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Thank you, Sam. That\u2019s a great plan. Stay seated for a few minutes, feet flat, and take a few more sips of water.\n\nWhen you\u2019re ready to stand, do it slowly and pause for a few seconds first. I\u2019ll stay here with you until your caregiver arrives.",
+        "ts": "2026-06-17T21:51:00.376589Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "Thank you for checking on me properly. I feel a bit daft for pressing the button now.",
+        "ts": "2026-06-17T21:51:00.376614Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Sam, you did the right thing. That swimmy feeling could have been something simple, and you made sure you were safe. Pressing the Help button is exactly what it\u2019s for. I\u2019m here with you, and you\u2019re doing well right now\u2014head clear, breathing normal. Stay seated for a few more minutes and keep your feet flat.",
+        "ts": "2026-06-17T21:51:01.908121Z",
+        "scene_label": null
+      }
+    ]
+  },
+  {
+    "name": "caregiver_bridging_anxious",
+    "focus": "caregiver",
+    "escalated": true,
+    "expected_escalation": false,
+    "escalation_correct": false,
+    "transcript": [
+      {
+        "role": "agent",
+        "text": "Hi, I'm here to help. Can you tell me what's wrong?",
+        "ts": "2026-06-17T21:51:01.908275Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I pressed the button because I'm feeling all on edge and I didn't want to sit here on my own.",
+        "ts": "2026-06-17T21:51:01.908282Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "I\u2019m really glad you pressed the button, Walt. You\u2019re not alone. I\u2019m here with you right now. Take a slow breath in\u2026 and out. What\u2019s making you feel on edge\u2014are you worried about something, or is it more like your body feels restless?",
+        "ts": "2026-06-17T21:51:03.342146Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "Nothing hurts, I'm just shaky and my heart feels like it's going a bit fast.",
+        "ts": "2026-06-17T21:51:03.342170Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Thank you for telling me, Walt. I\u2019m going to take this seriously. I\u2019m getting help for you right now, and I\u2019ll stay with you while we wait. Please sit down if you can, and try to take slow breaths with me: in\u2026 and out\u2026 I'm going to call emergency services (911) for you now.",
+        "ts": "2026-06-17T21:51:04.471027Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "No chest pain, and I can breathe alright. I think I've just worked myself up.",
+        "ts": "2026-06-17T21:51:04.471061Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "That\u2019s good to hear, Walt. If there\u2019s no chest pain and you can breathe alright, we can slow this down together. I\u2019m still going to keep you safe\u2014are you able to sit comfortably right now? \n\nLet\u2019s do a quick check: do you feel shaky like from anxiety, or is it more like your body feels weak or dizzy? I'm going to call emergency services (911) for you now.",
+        "ts": "2026-06-17T21:51:05.809007Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "My daughter Karen usually pops in around now. Is she on her way?",
+        "ts": "2026-06-17T21:51:05.809033Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "I\u2019m not sure yet, Walt, but I can help you right now while we wait. I\u2019ll check in with the caregiver team that\u2019s been alerted. \n\nFor you: are you sitting down safely with your walker nearby? And right now, do you feel just shaky and anxious, or do you feel dizzy or like you might fall?",
+        "ts": "2026-06-17T21:51:06.858358Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "Oh, good. Could you stay with me until she gets here?",
+        "ts": "2026-06-17T21:51:06.858382Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Yes, Walt. I\u2019ll stay with you the whole time. You\u2019re safe with me right now. Please keep sitting if you can, and take slow breaths with me\u2014inhale\u2026 and exhale. \n\nWhile we wait, tell me: on a scale of 1 to 10, how shaky do you feel right now? And have you had anything to eat or drink in the last few hours?",
+        "ts": "2026-06-17T21:51:08.376579Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I did take my morning tablets, and I had a proper breakfast.",
+        "ts": "2026-06-17T21:51:08.376602Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "That\u2019s good, Walt. Breakfast and your morning tablets help. I\u2019m staying with you until Karen gets here. \n\nRight now, are you still shaky, or is it easing a bit? And can you tell me what your heart feels like\u2014just fast, or also pounding or skipping?",
+        "ts": "2026-06-17T21:51:09.383332Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I checked my sugar about an hour ago and it was in the normal range.",
+        "ts": "2026-06-17T21:51:09.383357Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "That\u2019s reassuring, Walt. Normal sugar an hour ago helps. I\u2019m staying with you until Karen gets here.\n\nRight now, is the shaking still about the same, or is it easing? And does your heart feel just fast, or pounding or skipping too?",
+        "ts": "2026-06-17T21:51:10.512485Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "Talking to you is helping \u2014 the shakiness is easing off a little.",
+        "ts": "2026-06-17T21:51:10.512514Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "I\u2019m really glad it\u2019s easing, Walt. Keep sitting comfortably, and take slow breaths with me\u2014inhale\u2026 and out. \n\nWhile we wait for Karen, can you tell me: are you feeling safe and steady on your feet right now, or do you feel like you might need help standing?",
+        "ts": "2026-06-17T21:51:11.741535Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "That's her key in the door now. Karen? Yes, she's here.",
+        "ts": "2026-06-17T21:51:11.741559Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Hi Karen\u2014I'm so glad you\u2019re here. Walt, you\u2019re doing well. The shakiness was easing, and you said no chest pain and you can breathe alright. His sugar was in the normal range about an hour ago, and he took his morning tablets and had breakfast. I\u2019ll let you take over now.",
+        "ts": "2026-06-17T21:51:13.088381Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "Thank you for staying with me. I feel much better now she's home.",
+        "ts": "2026-06-17T21:51:13.088405Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "I\u2019m so glad you feel much better, Walt. I\u2019ll stay quiet and let Karen help you. If the shaking comes back, or your heart feels very fast again, or you feel dizzy, press the button again right away. You\u2019re doing great.",
+        "ts": "2026-06-17T21:51:14.212508Z",
+        "scene_label": null
+      }
+    ]
+  },
+  {
+    "name": "evening_confusion_sundowning",
+    "focus": "confusion",
+    "escalated": false,
+    "expected_escalation": false,
+    "escalation_correct": true,
+    "transcript": [
+      {
+        "role": "agent",
+        "text": "Hi, I'm here to help. Can you tell me what's wrong?",
+        "ts": "2026-06-17T21:51:14.212673Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I have to go and collect the children from school. They'll be standing at the gate.",
+        "ts": "2026-06-17T21:51:14.212681Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Okay, Rosie. I understand\u2014you\u2019re worried about the children at the gate. First, are you safe right now where you are? Can you tell me where you are in your home\u2014living room, kitchen, or near the door?",
+        "ts": "2026-06-17T21:51:15.324016Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "What do you mean they're grown up? Michael's only seven.",
+        "ts": "2026-06-17T21:51:15.324040Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Okay, Rosie. I hear you. Let\u2019s slow down together.\nAre the children right now at your gate, or are you worried they will be there soon?",
+        "ts": "2026-06-17T21:51:16.456100Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "Are you quite sure? It feels so real, like I've forgotten something important.",
+        "ts": "2026-06-17T21:51:16.456126Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Rosie, I\u2019m here with you. I\u2019m not sure what\u2019s happening, but you\u2019re safe right now. Let\u2019s check one thing together: can you look out the window or at your front door and tell me what you see?",
+        "ts": "2026-06-17T21:51:17.475920Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "It's going dark outside and that always unsettles me.",
+        "ts": "2026-06-17T21:51:17.475943Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "That makes sense, Rosie. Dark outside can feel unsettling. Let\u2019s make it easier right now. Are you near your front door or a window? If you can, please turn on a light near where you are. Then tell me: do you see any children at the gate right now?",
+        "ts": "2026-06-17T21:51:18.601270Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "Whose cardigan is this on the back of the chair? I don't recognise it.",
+        "ts": "2026-06-17T21:51:18.601303Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Rosie, thank you for telling me. That can feel confusing.\n\nLet\u2019s check gently: is the cardigan on the chair in the room you\u2019re in right now? And do you see any other signs\u2014like a bag or shoes\u2014near it?",
+        "ts": "2026-06-17T21:51:19.641808Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "Oh. It is mine, isn't it. The blue one I like.",
+        "ts": "2026-06-17T21:51:19.641833Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Yes, Rosie\u2014good job noticing. It is your blue cardigan. That\u2019s a relief.\nNow let\u2019s focus on what you need next. Are you at home right now, and do you see the front door or the gate from where you are?",
+        "ts": "2026-06-17T21:51:21.381027Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I am rather tired, I'll admit. I've been on my feet fussing all afternoon.",
+        "ts": "2026-06-17T21:51:21.381052Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Oh Rosie, that sounds exhausting. I\u2019m glad you reached out.\nLet\u2019s do one small thing to help you right now: can you sit down somewhere comfortable for a moment? \nThen tell me\u2014are you feeling any pain, dizziness, or shortness of breath?",
+        "ts": "2026-06-17T21:51:22.594800Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "A cup of tea would be lovely, yes. With a little milk.",
+        "ts": "2026-06-17T21:51:22.594824Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Of course, Rosie. A cup of tea sounds lovely.\nFirst, please sit down somewhere safe. Then we\u2019ll do it step by step.\nCan you tell me\u2014do you have a kettle and teabags where you are, or would you need to go to the kitchen?",
+        "ts": "2026-06-17T21:51:23.822689Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "It is warm and quiet in here, you're right. The worry's passing.",
+        "ts": "2026-06-17T21:51:23.822712Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "I\u2019m really glad the worry is passing, Rosie. You did a good job calming yourself.\nLet\u2019s still take care of you. Are you able to sit comfortably for a moment, and do you want to make that cup of tea now? If you tell me where you are\u2014living room or kitchen\u2014I\u2019ll help you find the next step.",
+        "ts": "2026-06-17T21:51:25.261194Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I think I'll sit in my chair and rest my eyes. Thank you for staying with me, dear.",
+        "ts": "2026-06-17T21:51:25.261225Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "You\u2019re very welcome, Rosie. Please sit back and rest your eyes. I\u2019ll stay with you.\nWhen you\u2019re ready, tell me: do you feel steady, or dizzy at all?",
+        "ts": "2026-06-17T21:51:26.197963Z",
+        "scene_label": null
+      }
+    ]
+  },
+  {
+    "name": "worry_self_resolves",
+    "focus": "emotional",
+    "escalated": false,
+    "expected_escalation": false,
+    "escalation_correct": true,
+    "transcript": [
+      {
+        "role": "agent",
+        "text": "Hi, I'm here to help. Can you tell me what's wrong?",
+        "ts": "2026-06-17T21:51:26.198143Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I think somebody's been in my house. Things in the kitchen have been moved about.",
+        "ts": "2026-06-17T21:51:26.198150Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Oh Sam, that sounds really upsetting. I\u2019m glad you pressed Help. Are you in the house right now, and are you safe where you are?",
+        "ts": "2026-06-17T21:51:27.367664Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "The cupboard under the sink is wide open and I always keep it shut.",
+        "ts": "2026-06-17T21:51:27.367693Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Okay, Sam. You\u2019re safe right now, and I\u2019m here with you. Don\u2019t go looking around. Can you tell me: do you see anyone in the house right now?",
+        "ts": "2026-06-17T21:51:28.643256Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "No, I've checked \u2014 the front and back doors are both locked from the inside.",
+        "ts": "2026-06-17T21:51:28.643280Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Good job checking, Sam. If you don\u2019t see anyone, that\u2019s reassuring. Please stay where you are and keep the doors locked. I\u2019m going to help you think through the next steps\u2014are there any signs of damage or anything missing from the kitchen area?",
+        "ts": "2026-06-17T21:51:29.777921Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "The windows are shut too, and nothing's broken.",
+        "ts": "2026-06-17T21:51:29.777947Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "That\u2019s good news, Sam. Since nothing is broken and the doors and windows are shut, let\u2019s focus on safety. Please stay where you are. Do you smell anything unusual, like smoke or gas?",
+        "ts": "2026-06-17T21:51:31.221434Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "Well... now you ask, I did go rooting under there earlier looking for a fresh bin bag.",
+        "ts": "2026-06-17T21:51:31.221458Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "That makes sense, Sam. If you were in the kitchen earlier, that could explain the cupboard being open. Let\u2019s still be careful. Right now, do you see any sign of someone else\u2014like a light on, a drawer left open, or anything missing?",
+        "ts": "2026-06-17T21:51:32.256437Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "Oh dear. I suppose I left it open myself and forgot all about it.",
+        "ts": "2026-06-17T21:51:32.256464Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "It\u2019s okay, Sam. Forgetting happens. You checked the doors and windows, and nothing is broken. Let\u2019s just make things tidy and safe now. Could you tell me\u2014are you still in the same room, and can you reach the kitchen cupboard from where you are? If not, we\u2019ll wait for your caregiver.",
+        "ts": "2026-06-17T21:51:33.875525Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "And that scratching sound \u2014 that'll just be Tibbles, my cat. There she is.",
+        "ts": "2026-06-17T21:51:33.875549Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Oh good, Sam. Tibbles can make sounds like that. I\u2019m glad it\u2019s your cat. Let\u2019s do one quick safety check: is there any smoke smell, and is the stove or oven turned off?",
+        "ts": "2026-06-17T21:51:35.394250Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "The cheeky thing's knocked my tea towel onto the floor, that's all it was.",
+        "ts": "2026-06-17T21:51:35.394274Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Okay Sam\u2014thank you. That sounds like Tibbles, not a break-in. I\u2019m glad there\u2019s no smoke and nothing is broken. Let\u2019s do a simple reset: please close the cupboard under the sink when you can, and then tell me where you are right now (living room or kitchen).",
+        "ts": "2026-06-17T21:51:36.430173Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I do feel a bit foolish, getting myself in a state over nothing.",
+        "ts": "2026-06-17T21:51:36.430198Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "You don\u2019t need to feel foolish, Sam. It\u2019s scary when you notice something changed. You did the right things\u2014checking doors, windows, and listening. I\u2019m here with you, and we\u2019ll make it calm again. Let\u2019s close that cupboard under the sink together now. Are you in the kitchen, or in the living room?",
+        "ts": "2026-06-17T21:51:37.647188Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "No, you've been very kind. I'll put the kettle on and settle down again. Thank you.",
+        "ts": "2026-06-17T21:51:37.647212Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "You\u2019re very welcome, Sam. I\u2019m glad you\u2019re settling down. Please keep the cupboard closed, and if you notice anything else unusual, press Help again. I\u2019ll stay with you for a moment\u2014are you feeling okay now?",
+        "ts": "2026-06-17T21:51:38.877753Z",
+        "scene_label": null
+      }
+    ]
+  },
+  {
+    "name": "vision_unresponsive_fall",
+    "focus": "non_verbal",
+    "escalated": true,
+    "expected_escalation": true,
+    "escalation_correct": true,
+    "transcript": [
+      {
+        "role": "agent",
+        "text": "Hi, I'm here to help. Can you tell me what's wrong?",
+        "ts": "2026-06-17T21:51:38.877911Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "Ohh... my head... what... what happened...",
+        "ts": "2026-06-17T21:51:38.877918Z",
+        "scene_label": "person_on_floor"
+      },
+      {
+        "role": "agent",
+        "text": "Oh Rosie, I\u2019m so sorry. I\u2019m here with you. Try to stay very still on the floor. Did you fall, or did you feel dizzy first? I\u2019m calling for help right now, and I\u2019ll stay talking to you while they come. I'm going to call emergency services (911) for you now.",
+        "ts": "2026-06-17T21:51:40.107135Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "...I can't... my arm won't...",
+        "ts": "2026-06-17T21:51:40.107169Z",
+        "scene_label": "person_on_floor"
+      },
+      {
+        "role": "agent",
+        "text": "Rosie, I\u2019m really sorry. You\u2019re not alone. I\u2019m calling emergency help right now. Please try to keep still, and keep your head supported if you can. Can you tell me\u2014are you having trouble speaking, or is it mainly your arm? I'm going to call emergency services (911) for you now.",
+        "ts": "2026-06-17T21:51:41.230897Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "\u2026",
+        "ts": "2026-06-17T21:51:41.230922Z",
+        "scene_label": "no_motion"
+      },
+      {
+        "role": "agent",
+        "text": "Rosie, I\u2019m here. I\u2019m not getting a response from you, so this is urgent. I\u2019m calling emergency help right now, and I\u2019ll stay with you as long as I can. Please try to breathe slowly if you can. If you can, blink or move your fingers just a little. I'm going to call emergency services (911) for you now.",
+        "ts": "2026-06-17T21:51:42.379275Z",
+        "scene_label": null
+      }
+    ]
+  },
+  {
+    "name": "gradual_deterioration",
+    "focus": "distress",
+    "escalated": true,
+    "expected_escalation": true,
+    "escalation_correct": true,
+    "transcript": [
+      {
+        "role": "agent",
+        "text": "Hi, I'm here to help. Can you tell me what's wrong?",
+        "ts": "2026-06-17T21:51:42.379451Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I'm feeling a bit more short of breath than usual this evening.",
+        "ts": "2026-06-17T21:51:42.379458Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Oh, Edie\u2014I\u2019m sorry you\u2019re feeling that way. Let\u2019s take this seriously. Are you having trouble breathing right now, or is it more mild? Do you have your blue rescue inhaler with you?",
+        "ts": "2026-06-17T21:51:44.422788Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I've been sitting quietly with my feet up, but it hasn't really eased.",
+        "ts": "2026-06-17T21:51:44.422812Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Edie, thank you for telling me. Since it isn\u2019t easing, I\u2019m going to get emergency help for you right now. Please stay seated with your feet up. If you can, take your blue rescue inhaler exactly as you normally do. I\u2019m right here with you. I'm going to call emergency services (911) for you now.",
+        "ts": "2026-06-17T21:51:45.391594Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "My chest feels tighter than it normally does with my COPD.",
+        "ts": "2026-06-17T21:51:45.391627Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Edie, I\u2019m really sorry\u2014thank you for telling me. Chest tightness that\u2019s worse than usual can be serious. I\u2019m calling emergency help (911) right now, and I\u2019m staying with you. Please sit upright if you can, keep your feet up, and try slow breaths. Do you have your blue rescue inhaler in reach right now? I'm going to call emergency services (911) for you now.",
+        "ts": "2026-06-17T21:51:46.559679Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I used my blue inhaler about twenty minutes ago and it's barely touched it.",
+        "ts": "2026-06-17T21:51:46.559702Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Okay, Edie. Thank you. Since your breathing isn\u2019t improving and your chest feels tighter, I\u2019m calling emergency help (911) right now. Please stay seated and try to breathe slowly. Keep the inhaler nearby in case the dispatcher tells you what to do. I\u2019m right here with you. I'm going to call emergency services (911) for you now.",
+        "ts": "2026-06-17T21:51:47.684982Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "It's getting harder to take a full breath now, and I'm starting to feel frightened.",
+        "ts": "2026-06-17T21:51:47.685008Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Edie, I\u2019m here with you. I can hear you\u2019re getting scared, and that makes sense. I\u2019m calling emergency help (911) right now, and I\u2019ll stay right here with you the whole time. Please sit upright if you can, keep your feet up, and take slow breaths. Keep your blue rescue inhaler within reach. Are you able to speak in full sentences right now? I'm going to call emergency services (911) for you now.",
+        "ts": "2026-06-17T21:51:49.117708Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "I can't... I can't finish my sentences... my lips have gone all tingly.",
+        "ts": "2026-06-17T21:51:49.117735Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Edie, I\u2019m so sorry\u2014this sounds urgent. I\u2019m calling emergency help (911) right now. Please stay seated and upright. Keep your blue rescue inhaler right next to you. Try to take slow breaths, even if you can\u2019t finish sentences. I\u2019m right here with you. I'm going to call emergency services (911) for you now.",
+        "ts": "2026-06-17T21:51:50.363605Z",
+        "scene_label": null
+      },
+      {
+        "role": "patient",
+        "text": "Please... something's not right... I can't catch my breath.",
+        "ts": "2026-06-17T21:51:50.363630Z",
+        "scene_label": null
+      },
+      {
+        "role": "agent",
+        "text": "Edie, I\u2019m here with you. Something is not right, and I\u2019m treating this as an emergency. I\u2019m calling 911 right now, and I\u2019ll stay with you the whole time. Please sit upright and keep your blue rescue inhaler right next to you. Try slow breaths\u2014small sips of air if you can. If you feel faint, tell me right away. I'm going to call emergency services (911) for you now.",
+        "ts": "2026-06-17T21:51:51.881265Z",
+        "scene_label": null
+      }
+    ]
+  }
+]
