@@ -1,8 +1,10 @@
 """Run the agent over the eval dataset and export transcripts for scoring.
 
 Default flow (``main``) needs ONLY the OpenAI key: it runs each conversation through
-the agent and writes the transcripts to ``eval_out/`` as JSON plus a self-contained
-markdown file (rubric included) that you can paste into a chat for scoring.
+every model in ``EVAL_MODELS`` and writes the transcripts to a uniquely-id'd run folder
+under ``docs/eval-runs/<run_id>/<model>/`` as JSON plus a self-contained markdown file
+(rubric included) that you can paste into a chat for scoring, alongside a ``run.json``
+manifest for the run.
 
 An optional automated path (``run_case`` + ``Judge``) scores with an API judge; see
 ``memaide.eval.judge``. It is not used by ``main`` and requires the ``judge`` extra.
@@ -10,6 +12,7 @@ An optional automated path (``run_case`` + ``Judge``) scores with an API judge; 
 
 import asyncio
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
@@ -20,9 +23,17 @@ from memaide.agent.session import AgentSession
 from memaide.eval.dataset import EVAL_CASES, EvalCase
 from memaide.eval.judge import Judge, ScoreCard
 from memaide.io.openai_client import OpenAIClient
+from memaide.prompts.few_shot import FEW_SHOT_EXAMPLES
 from memaide.schemas import HandoffType, PatientContext, Turn
 
 _AXES = ["safety", "clarity", "task_completion", "tone", "handoff_readiness"]
+
+# Models compared in a run. Each is run over the full dataset and its transcripts
+# written to <run_dir>/<model>/.
+EVAL_MODELS = ["gpt-4o-mini", "gpt-5.4-mini", "gpt-5.4-nano"]
+
+# Every eval run is archived under here in its own timestamped, uniquely-id'd folder.
+EVAL_RUNS_DIR = Path("docs/eval-runs")
 
 RUBRIC = """\
 Score each conversation from 1 (poor) to 5 (excellent) on each axis:
@@ -140,25 +151,79 @@ def summarize(results: list[CaseResult]) -> dict:
     return {"n": n, "avg": avg, "escalation_accuracy": round(accuracy, 3)}
 
 
-async def main() -> None:
-    openai_client = OpenAIClient()
+async def run_model(
+    model: str, openai_client: OpenAIClient, run_dir: Path
+) -> list[CaseTranscript]:
+    """Run the full dataset through one model and write its transcripts under run_dir."""
 
     def brain_factory(patient: PatientContext) -> AgentBrain:
-        return AgentBrain(client=openai_client, patient=patient)
+        return AgentBrain(client=openai_client, patient=patient, model=model)
 
-    transcripts = [await run_agent_case(case, brain_factory) for case in EVAL_CASES]
+    transcripts: list[CaseTranscript] = []
+    failed: list[str] = []
+    for case in EVAL_CASES:
+        try:
+            transcripts.append(await run_agent_case(case, brain_factory))
+        except Exception as exc:  # noqa: BLE001 - isolate so one case can't sink the run
+            failed.append(case.name)
+            print(f"  {case.name:<28}ERROR after retries: {str(exc)[:120]}")
 
-    out_dir = Path("eval_out")
+    out_dir = run_dir / model
     json_path = out_dir / "eval_transcripts.json"
     md_path = out_dir / "eval_transcripts.md"
     export(transcripts, json_path, md_path)
 
     correct = sum(1 for t in transcripts if t.escalation_correct)
-    print(f"Ran {len(transcripts)} cases. Escalation correct: {correct}/{len(transcripts)}.")
+    failed_note = f" ({len(failed)} failed: {', '.join(failed)})" if failed else ""
+    print(f"\n[{model}] Ran {len(transcripts)}/{len(EVAL_CASES)} cases. Escalation correct: "
+          f"{correct}/{len(transcripts)}.{failed_note}")
     for t in transcripts:
         flag = "OK" if t.escalation_correct else "MISMATCH"
-        print(f"  {t.name:<22}{t.focus:<12}escalated={str(t.escalated):<6}{flag}")
-    print(f"\nTranscripts written to:\n  {md_path}  (paste into chat for scoring)\n  {json_path}")
+        print(f"  {t.name:<28}{t.focus:<12}escalated={str(t.escalated):<6}{flag}")
+    print(f"  -> {md_path}  (paste into chat for scoring)")
+    return transcripts
+
+
+async def main() -> None:
+    openai_client = OpenAIClient()
+
+    run_id = datetime.now().strftime("run-%Y%m%d-%H%M%S")
+    run_dir = EVAL_RUNS_DIR / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Eval run id: {run_id}\nWriting to:  {run_dir}")
+
+    by_model: dict[str, list[CaseTranscript]] = {}
+    for model in EVAL_MODELS:
+        try:
+            by_model[model] = await run_model(model, openai_client, run_dir)
+        except Exception as exc:  # noqa: BLE001 - keep going so other models still run
+            print(f"\n[{model}] FAILED: {exc}")
+
+    print("\n=== Escalation accuracy by model ===")
+    n = len(EVAL_CASES)
+    results: dict[str, dict | None] = {}
+    for model in EVAL_MODELS:
+        transcripts = by_model.get(model)
+        if transcripts is None:
+            print(f"  {model:<16} (run failed)")
+            results[model] = None
+            continue
+        correct = sum(1 for t in transcripts if t.escalation_correct)
+        ran = len(transcripts)
+        note = "" if ran == n else f"  ({n - ran} case(s) errored out)"
+        print(f"  {model:<16} {correct}/{ran} correct{note}")
+        results[model] = {"ran": ran, "escalation_correct": correct}
+
+    manifest = {
+        "run_id": run_id,
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "models": EVAL_MODELS,
+        "num_cases": n,
+        "num_few_shot_examples": len(FEW_SHOT_EXAMPLES),
+        "results": results,
+    }
+    (run_dir / "run.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    print(f"\nRun manifest: {run_dir / 'run.json'}")
 
 
 if __name__ == "__main__":

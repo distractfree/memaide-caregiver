@@ -1,12 +1,12 @@
-
-
 import os
 
 from dotenv import load_dotenv
 
 # Load OPENAI_API_KEY (and optional ANTHROPIC_API_KEY) from a .env file if one exists.
 # No-op when there is no .env, so this is safe for library/integration use too.
-load_dotenv()
+# override=True so .env is authoritative even when a stale OPENAI_API_KEY is already
+# set in the OS environment (otherwise load_dotenv won't overwrite it).
+load_dotenv(override=True)
 
 # --- Models ---
 BRAIN_MODEL = "gpt-4o-mini"

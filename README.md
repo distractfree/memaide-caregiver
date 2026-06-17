@@ -29,9 +29,12 @@ python -m venv .venv
 
 ## Evaluate (needs only OPENAI_API_KEY)
 
-Runs every dataset conversation through the agent and writes transcripts to `eval_out/`
-(JSON + a self-contained markdown that includes the scoring rubric). Paste the markdown
-into a chat to score it against the rubric — no Anthropic key needed.
+Runs every dataset conversation through each model in `EVAL_MODELS` and writes transcripts
+to `docs/eval-runs/<run_id>/<model>/` (JSON + a self-contained markdown that includes the
+scoring rubric), where `<run_id>` is a unique timestamp per run (e.g. `run-20260617-143205`).
+Each run also drops a `run.json` manifest (models, case count, few-shot-example count,
+per-model escalation accuracy). Paste a markdown file into a chat to score it against the
+rubric — no Anthropic key needed.
 
 ```bash
 .venv\Scripts\python -m memaide.eval.run_eval

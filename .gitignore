@@ -4,4 +4,4 @@ __pycache__/
 .venv/
 venv/
 .pytest_cache/
-eval_out/
+# Eval runs are archived (and tracked) under docs/eval-runs/<run_id>/.

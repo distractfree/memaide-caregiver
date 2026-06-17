@@ -1,5 +1,6 @@
 from typing import Any
 
+from memaide import config
 from memaide.prompts.system_prompt import build_system_prompt
 from memaide.schemas import AgentDecision, PatientContext, Role, Turn, VisionContext
 
@@ -16,9 +17,10 @@ class AgentBrain:
     ``client`` must expose ``async complete_json(messages, model=?, temperature=?)``.
     """
 
-    def __init__(self, client: Any, patient: PatientContext):
+    def __init__(self, client: Any, patient: PatientContext, model: str = config.BRAIN_MODEL):
         self._client = client
         self._patient = patient
+        self._model = model
         self._system_prompt = build_system_prompt(patient)
 
     def _build_messages(self, transcript: list[Turn], vision: VisionContext | None) -> list[dict]:
@@ -42,5 +44,5 @@ class AgentBrain:
         self, transcript: list[Turn], vision: VisionContext | None = None
     ) -> AgentDecision:
         messages = self._build_messages(transcript, vision)
-        data = await self._client.complete_json(messages)
+        data = await self._client.complete_json(messages, model=self._model)
         return AgentDecision.model_validate(data)
