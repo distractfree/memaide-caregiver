@@ -45,6 +45,25 @@ async def test_complete_json_parses_and_requests_json_mode():
     assert call["model"] == "gpt-4o-mini"
 
 
+async def test_fixed_temperature_model_omits_temperature():
+    # gpt-5-mini rejects any non-default temperature; the client must not send it.
+    sdk = _FakeSDK()
+    client = OpenAIClient(client=sdk)
+    await client.complete_json([{"role": "user", "content": "hi"}], model="gpt-5-mini")
+    call = sdk.chat.completions.calls[0]
+    assert "temperature" not in call
+
+
+async def test_normal_model_includes_temperature():
+    sdk = _FakeSDK()
+    client = OpenAIClient(client=sdk)
+    await client.complete_json(
+        [{"role": "user", "content": "hi"}], model="gpt-5.4-mini", temperature=0.4
+    )
+    call = sdk.chat.completions.calls[0]
+    assert call["temperature"] == 0.4
+
+
 class _FlakyCompletions:
     """Raises ``exc`` the first ``fail_times`` calls, then succeeds."""
 

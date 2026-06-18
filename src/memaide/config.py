@@ -40,6 +40,10 @@ DISTRESS_KEYWORDS = [
 ]
 CRITICAL_VISION_FLAGS = {"person_on_floor", "fall_detected", "no_motion"}
 
+# Models that reject a custom sampling temperature and only accept the API default (1).
+# The GPT-5.0 family is stricter here than gpt-5.4, which does accept e.g. 0.4.
+FIXED_TEMPERATURE_MODELS = {"gpt-5-mini"}
+
 # --- Vision (Milestone 2) ---
 VISION_INTERVAL_SECONDS = 7.0
 

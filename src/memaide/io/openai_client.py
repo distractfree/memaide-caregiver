@@ -50,7 +50,7 @@ class OpenAIClient:
             "messages": messages,
             "response_format": {"type": "json_object"},
         }
-        if temperature is not None:
+        if temperature is not None and model not in config.FIXED_TEMPERATURE_MODELS:
             kwargs["temperature"] = temperature
 
         delay = retry_base_delay
