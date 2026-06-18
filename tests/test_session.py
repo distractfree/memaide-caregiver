@@ -69,6 +69,16 @@ async def test_rule_based_escalation_sets_flag_and_appends_suggestion():
     assert "911" in agent_turn.text
 
 
+async def test_suggestion_not_appended_when_reply_already_contains_it():
+    from memaide import config
+
+    reply = f"Hold on. {config.EMERGENCY_SUGGESTION}"
+    s = _session(StubBrain(_decision(reply=reply, escalate=True)))
+    s.start()
+    agent_turn = await s.handle_patient_input("I feel a bit off")
+    assert agent_turn.text.count(config.EMERGENCY_SUGGESTION) == 1
+
+
 async def test_brain_requested_escalation_also_escalates():
     s = _session(StubBrain(_decision(reply="Okay.", escalate=True)))
     s.start()

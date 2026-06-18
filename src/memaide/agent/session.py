@@ -76,7 +76,7 @@ class AgentSession:
             self.escalated = True
 
         reply_text = decision.reply_text
-        if escalate:
+        if escalate and config.EMERGENCY_SUGGESTION not in reply_text:
             reply_text = f"{reply_text} {config.EMERGENCY_SUGGESTION}".strip()
 
         if vision is not None:
