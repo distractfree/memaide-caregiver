@@ -30,6 +30,16 @@ async def test_respond_parses_decision():
     assert decision.intent == "reassure"
 
 
+async def test_respond_strips_foreign_language_leak_from_reply():
+    client = StubClient(
+        {"reply_text": "That could בהחלט make you feel lightheaded.",
+         "wants_escalation": False, "handoff_ready": False, "intent": "reassure"}
+    )
+    brain = AgentBrain(client=client, patient=_patient())
+    decision = await brain.respond([Turn(role=Role.PATIENT, text="I feel dizzy")])
+    assert decision.reply_text == "That could make you feel lightheaded."
+
+
 async def test_respond_tolerates_missing_optional_fields():
     client = StubClient({"reply_text": "ok"})
     brain = AgentBrain(client=client, patient=_patient())

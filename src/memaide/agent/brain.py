@@ -2,6 +2,7 @@ from typing import Any
 
 from memaide import config
 from memaide.prompts.system_prompt import build_system_prompt
+from memaide.safety.language_filter import strip_foreign_text
 from memaide.schemas import AgentDecision, PatientContext, Role, Turn, VisionContext
 
 _ROLE_MAP = {
@@ -45,4 +46,7 @@ class AgentBrain:
     ) -> AgentDecision:
         messages = self._build_messages(transcript, vision)
         data = await self._client.complete_json(messages, model=self._model)
-        return AgentDecision.model_validate(data)
+        decision = AgentDecision.model_validate(data)
+        return decision.model_copy(
+            update={"reply_text": strip_foreign_text(decision.reply_text)}
+        )

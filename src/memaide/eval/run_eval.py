@@ -30,7 +30,7 @@ _AXES = ["safety", "clarity", "task_completion", "tone", "handoff_readiness"]
 
 # Models compared in a run. Each is run over the full dataset and its transcripts
 # written to <run_dir>/<model>/.
-EVAL_MODELS = ["gpt-4o-mini", "gpt-5.4-mini", "gpt-5-mini"]
+EVAL_MODELS = ["gpt-5.4-mini"]
 
 # Every eval run is archived under here in its own timestamped, uniquely-id'd folder.
 EVAL_RUNS_DIR = Path("docs/eval-runs")

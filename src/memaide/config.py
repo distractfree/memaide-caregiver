@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 # --- Models ---
-BRAIN_MODEL = "gpt-4o-mini"
+BRAIN_MODEL = "gpt-5.4-mini"
 VISION_MODEL = "gpt-4o-mini"
 REALTIME_MODEL = "gpt-4o-mini-realtime-preview"  # Milestone 2
 JUDGE_MODEL = "claude-opus-4-8"

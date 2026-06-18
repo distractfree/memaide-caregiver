@@ -2,7 +2,7 @@ from memaide import config
 
 
 def test_model_names():
-    assert config.BRAIN_MODEL == "gpt-4o-mini"
+    assert config.BRAIN_MODEL == "gpt-5.4-mini"
     assert config.VISION_MODEL == "gpt-4o-mini"
     assert config.REALTIME_MODEL == "gpt-4o-mini-realtime-preview"
     assert config.JUDGE_MODEL == "claude-opus-4-8"

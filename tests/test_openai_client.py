@@ -1,3 +1,4 @@
+from memaide import config
 from memaide.io.openai_client import OpenAIClient
 
 
@@ -42,7 +43,7 @@ async def test_complete_json_parses_and_requests_json_mode():
     assert out == {"reply_text": "hi", "intent": "reassure"}
     call = sdk.chat.completions.calls[0]
     assert call["response_format"] == {"type": "json_object"}
-    assert call["model"] == "gpt-4o-mini"
+    assert call["model"] == config.BRAIN_MODEL
 
 
 async def test_fixed_temperature_model_omits_temperature():
