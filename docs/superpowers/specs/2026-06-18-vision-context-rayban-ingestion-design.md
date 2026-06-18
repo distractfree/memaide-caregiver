@@ -1,4 +1,4 @@
-# Vision Context + Ray-Ban Meta Frame Ingestion — Design (M2, increment 1)
+# Vision + Voice Live-Media Layer (Ray-Ban Meta) — Design (M2)
 
 Date: 2026-06-18
 Status: Approved (brainstorming)
@@ -6,14 +6,23 @@ Branch: `feat/agent-foundation-m1`
 
 ## Summary
 
-The first Milestone 2 increment: turn live point-of-view frames from Ray-Ban Meta
-glasses into `VisionContext` (scene description + label + advisory flags) and feed
-them toward the agent. This adds the frame **describer** (model + image-detail
-configurable), a pluggable frame **source** seam, a reusable **pipeline** core, a thin
-**WebSocket server** that receives frames from the glasses' mobile app, and a
-**vision-describer eval** that sweeps gpt-4o-mini × gpt-5.4-mini at low × high detail —
-saving every input image alongside each model's output and real cost/latency — so the
-model/detail choice is made on evidence.
+The Milestone 2 live-media layer. Two media streams from the Ray-Ban Meta glasses (POV
+camera + microphone) flow over a WebSocket into the existing text brain and back out as
+spoken replies:
+
+- **Vision:** frames → `VisionDescriber` (model + image-detail configurable) → `VisionContext`
+  (scene description + label + advisory flags), produced on an interval and kept as the
+  "latest scene" for the brain.
+- **Voice:** patient audio → **streaming STT** → text → existing `AgentBrain` (the *only*
+  inference) → reply text → **batch TTS** → spoken audio + on-screen subtitle.
+
+The audio models are pure converters — no reasoning happens in STT or TTS; all judgment
+stays in the text brain and the rule-based safety monitor. This adds the frame
+**describer**, a pluggable frame **source** seam, a reusable vision **pipeline**, **STT**
+and **TTS** converters, a thin **WebSocket server** carrying both media streams, the
+**live `AgentSession` loop** that ties them together, and a **vision-describer eval**
+(gpt-4o-mini × gpt-5.4-mini at low × high detail, with every input image saved) so the
+vision model/detail choice is made on evidence.
 
 ## Context and constraints (verified 2026-06)
 
@@ -27,9 +36,12 @@ model/detail choice is made on evidence.
   the **Llama API** (Llama 4 multimodal). For this increment we keep **gpt-4o-mini** as
   the vision describer (decision below); "Meta / Ray-Ban" refers to the *frame source*
   (hardware via the mobile toolkit), not an inference API.
-- The glasses SDK is mobile/web, **not runnable from Python**. The backend side of this
-  increment is therefore: the describer, the frame-ingestion boundary, and the pipeline
-  that connects them.
+- The glasses SDK (camera **and** microphone) is mobile/web, **not runnable from
+  Python**. The backend side of this increment is therefore: the describer, the STT/TTS
+  converters, the media-ingestion boundary (WebSocket), and the pipeline + voice loop that
+  connect them to the brain. On-device capture/encoding stays in the mobile app.
+- **Audio "Meta AI" clarification:** the glasses' own on-board Meta AI assistant is not
+  used; the glasses are a mic/speaker, and all STT, reasoning, and TTS run server-side.
 
 ## Decisions
 
@@ -38,7 +50,10 @@ model/detail choice is made on evidence.
 | Vision model (frame → `VisionContext`) | **gpt-4o-mini** is the working default; final pick (vs **gpt-5.4-mini**) is decided by the model × detail eval below |
 | Image `detail` | **`"low"`** is the default; eval also measures **`"high"`** |
 | `describe()` input | **base64 data URL `str`** (`data:image/jpeg;base64,…`) |
-| Increment scope | Describer (`model` + `detail` params) + `FrameSource` seam + `VisionPipeline` + **thin WebSocket receiver** + **vision-describer eval harness** |
+| Voice architecture | **STT → text brain → TTS** pipeline; the audio models do **no inference**. Supersedes the bundled `gpt-4o-mini-realtime` path |
+| STT / TTS provider | **All-OpenAI**: `gpt-4o-mini-transcribe` ($0.003/min) + `gpt-4o-mini-tts` (~$0.015/min) — one key, streaming, 50+ languages |
+| Audio streaming | **Streaming STT** (endpointing + partials) + **batch TTS** (synthesize the short reply once) |
+| Increment scope | Describer + `FrameSource` + `VisionPipeline` + STT + TTS converters + **WebSocket server (both media streams)** + **live `AgentSession` loop** + **vision-describer eval** |
 | WebSocket layer | **`websockets`** (lightweight, pure asyncio; no HTTP framework) |
 | Describer flags | the model emits **advisory** flags, kept in a **separate field** from the rule-based `flags` |
 
@@ -52,6 +67,17 @@ advantage** — gpt-4o-mini's per-tile ×33 multiplier can overtake gpt-5.4-mini
 exactly why the eval measures real cost per (model, detail) rather than trusting the
 estimate. Because the describer's flags are only **advisory** (the rule-based CV `flags`
 own escalation), paying for the strongest model is not required for safety.
+
+### Audio cost / latency context (verified 2026-06)
+
+`gpt-4o-mini-transcribe` is $0.003/min and `gpt-4o-mini-tts` ~$0.015/min, so a 5-minute
+session's audio is roughly $0.02–0.09 depending on talk time — same order as the vision
+cost. Single-vendor (one `OPENAI_API_KEY`) and 50+ language support align with the brain's
+existing language-mirroring. The trade-off accepted: OpenAI TTS has higher time-to-first-
+audio than specialist providers (Cartesia ~40–90ms, ElevenLabs Flash ~75ms). Mitigations:
+streaming STT keeps endpointing tight, replies are short, and `TextToSpeech` is an
+injectable seam — if measured turn latency misses the <3s target, a low-latency TTS vendor
+can be dropped in without touching the loop or the brain.
 
 ### Why advisory flags get their own field
 
@@ -70,8 +96,14 @@ path; the deterministic escalation logic is untouched. The brain still benefits:
 
 ## Data flow
 
+One WebSocket connection per Help session carries **both** streams. Two concurrent tasks
+run per connection: the vision pipeline (continuous, interval-throttled) keeps a "latest
+scene", and the voice loop (turn-based) drives the conversation, reading that latest
+scene on each turn.
+
+**Vision stream (continuous):**
 ```
-Ray-Ban glasses ──POV frame──> phone app (Meta Wearables toolkit)
+Ray-Ban camera ──POV frame──> phone app (Meta Wearables toolkit)
         │  JSON {type:"frame", data_url:"data:image/jpeg;base64,…"}
         ▼  WebSocket
   server/ws.py ─> WebSocketFrameSource ─> VisionPipeline
@@ -79,9 +111,27 @@ Ray-Ban glasses ──POV frame──> phone app (Meta Wearables toolkit)
                                               ▼
                                         VisionDescriber.describe(data_url)   # gpt-4o-mini
                                               ▼
-                                        VisionContext ──> sink ──> WS back to client
-                                                              (later: into AgentSession)
+                                        VisionContext ──> stored as "latest scene"
+                                                       └─> echoed to client (subtitle/debug)
 ```
+
+**Voice loop (turn-based):**
+```
+Ray-Ban mic ──audio──> phone app ──{type:"audio", pcm chunks}──> WebSocket
+        ▼
+  SpeechToText (streaming, gpt-4o-mini-transcribe)  ── endpoint ──> final transcript
+        ▼
+  AgentSession.handle_patient_input(text, vision=<latest scene>, seconds_since_last_speech)
+        │   (text brain = ONLY inference; rule-based escalation runs in parallel)
+        ▼
+  reply text ──> {type:"subtitle"} to client
+        ▼
+  TextToSpeech.synthesize(reply)  # batch, gpt-4o-mini-tts
+        ▼
+  {type:"audio_out"} ──> WebSocket ──> glasses speaker
+```
+A silence timer (no final transcript for `SILENCE_SECONDS`) fires a silence tick so the
+rule-based "silence + abnormal vision" escalation can trigger without patient speech.
 
 ## Components
 
@@ -128,18 +178,67 @@ Replaces the current `NotImplementedError` placeholder.
   stream.
 - This is the reusable, transport-agnostic, fully-mockable core.
 
-### 4. WebSocket server — `src/memaide/server/ws.py` (new `server/` package)
+### 4. `SpeechToText` — `src/memaide/audio/stt.py` (new `audio/` package)
 
-- `WebSocketFrameSource(websocket)` implements `FrameSource`: parses inbound JSON
-  `{type:"frame", data_url}` envelopes, yields `data_url`, ignores malformed / other
-  message types, and stops cleanly on connection close.
-- `handle(websocket)`: builds a `WebSocketFrameSource`, defines a `sink` that sends each
-  `VisionContext` back as `{type:"vision_context", description, label, advisory_flags, ts}`,
-  and runs a `VisionPipeline`.
-- `async serve(describer, host=config.WS_HOST, port=config.WS_PORT)`: thin
-  `websockets.serve(...)` wrapper.
+Pure transcription — **no inference**.
 
-### 5. Vision-describer eval harness — `src/memaide/eval/run_vision_eval.py`
+- Interface: `async transcribe(self, audio: AsyncIterator[bytes]) -> AsyncIterator[STTEvent]`,
+  where `STTEvent` is `{kind: "partial"|"final", text: str}`. The loop acts on `final`
+  events (a completed utterance); `partial` events are available for live subtitles.
+- Implementation streams audio chunks to `gpt-4o-mini-transcribe` (streaming transcription)
+  and surfaces endpointing (utterance boundaries) from the model. `language` may be hinted
+  from `PatientContext.language`; otherwise auto-detected.
+- Injectable like the other seams: tests pass a `StubSpeechToText(scripted_events)` so the
+  loop is exercised without audio or network.
+
+### 5. `TextToSpeech` — `src/memaide/audio/tts.py`
+
+Pure synthesis — **no inference**.
+
+- Interface: `async synthesize(self, text: str) -> bytes` (one-shot; the reply is short).
+  Returns encoded audio (format/sample-rate from config) for the WS to forward.
+- Implementation calls `gpt-4o-mini-tts` with `config.TTS_VOICE`. Injectable seam
+  (`StubTextToSpeech`) for tests; the loop only depends on `synthesize(...)`. This is the
+  swap point if a lower-latency TTS vendor is needed later.
+
+### 6. Live session loop — `src/memaide/server/voice_loop.py`
+
+Ties audio + vision + the existing `AgentSession` together. One instance per connection.
+
+- Holds: an `AgentSession`, a `SpeechToText`, a `TextToSpeech`, a handle to the vision
+  pipeline's **latest `VisionContext`**, an outbound `send` callback, and a clock.
+- On each STT `final` transcript: calls
+  `session.handle_patient_input(text, vision=<latest scene>, seconds_since_last_speech)`,
+  sends the reply as `{type:"subtitle"}`, then `TextToSpeech.synthesize(reply)` and sends
+  `{type:"audio_out"}`. Tracks `seconds_since_last_speech` from its clock.
+- **Silence tick:** a timer fires every `SILENCE_SECONDS` of no final transcript and calls
+  a new lightweight `AgentSession.on_silence_tick(seconds_since_last_speech, vision)` (see
+  *Other edits*) so the rule-based "silence + abnormal vision" escalation can trigger and
+  emit the emergency suggestion without requiring patient speech.
+- Deterministic `VisionContext.flags` come from an injected `VisionCheck` (default
+  `StubVisionCheck`, returning `[]`) run on frames; the describer only supplies
+  `advisory_flags`. The real CV `VisionCheck` is still a later, pluggable drop-in.
+- Fully testable: `StubSpeechToText` + `StubTextToSpeech` + a fake brain + a fake clock
+  drive a complete turn (and a silence tick) with no network or audio devices.
+
+### 7. WebSocket server — `src/memaide/server/ws.py` (new `server/` package)
+
+Carries **both** media streams over one connection and runs the two concurrent tasks.
+
+- Inbound demux by message `type`: `frame` → vision path; `audio` → voice path; `hello`
+  / control → session setup. Malformed / unknown messages are ignored.
+- `WebSocketFrameSource(websocket)` implements `FrameSource` for the vision path;
+  `WebSocketAudioSource(websocket)` yields inbound audio chunks for STT.
+- `handle(websocket)`: reads a `hello` (patient context / session id), starts a
+  `VisionPipeline` task (sink stores latest scene + echoes `{type:"vision_context", …}`)
+  **and** a `VoiceLoop` task, and fans both message types to them until the socket closes.
+- Outbound message types: `vision_context`, `subtitle`, `audio_out`, plus `escalation`
+  (so the caregiver portal can surface a 911 suggestion immediately).
+- `async serve(deps, host=config.WS_HOST, port=config.WS_PORT)`: thin
+  `websockets.serve(...)` wrapper; `deps` bundles the describer, STT, TTS, and brain
+  factory so the whole server is constructed from injectable parts.
+
+### 8. Vision-describer eval harness — `src/memaide/eval/run_vision_eval.py`
 
 Mirrors the existing text eval (`run_eval.py`): real API calls, export-driven, writes a
 timestamped run directory. It sweeps every **(model, detail)** combination over a fixed
@@ -208,26 +307,70 @@ advisory_flags: list[str] = Field(default_factory=list)
 `flags` keeps its meaning (rule-based / CV pipeline; drives escalation). Existing
 consumers are unaffected.
 
+## WebSocket message protocol
+
+One connection per Help session. JSON envelopes for control + vision + text; audio may be
+sent as JSON with base64 payloads initially (simplest, matches the `data_url` vision path)
+with binary frames as a later optimization. This is the contract the Ray-Ban mobile app
+implements.
+
+**Client → server**
+| `type` | payload | meaning |
+|---|---|---|
+| `hello` | `session_id`, patient context | open a session |
+| `frame` | `data_url` (base64 image) | one POV camera frame |
+| `audio` | `pcm` (base64 chunk), `seq` | a microphone audio chunk |
+| `bye` | — | patient/app ending the session |
+
+**Server → client**
+| `type` | payload | meaning |
+|---|---|---|
+| `vision_context` | `description`, `label`, `advisory_flags`, `ts` | latest scene (subtitle/debug) |
+| `subtitle` | `text`, `role` | agent reply text for on-screen display |
+| `audio_out` | `pcm` (base64), `seq` | synthesized agent speech |
+| `escalation` | `reason`, `triggered_by` | 911 suggested — surface in caregiver portal |
+
+Unknown / malformed messages are ignored (forward-compatible).
+
 ## Other edits
 
 - `src/memaide/agent/brain.py` — `_build_messages` appends an `Advisory: …` segment to
   the `[VISION CONTEXT]` system line when `advisory_flags` is non-empty.
+- `src/memaide/agent/session.py` — add `on_silence_tick(seconds_since_last_speech,
+  vision) -> Turn | None`: runs `escalation.check(None, vision, seconds)`, and if it
+  escalates, appends an agent `Turn` carrying `EMERGENCY_SUGGESTION` and sets
+  `escalated = True`. Lets the voice loop act on silence without patient text. Additive;
+  existing turn flow unchanged.
 - `src/memaide/config.py` — add `WS_HOST = "0.0.0.0"`, `WS_PORT = 8765`,
   `VISION_DETAIL = "low"`, `VISION_EVAL_MODELS = ["gpt-4o-mini", "gpt-5.4-mini"]`,
-  `VISION_EVAL_DETAILS = ["low", "high"]`, and `VISION_PRICING` (per-model in/out
-  $/token, for the eval's cost computation).
-- `pyproject.toml` — add `websockets>=12` to `dependencies`.
-- `docs/architecture.md` and `README.md` — document the new vision pipeline, WebSocket
-  server, and how to run the vision-describer eval (`python -m memaide.eval.run_vision_eval`).
+  `VISION_EVAL_DETAILS = ["low", "high"]`, `VISION_PRICING` (per-model in/out $/token,
+  for the eval's cost computation), and audio settings: `STT_MODEL =
+  "gpt-4o-mini-transcribe"`, `TTS_MODEL = "gpt-4o-mini-tts"`, `TTS_VOICE`,
+  `AUDIO_FORMAT` / `AUDIO_SAMPLE_RATE`. `REALTIME_MODEL` is now **deprecated** (the
+  STT→brain→TTS pipeline supersedes the bundled realtime path) — keep it with a comment
+  rather than wiring it.
+- `pyproject.toml` — add `websockets>=12` to `dependencies`. STT/TTS need **no** new
+  dependency: both use the existing `openai` SDK.
+- `docs/architecture.md` and `README.md` — document the vision pipeline, the STT/TTS
+  converters, the live voice loop, the WebSocket server (both streams), and how to run
+  the vision-describer eval (`python -m memaide.eval.run_vision_eval`).
 
 ## Error handling
 
 - Per-frame `describe()` failure → log + skip; stream continues with the last good
   `VisionContext`.
-- Malformed / non-`frame` inbound WS message → ignored.
+- Malformed / unknown inbound WS message → ignored.
 - gpt-4o-mini returning non-JSON → surfaces as a `complete_json` exception, caught
   per-frame by the pipeline.
-- WebSocket disconnect → `frames()` iterator ends, `run()` returns, handler exits.
+- **STT failure** on an utterance → log + skip that turn (no reply); the loop stays alive
+  for the next utterance. A patient stuck in failure still has the rule-based silence-tick
+  escalation as a backstop.
+- **TTS failure** → still send the `subtitle` (text reply is delivered) and an error
+  marker; the conversation is not lost just because audio synthesis failed.
+- **Brain turn** runs with `vision=<latest scene>`; if no frame has arrived yet, vision is
+  `None` (the brain already handles `None`).
+- WebSocket disconnect → media sources end, both tasks return, handler exits; the backend
+  may still `stop()` the `AgentSession` to emit a `SessionRecord`.
 
 ## Testing
 
@@ -237,9 +380,18 @@ consumers are unaffected.
 - `test_vision_pipeline` — `StubFrameSource` + fake describer + fake clock; assert
   interval throttling, sink invocation per emitted context, and that a raising
   `describe()` is skipped without aborting the run.
-- `test_frame_source` / `test_ws` — fake websocket fixture yielding messages; assert
-  envelope parsing, malformed-message skipping, and `vision_context` echo. One optional
-  localhost round-trip test.
+- `test_stt` / `test_tts` — fake OpenAI client; assert STT yields `partial`/`final`
+  `STTEvent`s from a scripted stream and targets `STT_MODEL`; assert TTS calls `TTS_MODEL`
+  with `TTS_VOICE` and returns audio bytes.
+- `test_voice_loop` — `StubSpeechToText` + `StubTextToSpeech` + fake brain + fake clock:
+  a scripted `final` transcript drives one full turn (asserts `handle_patient_input`
+  called with the latest vision, `subtitle` + `audio_out` sent); a simulated gap fires
+  `on_silence_tick` and asserts escalation emits the 911 suggestion. No network/audio.
+- `test_session_silence_tick` — `on_silence_tick` escalates on silence + abnormal vision
+  and is a no-op otherwise.
+- `test_ws` — fake websocket fixture; assert inbound demux (`frame` vs `audio` vs `hello`),
+  malformed-message skipping, and that `vision_context` / `subtitle` / `audio_out` are
+  emitted. One optional localhost round-trip test.
 - `test_run_vision_eval` — fake client (no network); assert the harness sweeps every
   (model, detail) combo, writes the `frames/` copies, `results.json`, `results.md`, the
   top-level `comparison.md` and `run.json`, and that cost is computed from usage ×
@@ -248,18 +400,32 @@ consumers are unaffected.
 
 ## Out of scope (later increments)
 
-- Live audio / `gpt-4o-mini-realtime` voice loop and TTS output.
-- Wiring `VisionContext` into the live `AgentSession` turn loop (this increment produces
-  and echoes it; session integration follows).
-- The Ray-Ban mobile app itself (iOS/Android/Web via the Wearables toolkit).
-- Real CV `VisionCheck` implementation feeding the deterministic `flags`.
+- The bundled `gpt-4o-mini-realtime` path — explicitly **superseded** by the
+  STT→brain→TTS pipeline; `REALTIME_MODEL` stays in config as deprecated.
+- The Ray-Ban mobile app itself (iOS/Android/Web via the Wearables toolkit) and the
+  audio capture/encoding on the device side.
+- Real CV `VisionCheck` implementation feeding the deterministic `flags` (loop uses the
+  `StubVisionCheck` default until the CV team's drop-in lands).
+- Barge-in / interruption handling (patient talking over the agent) and streaming TTS —
+  the loop is turn-based with batch TTS this increment; the `TextToSpeech` seam allows a
+  later streaming/low-latency swap.
+- Audio as binary WS frames (this increment can use base64 JSON payloads; binary is a
+  later optimization).
 - A *live* capture eval: the vision eval runs over checked-in fixture frames, not frames
   pulled live from the glasses. Real captured frames can be dropped into
   `eval/vision_frames/` later and the harness picks them up automatically.
 
-## Alternative considered
+## Alternatives considered
 
-Folding throttle + describe directly into the WS handler (no `VisionPipeline`). Rejected:
-it would make the core logic untestable without a live socket and couple description
-cadence to transport. The `FrameSource` → `VisionPipeline` split keeps the testable core
-transport-agnostic and lets a phone-camera fallback or a file-based source reuse it.
+- **Folding throttle + describe directly into the WS handler** (no `VisionPipeline`).
+  Rejected: it would make the core logic untestable without a live socket and couple
+  description cadence to transport. The `FrameSource` → `VisionPipeline` split keeps the
+  testable core transport-agnostic and lets a phone-camera fallback or a file-based source
+  reuse it.
+- **Bundled `gpt-4o-mini-realtime` (STT + LLM + TTS in one model)** instead of the
+  pipeline. Rejected per the decision above: it would move inference into the realtime
+  model and bypass the already-tuned text brain, few-shot, and language filter. The
+  realtime model also has no vision, so frames would still need a separate describe path.
+  The STT→brain→TTS pipeline keeps the text brain as the single source of reasoning and
+  lets STT/TTS be swapped independently. (Lower theoretical latency is the realtime
+  model's only edge; the `TextToSpeech` seam preserves a latency escape hatch.)
