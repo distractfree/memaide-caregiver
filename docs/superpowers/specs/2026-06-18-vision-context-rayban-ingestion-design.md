@@ -8,9 +8,12 @@ Branch: `feat/agent-foundation-m1`
 
 The first Milestone 2 increment: turn live point-of-view frames from Ray-Ban Meta
 glasses into `VisionContext` (scene description + label + advisory flags) and feed
-them toward the agent. This adds the gpt-4o-mini frame **describer**, a pluggable
-frame **source** seam, a reusable **pipeline** core, and a thin **WebSocket server**
-that receives frames from the glasses' mobile app.
+them toward the agent. This adds the frame **describer** (model + image-detail
+configurable), a pluggable frame **source** seam, a reusable **pipeline** core, a thin
+**WebSocket server** that receives frames from the glasses' mobile app, and a
+**vision-describer eval** that sweeps gpt-4o-mini × gpt-5.4-mini at low × high detail —
+saving every input image alongside each model's output and real cost/latency — so the
+model/detail choice is made on evidence.
 
 ## Context and constraints (verified 2026-06)
 
@@ -32,11 +35,23 @@ that receives frames from the glasses' mobile app.
 
 | Question | Decision |
 |---|---|
-| Vision model (frame → `VisionContext`) | **gpt-4o-mini** (existing M2 plan); glasses are the frame source only |
+| Vision model (frame → `VisionContext`) | **gpt-4o-mini** is the working default; final pick (vs **gpt-5.4-mini**) is decided by the model × detail eval below |
+| Image `detail` | **`"low"`** is the default; eval also measures **`"high"`** |
 | `describe()` input | **base64 data URL `str`** (`data:image/jpeg;base64,…`) |
-| Increment scope | Describer + `FrameSource` seam + `VisionPipeline` + **thin WebSocket receiver** |
+| Increment scope | Describer (`model` + `detail` params) + `FrameSource` seam + `VisionPipeline` + **thin WebSocket receiver** + **vision-describer eval harness** |
 | WebSocket layer | **`websockets`** (lightweight, pure asyncio; no HTTP framework) |
-| Describer flags | gpt-4o-mini emits **advisory** flags, kept in a **separate field** from the rule-based `flags` |
+| Describer flags | the model emits **advisory** flags, kept in a **separate field** from the rule-based `flags` |
+
+### Model / detail cost context (verified 2026-06)
+
+Per-token list price: gpt-4o-mini **$0.15 / $0.60** per 1M (in/out); gpt-5.4-mini
+**$0.75 / $4.50** per 1M. gpt-4o-mini inflates image tokens ~33× (a *low*-detail frame
+is a fixed ~2,833 tokens), but its low base rate still makes it ~2.5× cheaper per frame
+(~$0.0005 vs ~$0.0013) for this short-description workload. **High detail removes that
+advantage** — gpt-4o-mini's per-tile ×33 multiplier can overtake gpt-5.4-mini — which is
+exactly why the eval measures real cost per (model, detail) rather than trusting the
+estimate. Because the describer's flags are only **advisory** (the rule-based CV `flags`
+own escalation), paying for the strongest model is not required for safety.
 
 ### Why advisory flags get their own field
 
@@ -78,16 +93,21 @@ Replaces the current `NotImplementedError` placeholder.
 
 - Interface: `async describe(self, frame: str) -> VisionContext`. `frame` is a base64
   data URL.
+- `__init__(self, client, model=config.VISION_MODEL, detail=config.VISION_DETAIL,
+  temperature=0.2)`. `detail` is `"low"` or `"high"` and is passed straight to the
+  image part's `image_url.detail`. The default is `"low"` (cheap; pins gpt-4o-mini at
+  its fixed ~2,833-token image cost and is enough for scene gist). `model` + `detail`
+  being constructor params is what lets the eval harness sweep the 2×2 matrix.
 - Depends on: an `OpenAIClient`-shaped object exposing
   `async complete_json(messages, model=?, temperature=?)`, injected for tests.
 - Builds a two-message request: a small vision **system prompt** instructing a strict
   JSON reply `{"description": str, "label": str, "flags": [str]}` with a short (1–2
   sentence) description, and a **user** message whose `content` is a list:
-  `[{"type":"text","text": …}, {"type":"image_url","image_url":{"url": frame}}]`.
-- Calls `complete_json(messages, model=config.VISION_MODEL, temperature=0.2)`. No client
-  changes are required — `complete_json` passes `messages` straight to
+  `[{"type":"text","text": …}, {"type":"image_url","image_url":{"url": frame, "detail": self._detail}}]`.
+- Calls `complete_json(messages, model=self._model, temperature=self._temperature)`. No
+  client changes are required — `complete_json` passes `messages` straight to
   `chat.completions.create`, which accepts image content parts and `json_object` for
-  gpt-4o-mini.
+  both gpt-4o-mini and gpt-5.4-mini.
 - Maps the result to `VisionContext(description=…, label=…, advisory_flags=data.get("flags", []))`.
 
 ### 2. `FrameSource` — `src/memaide/vision/frame_source.py`
@@ -119,6 +139,64 @@ Replaces the current `NotImplementedError` placeholder.
 - `async serve(describer, host=config.WS_HOST, port=config.WS_PORT)`: thin
   `websockets.serve(...)` wrapper.
 
+### 5. Vision-describer eval harness — `src/memaide/eval/run_vision_eval.py`
+
+Mirrors the existing text eval (`run_eval.py`): real API calls, export-driven, writes a
+timestamped run directory. It sweeps every **(model, detail)** combination over a fixed
+set of input frames so the model/detail choice is made on evidence — including the
+actual images each model saw.
+
+**Input frames** — `src/memaide/eval/vision_frames/` (checked-in fixtures): a small set
+of representative `.jpg`/`.png` scenes (e.g. person sitting calmly, person on the floor,
+empty room, kitchen, person holding chest). Each image may have an optional sidecar
+`<name>.json` with `{"expected_label": …, "expected_flags": […]}` for reference. The
+harness simply globs every image in this directory, so dropping a real captured frame in
+later "just works".
+
+**Matrix** — `config.VISION_EVAL_MODELS = ["gpt-4o-mini", "gpt-5.4-mini"]` ×
+`config.VISION_EVAL_DETAILS = ["low", "high"]` = 4 combos. Each combo constructs a
+`VisionDescriber(model=…, detail=…)` and runs every frame through it.
+
+**Per-frame record** — input filename, the `VisionContext` (description, label,
+advisory_flags), latency (s), token usage, and computed USD cost. (`complete_json`
+currently returns only the parsed JSON; the harness uses a thin variant that also returns
+the raw response so it can read `usage`. This is an eval-only helper — the runtime path
+is unchanged.)
+
+**Output layout** — `docs/vision-eval-runs/run-<timestamp>/`:
+
+```
+run-<timestamp>/
+  run.json                       # manifest: models, details, frame count,
+                                 #   per-combo aggregate cost + mean latency
+  comparison.md                  # grouped BY IMAGE: embeds each frame once, then a
+                                 #   table of all 4 combos' description/label/flags
+                                 #   side by side — open it to see image ↔ decisions
+  gpt-4o-mini/
+    low/
+      frames/                    # a copy of every image this combo actually used,
+        0001_person_on_floor.jpg #   named to match its results row
+        0002_kitchen.jpg
+      results.json               # structured per-frame records
+      results.md                 # self-contained: embeds each frame next to its output
+    high/
+      frames/ …
+      results.json
+      results.md
+  gpt-5.4-mini/
+    low/  …
+    high/ …
+```
+
+Saving the image **into each combo's `frames/` dir** (not just once) is deliberate: it
+keeps every `results.md` self-contained and makes "what did *this* model at *this* detail
+look at?" answerable from a single folder. `docs/vision-eval-runs/` is committed like the
+existing `docs/eval-runs/` so runs are reviewable in-repo; the harness writes a fresh
+timestamped dir each run.
+
+This eval makes **real** calls to both models (needs `OPENAI_API_KEY` and access to
+gpt-5.4-mini). With a handful of fixture frames × 4 combos it is a few cents per run.
+
 ## Schema change (additive, backward-compatible)
 
 `src/memaide/schemas.py` — `VisionContext` gains:
@@ -134,9 +212,13 @@ consumers are unaffected.
 
 - `src/memaide/agent/brain.py` — `_build_messages` appends an `Advisory: …` segment to
   the `[VISION CONTEXT]` system line when `advisory_flags` is non-empty.
-- `src/memaide/config.py` — add `WS_HOST = "0.0.0.0"` and `WS_PORT = 8765`.
+- `src/memaide/config.py` — add `WS_HOST = "0.0.0.0"`, `WS_PORT = 8765`,
+  `VISION_DETAIL = "low"`, `VISION_EVAL_MODELS = ["gpt-4o-mini", "gpt-5.4-mini"]`,
+  `VISION_EVAL_DETAILS = ["low", "high"]`, and `VISION_PRICING` (per-model in/out
+  $/token, for the eval's cost computation).
 - `pyproject.toml` — add `websockets>=12` to `dependencies`.
-- `docs/architecture.md` and `README.md` — document the new vision pipeline + server.
+- `docs/architecture.md` and `README.md` — document the new vision pipeline, WebSocket
+  server, and how to run the vision-describer eval (`python -m memaide.eval.run_vision_eval`).
 
 ## Error handling
 
@@ -158,6 +240,10 @@ consumers are unaffected.
 - `test_frame_source` / `test_ws` — fake websocket fixture yielding messages; assert
   envelope parsing, malformed-message skipping, and `vision_context` echo. One optional
   localhost round-trip test.
+- `test_run_vision_eval` — fake client (no network); assert the harness sweeps every
+  (model, detail) combo, writes the `frames/` copies, `results.json`, `results.md`, the
+  top-level `comparison.md` and `run.json`, and that cost is computed from usage ×
+  `VISION_PRICING`. Mirrors how `test_run_eval` mocks the OpenAI path.
 - All existing tests remain green (every change is additive).
 
 ## Out of scope (later increments)
@@ -167,6 +253,9 @@ consumers are unaffected.
   and echoes it; session integration follows).
 - The Ray-Ban mobile app itself (iOS/Android/Web via the Wearables toolkit).
 - Real CV `VisionCheck` implementation feeding the deterministic `flags`.
+- A *live* capture eval: the vision eval runs over checked-in fixture frames, not frames
+  pulled live from the glasses. Real captured frames can be dropped into
+  `eval/vision_frames/` later and the harness picks them up automatically.
 
 ## Alternative considered
 
