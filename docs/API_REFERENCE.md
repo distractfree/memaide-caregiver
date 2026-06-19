@@ -403,8 +403,11 @@ This document provides a developer-facing reference for all implemented backend 
 
 ## Mobile Sync (Overview)
 
-All `/api/mobile/*` endpoints are designed for the patient device. They do not require a caregiver JWT. Instead, they require the `deviceId` to be passed (as a query parameter for GET requests, or in the JSON body for POST requests).
+Most `/api/mobile/*` endpoints are designed for the patient device and do not require a caregiver JWT. Instead, they require the `deviceId` to be passed (as a query parameter for GET requests, or in the JSON body for POST requests).
 
+`GET /api/mobile/patients` is the exception. It requires `Authorization: Bearer <JWT_TOKEN>` and returns the logged-in caregiver's patients with only `id`, `name`, and `deviceId`. The mobile app should call it after login, choose the correct `deviceId`, then use that `deviceId` with the existing sync endpoints.
+
+- `GET /api/mobile/patients`
 - `GET /api/mobile/reminders?deviceId=...`
 - `GET /api/mobile/help-contact?deviceId=...`
 - `GET /api/mobile/beacons?deviceId=...`

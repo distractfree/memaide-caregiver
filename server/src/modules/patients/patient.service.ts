@@ -31,6 +31,16 @@ export async function listPatients(caregiverId: string, query: ListPatientsQuery
   };
 }
 
+export async function listMobilePatients(caregiverId: string) {
+  const patients = await prisma.patient.findMany({
+    where: { caregiverId },
+    select: { id: true, name: true, deviceId: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return patients.map(({ id, name, deviceId }) => ({ id, name, deviceId }));
+}
+
 export async function createPatient(caregiverId: string, input: CreatePatientInput) {
   return prisma.patient.create({
     data: { ...input, caregiverId },

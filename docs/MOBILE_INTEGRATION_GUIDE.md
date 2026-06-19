@@ -7,8 +7,10 @@ During local development, point your mobile app's networking client to the backe
 *(Note: Use `http://10.0.2.2:4000` if testing from an Android emulator).*
 
 ## Authentication / Device Identification
-The MVP mobile API endpoints do **not** use JWT authentication. Instead, they rely on a `deviceId` string. 
-- You must send the `deviceId` with **every** request.
+Most MVP mobile API endpoints do **not** use JWT authentication. Instead, they rely on a `deviceId` string.
+- `GET /api/mobile/patients` requires the caregiver JWT and returns the logged-in caregiver's patient `deviceId` values.
+- Existing reminder, help, beacon, vital, AI session, and stream mobile endpoints still use `deviceId` and do not require JWT.
+- Send the `deviceId` with every `deviceId`-based request.
 - For `GET` requests, append it as a query parameter: `?deviceId=android-demo-001`
 - For `POST` requests, include it in the JSON body: `{ "deviceId": "android-demo-001", ... }`
 - The backend uses this ID to automatically link telemetry and sync data to the correct Patient profile.
@@ -16,6 +18,25 @@ The MVP mobile API endpoints do **not** use JWT authentication. Instead, they re
 ## Mobile Sync Endpoints (GET)
 
 Fetch configuration and settings that the caregiver has set up in the web portal.
+
+### Lookup Patients After Login
+- **GET** `/api/mobile/patients`
+- **Headers:** `Authorization: Bearer <JWT_TOKEN>`
+- **Purpose:** Retrieve the logged-in caregiver's patients with `id`, `name`, and `deviceId`.
+- **Flow:** After login, call this endpoint, choose the correct patient/deviceId, then use that `deviceId` with `/api/mobile/reminders?deviceId=...`.
+- **Example Response:**
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": "patient-id",
+        "name": "Arian Test Patient",
+        "deviceId": "arian-test-device-001"
+      }
+    ]
+  }
+  ```
 
 ### Sync Reminders
 - **GET** `/api/mobile/reminders?deviceId=...`

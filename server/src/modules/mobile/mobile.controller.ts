@@ -17,10 +17,16 @@ import {
   updateStreamStatusSchema,
 } from "../streams/stream.schemas";
 import * as mobileService from "./mobile.service";
+import * as patientService from "../patients/patient.service";
 import * as helpService from "../help/help.service";
 import * as beaconService from "../beacons/beacon.service";
 import * as vitalService from "../vitals/vital.service";
 import * as streamService from "../streams/stream.service";
+
+export const getPatients = asyncHandler(async (req: Request, res: Response) => {
+  const data = await patientService.listMobilePatients(req.caregiverId!);
+  res.status(200).json({ success: true, data });
+});
 
 export const getReminders = asyncHandler(async (req: Request, res: Response) => {
   const query = mobileRemindersQuerySchema.parse(req.query);
