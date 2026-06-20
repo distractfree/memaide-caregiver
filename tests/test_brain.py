@@ -72,3 +72,28 @@ async def test_build_messages_appends_vision_context():
     joined = " ".join(m["content"] for m in client.last_messages)
     assert "VISION CONTEXT" in joined
     assert "person_on_floor" in joined
+
+
+async def test_build_messages_appends_advisory_segment_when_present():
+    client = StubClient({"reply_text": "x"})
+    brain = AgentBrain(client=client, patient=_patient())
+    vision = VisionContext(
+        description="A person sits calmly.", label="living room",
+        flags=[], advisory_flags=["person_seated", "tv_on"],
+    )
+    await brain.respond([Turn(role=Role.PATIENT, text="...")], vision=vision)
+    joined = " ".join(
+        m["content"] for m in client.last_messages if isinstance(m["content"], str)
+    )
+    assert "Advisory: person_seated, tv_on" in joined
+
+
+async def test_build_messages_omits_advisory_segment_when_empty():
+    client = StubClient({"reply_text": "x"})
+    brain = AgentBrain(client=client, patient=_patient())
+    vision = VisionContext(description="d", label="l")  # advisory_flags defaults to []
+    await brain.respond([Turn(role=Role.PATIENT, text="...")], vision=vision)
+    joined = " ".join(
+        m["content"] for m in client.last_messages if isinstance(m["content"], str)
+    )
+    assert "Advisory:" not in joined

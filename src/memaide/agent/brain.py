@@ -30,15 +30,13 @@ class AgentBrain:
             messages.append({"role": _ROLE_MAP[turn.role], "content": turn.text})
         if vision is not None:
             flags = ", ".join(vision.flags) if vision.flags else "none"
-            messages.append(
-                {
-                    "role": "system",
-                    "content": (
-                        f"[VISION CONTEXT] Scene: {vision.label}. "
-                        f"{vision.description} Flags: {flags}."
-                    ),
-                }
+            content = (
+                f"[VISION CONTEXT] Scene: {vision.label}. "
+                f"{vision.description} Flags: {flags}."
             )
+            if vision.advisory_flags:
+                content += f" Advisory: {', '.join(vision.advisory_flags)}."
+            messages.append({"role": "system", "content": content})
         return messages
 
     async def respond(
