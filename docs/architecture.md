@@ -134,7 +134,10 @@ sequenceDiagram
 | `agent/session.py` | Turn loop, two-track escalation, `SessionRecord` | config, safety, schemas |
 | `safety/escalation.py` | Deterministic emergency detection | config, schemas |
 | `vision/rule_check.py` | `VisionCheck` protocol + `StubVisionCheck` | — |
-| `vision/describer.py` | M2 frame→`VisionContext` (NotImplemented) | schemas |
+| `vision/describer.py` | frame (data URL) → `VisionContext` via gpt-4o-mini | config, schemas |
+| `vision/frame_source.py` | `FrameSource` protocol + `StubFrameSource` | — |
+| `vision/pipeline.py` | Throttled frame→describe→sink loop | config, schemas |
+| `eval/run_vision_eval.py` | (model × detail) describer eval, export-only | config, io, describer |
 | `eval/dataset.py` | `EvalCase` fixtures (5 scenarios) | schemas |
 | `eval/judge.py` | Claude Opus `ScoreCard` judge (optional) | config, dataset, schemas |
 | `eval/run_eval.py` | Runs cases through the agent, exports MD/JSON | brain, session, io, dataset, judge |
@@ -149,5 +152,29 @@ sequenceDiagram
   Anthropic (claude-opus-4-8) appears only in the eval *judge* — the runtime path never
   touches it.
 - **Vision is a hollow seam.** `VisionContext` flows through `session → brain` and
-  `→ escalation` today, but it's produced by `StubVisionCheck` / hand-written fixtures.
-  `VisionDescriber` is the M2 fill-in, and the interface is already frozen.
+  `→ escalation` today. The rule-based `flags` are still produced by `StubVisionCheck`
+  (the real CV drop-in lands later), but `VisionDescriber` now produces the scene
+  description + `advisory_flags` for real.
+
+## Vision pipeline (M2)
+
+Frames arrive as base64 data-URL strings from a `FrameSource` (`vision/frame_source.py`;
+`StubFrameSource` for tests, a WebSocket source in the audio/live-media increment).
+`VisionPipeline` (`vision/pipeline.py`) throttles to one describe per
+`VISION_INTERVAL_SECONDS`, calls `VisionDescriber.describe()` (`vision/describer.py`,
+gpt-4o-mini at `VISION_DETAIL`), and awaits an injected `sink` with each `VisionContext`.
+A failing describe is logged and skipped — one bad frame never kills the stream.
+
+Describer flags are **advisory only**: they land in `VisionContext.advisory_flags`, kept
+separate from the rule-based `flags` that drive deterministic escalation, so a
+hallucinated `person_on_floor` can never fire safety logic. The brain surfaces them as an
+`Advisory:` segment on the `[VISION CONTEXT]` line.
+
+### Vision-describer eval
+
+`python -m memaide.eval.run_vision_eval` sweeps every (`VISION_EVAL_MODELS` ×
+`VISION_EVAL_DETAILS`) combo over the frames in `src/memaide/eval/vision_frames/`, making
+real API calls, and writes a timestamped run under `docs/vision-eval-runs/` (per-combo
+`results.json`/`results.md` with copied frames, a top-level `comparison.md` grouped by
+image, and a `run.json` manifest with per-combo cost + mean latency). Drop representative
+`.jpg`/`.png` scenes into the frames dir; the harness globs them.

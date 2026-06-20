@@ -43,6 +43,21 @@ rubric — no Anthropic key needed.
 Optional automated API judge (Claude): `pip install -e ".[judge]"`, set `ANTHROPIC_API_KEY`,
 then use `memaide.eval.run_case` with `memaide.eval.judge.Judge`.
 
+### Vision-describer eval
+
+Add point-of-view frames (`.jpg`/`.jpeg`/`.png`) to `src/memaide/eval/vision_frames/`,
+then run:
+
+```bash
+.venv\Scripts\python -m memaide.eval.run_vision_eval
+```
+
+This sweeps gpt-4o-mini and gpt-5.4-mini at `low` and `high` image detail over every
+frame and writes a comparison run under `docs/vision-eval-runs/<run-id>/` (open
+`comparison.md` to see each image next to all four models' description/label/flags and
+cost). Needs `OPENAI_API_KEY` and access to both models; a handful of frames is a few
+cents per run.
+
 ## Integration notes for the backend team
 - Construct one `AgentSession` per Help-button session; call `start()` (agent speaks
   first), then `handle_patient_input(text, vision=?, seconds_since_last_speech=?)` per
