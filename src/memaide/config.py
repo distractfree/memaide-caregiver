@@ -46,6 +46,18 @@ FIXED_TEMPERATURE_MODELS = {"gpt-5-mini"}
 
 # --- Vision (Milestone 2) ---
 VISION_INTERVAL_SECONDS = 7.0
+VISION_DETAIL = "low"  # passed to image_url.detail; "low" pins gpt-4o-mini at ~2,833 img tokens
+
+# Vision-describer eval sweep (real API calls; see eval/run_vision_eval.py).
+VISION_EVAL_MODELS = ["gpt-4o-mini", "gpt-5.4-mini"]
+VISION_EVAL_DETAILS = ["low", "high"]
+
+# Per-token list price (USD) for the eval's cost computation. Verified 2026-06:
+# gpt-4o-mini $0.15/$0.60 per 1M in/out; gpt-5.4-mini $0.75/$4.50 per 1M in/out.
+VISION_PRICING = {
+    "gpt-4o-mini": {"in": 0.15 / 1_000_000, "out": 0.60 / 1_000_000},
+    "gpt-5.4-mini": {"in": 0.75 / 1_000_000, "out": 4.50 / 1_000_000},
+}
 
 # --- Secrets ---
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")

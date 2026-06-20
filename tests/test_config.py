@@ -17,3 +17,13 @@ def test_escalation_constants():
 
 def test_opening_line_is_a_question():
     assert config.OPENING_LINE.strip().endswith("?")
+
+
+def test_vision_config_present():
+    assert config.VISION_DETAIL in ("low", "high")
+    assert config.VISION_EVAL_MODELS == ["gpt-4o-mini", "gpt-5.4-mini"]
+    assert config.VISION_EVAL_DETAILS == ["low", "high"]
+    # pricing is per-token USD for every eval model
+    for model in config.VISION_EVAL_MODELS:
+        assert {"in", "out"} <= set(config.VISION_PRICING[model])
+        assert config.VISION_PRICING[model]["in"] > 0
