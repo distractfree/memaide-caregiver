@@ -73,3 +73,17 @@ def test_system_prompt_covers_dementia_redirect():
 def test_system_prompt_handoff_notes_dementia_episode():
     prompt = build_system_prompt(PatientContext(patient_id="p", name="A")).lower()
     assert "dementia episode" in prompt  # handoff names the episode for the caregiver
+
+
+def test_few_shot_has_a_dementia_redirect_example():
+    dementia = [ex for ex in FEW_SHOT_EXAMPLES if "dementia" in ex["situation"].lower()]
+    assert dementia, "expected a dementia example"
+    ex = dementia[0]
+    # it must be multi-turn and end with a handoff-ready turn
+    turns = ex.get("turns") or [ex]
+    assert len(turns) > 1
+    assert turns[-1]["handoff_ready"] is True
+    # the example never escalates (confusion without a red flag)
+    assert not any(t["wants_escalation"] for t in turns)
+    # it renders into the few-shot block
+    assert ex["situation"] in format_few_shot()

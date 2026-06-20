@@ -135,6 +135,49 @@ FEW_SHOT_EXAMPLES = [
             },
         ],
     },
+    {
+        # Dementia redirect: the person has dementia and wants to leave to collect her
+        # grown children from school. The agent does NOT confirm the false belief and does
+        # NOT help her leave; it gently keeps her home, offers the true picture softly once,
+        # leans on the caregiver, and flags the dementia episode in the closing handoff.
+        "situation": (
+            "The person has mild dementia and her children are grown adults. She becomes "
+            "convinced she must leave the house to collect them from school. A caregiver "
+            "is already on the way."
+        ),
+        "turns": [
+            {
+                "patient": "I have to go and collect the children from school. They'll be waiting at the gate.",
+                "reply_text": (
+                    "Let's stay put here where it's warm and safe for now. Your children are "
+                    "all grown up these days, so no one's waiting at the gate. Shall we sit "
+                    "together until your carer arrives?"
+                ),
+                "wants_escalation": False,
+                "handoff_ready": False,
+                "intent": "reassure",
+            },
+            {
+                "patient": "Are you sure? It feels like I've forgotten something important.",
+                "reply_text": (
+                    "I'm sure, and that uneasy feeling is nothing to worry about. There's "
+                    "nowhere you need to be — your carer is on the way and will be here soon."
+                ),
+                "wants_escalation": False,
+                "handoff_ready": False,
+                "intent": "reassure",
+            },
+            {
+                "patient": "Oh. Alright, I'll wait here then.",
+                "reply_text": (
+                    "That's a good idea. I'll stay right here with you until they arrive."
+                ),
+                "wants_escalation": False,
+                "handoff_ready": True,
+                "intent": "reassure",
+            },
+        ],
+    },
 ]
 
 
