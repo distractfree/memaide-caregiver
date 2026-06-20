@@ -59,3 +59,15 @@ def test_session_record_roundtrip():
     assert data["transcript"][0]["text"] == "hi"
     assert HandoffType.CAREGIVER_JOINED.value == "caregiver_joined"
     assert VisionContext(description="d", label="l").flags == []
+
+
+def test_vision_context_advisory_flags_default_empty_and_separate_from_flags():
+    ctx = VisionContext(description="d", label="kitchen", flags=["person_on_floor"])
+    assert ctx.advisory_flags == []  # defaults independent of flags
+
+    ctx2 = VisionContext(
+        description="d", label="kitchen",
+        flags=[], advisory_flags=["tv_on", "person_seated"],
+    )
+    assert ctx2.flags == []
+    assert ctx2.advisory_flags == ["tv_on", "person_seated"]

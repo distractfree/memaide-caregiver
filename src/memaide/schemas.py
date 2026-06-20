@@ -48,6 +48,7 @@ class VisionContext(BaseModel):
     label: str
     ts: datetime = Field(default_factory=_now)
     flags: list[str] = Field(default_factory=list)
+    advisory_flags: list[str] = Field(default_factory=list)
 
 
 class AgentDecision(BaseModel):
