@@ -64,3 +64,25 @@ class OpenAIClient:
                 if delay:
                     await asyncio.sleep(delay)
                 delay *= 2
+
+    async def complete_json_with_raw(
+        self,
+        messages: list[dict],
+        model: str = config.BRAIN_MODEL,
+        temperature: float | None = None,
+    ) -> tuple[dict, Any]:
+        """Eval-only: like ``complete_json`` but also returns the raw SDK response.
+
+        No retry wrapper — the eval tolerates per-frame failures itself. Lets the
+        vision eval read ``resp.usage`` for cost computation.
+        """
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "response_format": {"type": "json_object"},
+        }
+        if temperature is not None and model not in config.FIXED_TEMPERATURE_MODELS:
+            kwargs["temperature"] = temperature
+        resp = await self._client.chat.completions.create(**kwargs)
+        data = json.loads(resp.choices[0].message.content)
+        return data, resp

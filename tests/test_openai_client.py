@@ -117,3 +117,36 @@ async def test_complete_json_does_not_retry_real_errors():
         raised = True
     assert raised
     assert sdk.chat.completions.calls == 1  # no retry on non-transient errors
+
+
+async def test_complete_json_with_raw_returns_parsed_and_raw():
+    import json as _json
+
+    class _Msg:
+        content = _json.dumps({"label": "kitchen"})
+
+    class _Choice:
+        message = _Msg()
+
+    class _Resp:
+        choices = [_Choice()]
+        usage = type("U", (), {"prompt_tokens": 2833, "completion_tokens": 20})()
+
+    class _Completions:
+        async def create(self, **kwargs):
+            self.kwargs = kwargs
+            return _Resp()
+
+    class _Chat:
+        completions = _Completions()
+
+    class _SDK:
+        chat = _Chat()
+
+    client = OpenAIClient(client=_SDK())
+    data, resp = await client.complete_json_with_raw(
+        [{"role": "user", "content": "hi"}], model="gpt-4o-mini", temperature=0.2
+    )
+    assert data == {"label": "kitchen"}
+    assert resp.usage.prompt_tokens == 2833
+    assert resp.usage.completion_tokens == 20
