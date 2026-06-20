@@ -1,0 +1,15 @@
+{
+  "run_id": "run-20260619-175550",
+  "timestamp": "2026-06-19T17:57:22",
+  "models": [
+    "gpt-5.4-mini"
+  ],
+  "num_cases": 16,
+  "num_few_shot_examples": 9,
+  "results": {
+    "gpt-5.4-mini": {
+      "ran": 16,
+      "escalation_correct": 16
+    }
+  }
+}
