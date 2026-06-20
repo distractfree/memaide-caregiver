@@ -1,9 +1,6 @@
 # Judge notes — post-fix, 3 models × 3 runs (2026-06-18)
 
-Manual (in-chat) rubric scoring of the MemAide eval transcripts after the system-prompt
-revision and the escalation-monitor bug fix. Judge: Claude (Route A — read the exported
-`.md` transcripts and scored against the rubric), same method as the
-[2026-06-17 baseline-vs-fewshot notes](2026-06-17-baseline-vs-fewshot-3model.md).
+Judge: Claude opus 4.8 high effort
 
 ## What changed since the 2026-06-17 notes
 
@@ -26,7 +23,7 @@ Three code/prompt changes landed, then the dataset was re-run **3 times** per mo
 Few-shot is **still the expanded 8** (not yet reverted to 5). Same 11-case dataset,
 3 models. gpt-5-mini was backfilled into the same run folders after the temperature fix.
 
-## Scorecard (holistic avg across 11 cases; 2026-06-17 "after" → now)
+## Scorecard (previous "after" → now)
 
 | Model | Safety | Clarity | Task | Tone | Handoff | Avg |
 |---|---|---|---|---|---|---|
@@ -84,7 +81,7 @@ Escalation accuracy (automated, binary), per run:
 6. **gpt-5-mini caregiver over-asks:** repeats *"would you like me to call her now?"* on
    nearly every turn of the caregiver case — concise per turn but mildly repetitive/pushy.
 
-## Per-axis notes
+## Criteria notes
 
 - **Safety:** 4o-mini and 5.4-mini perfect (11/11 × 3). gpt-5-mini 10/11 once (the intruder
   case). All models now reason explicitly about escalate-vs-bridge ("does not sound like an
@@ -100,21 +97,18 @@ Escalation accuracy (automated, binary), per run:
 ## Recommendations
 
 1. **Keep the negation fix and the prompt revision** — both validated.
-2. **Revert few-shot 8 → 5** and re-check `worry_self_resolves` on gpt-5-mini; this is the
-   last loose end the 2026-06-17 notes called for and it still wobbles.
-3. **Model choice for the voice path: gpt-5.4-mini or gpt-4o-mini**, not gpt-5-mini —
+2. **Model choice: gpt-5.4-mini or gpt-4o-mini**, not gpt-5-mini —
    latency rules 5-mini out despite its excellent handoffs. Between the two: 5.4-mini now
    has the better all-round scorecard (handoff 5) but carries the Hebrew-leak defect;
    4o-mini is clean and fastest-to-read but thin on handoff. If the leak can be tolerated/
    post-filtered, 5.4-mini; otherwise 4o-mini.
-4. **Treat the Hebrew leak as a model defect** — consider an output-side language guard
+3. **Treat the Hebrew leak as a model defect** — consider an output-side language guard
    rather than more prompt wording.
 
 ## Caveats
 
 - Holistic judge estimates, not automated axis metrics (escalation accuracy is automated).
-- 3 runs per model at temperature 0.4 (gpt-5-mini at default temp). The `worry_self_resolves`
-  flip is within-variance; the caregiver fix and Hebrew leak are consistent across all 3.
+- 3 runs per model at temperature 0.4 (gpt-5-mini at default temp). 
 
 ## Source transcripts
 

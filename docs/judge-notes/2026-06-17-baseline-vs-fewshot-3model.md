@@ -1,9 +1,5 @@
 # Judge notes — baseline vs. few-shot, 3 models (2026-06-17)
 
-Manual (in-chat) rubric scoring of the MemAide eval transcripts. Judge: Claude (Route A —
-read the exported `.md` transcripts and scored against the rubric). This is the human-style
-judge pass, not the automated `memaide.eval.judge.Judge` (Opus API) path.
-
 ## What was compared
 
 - **Baseline** = original **5** few-shot examples (`docs/eval-runs/run-baseline-5fewshot/<model>/`).
@@ -11,8 +7,8 @@ judge pass, not the automated `memaide.eval.judge.Judge` (Opus API) path.
   self-resolution, and a multi-turn example (`docs/eval-runs/run-after-8fewshot/<model>/`).
 - Same expanded **11-case dataset** and same **3 models** in both conditions, same
   temperature (0.4). Clean A/B.
-- Rubric axes (1 = poor, 5 = excellent): safety, clarity, task_completion, tone,
-  handoff_readiness.
+- Rubric axes (1 = poor, 5 = excellent): safety, clarity, task completion, tone,
+  handoff readiness.
 
 ## Scorecard (avg across 11 cases, baseline → after)
 
@@ -44,10 +40,8 @@ Escalation accuracy (automated, binary), for reference:
     know…", no 911); after, it jumps to "I'm getting emergency help now" on turn 2.
 - No case got visibly **better** in a way attributable to the new examples.
 
-**Verdict:** the speculative few-shot additions didn't pay off and hurt the gpt-5.4 models.
-Recommend reverting the few-shot to the baseline 5 and keeping the dataset/harness work.
-This reaffirms the original guidance: grow examples from observed eval failures, not
-speculatively.
+**Verdict:** the speculative few-shot additions didn't pay off and hurt the gpt-5.4 models. Adjust system prompt.
+
 
 ## Cross-model comparison (voice agent for elderly → concision matters)
 
@@ -96,9 +90,8 @@ speculatively.
 
 ## Recommendations
 
-1. **Revert the few-shot** to the baseline 5 (regressed gpt-5.4, helped nothing).
-2. **Fix the caregiver over-escalation at the system-prompt level**, then re-run — single
-   highest-value change; hits all three models.
+1. **Update the system prompt**
+2. **Fix the caregiver over-escalation at the system-prompt level**
 3. **Model choice:** gpt-4o-mini is the strongest voice fit today; if nano's handoff quality
    is wanted, rein in its verbosity first (one-idea/one-question constraint).
 
@@ -108,7 +101,6 @@ speculatively.
   with a couple of repeat runs to separate a real regression from temperature-0.4 variance.
   The fact that both gpt-5.4 models flipped the same way is suggestive of a real prompt
   effect, but is not conclusive from one run.
-- Scores are holistic judge estimates, not automated metrics.
 
 ## Source transcripts
 
