@@ -61,3 +61,15 @@ def test_system_prompt_handles_missing_optional_fields():
     prompt = build_system_prompt(PatientContext(patient_id="p", name="Sam"))
     assert "Sam" in prompt
     assert "none on file" in prompt   # no known_conditions
+
+
+def test_system_prompt_covers_dementia_redirect():
+    prompt = build_system_prompt(PatientContext(patient_id="p", name="A")).lower()
+    assert "dementia" in prompt          # confusion/dementia handling exists
+    assert "gently" in prompt            # gentle redirection, not blunt correction
+    assert "leave" in prompt             # guidance about wanting to leave / keeping them put
+
+
+def test_system_prompt_handoff_notes_dementia_episode():
+    prompt = build_system_prompt(PatientContext(patient_id="p", name="A")).lower()
+    assert "dementia episode" in prompt  # handoff names the episode for the caregiver
