@@ -58,6 +58,23 @@ frame and writes a comparison run under `docs/vision-eval-runs/<run-id>/` (open
 cost). Needs `OPENAI_API_KEY` and access to both models; a handful of frames is a few
 cents per run.
 
+### Live voice + media server (M2)
+
+The WebSocket server (`memaide.server.ws`) carries the Ray-Ban POV-camera and microphone
+streams over one connection and runs two concurrent tasks per session: the throttled
+vision pipeline (keeps the latest scene) and a turn-based voice loop
+(**STT → text brain → TTS**). The audio models (`gpt-4o-mini-transcribe`,
+`gpt-4o-mini-tts`) are pure converters; all reasoning stays in the text brain and the
+rule-based safety monitor. A silence tick lets the "silence + abnormal vision" escalation
+fire without patient speech.
+
+Every seam (describer, STT, TTS, brain) is injected via `ServerDeps`, so the whole stack
+runs against stubs in tests with no network or audio devices. To run a real server you
+provide a `ServerDeps` with live `VisionDescriber`, `SpeechToText`, `TextToSpeech`, and a
+brain factory, then `await serve(deps)` (needs `OPENAI_API_KEY` and the `websockets`
+package). The Ray-Ban mobile app (Meta Wearables toolkit) is the client; on-device capture
+is out of scope for this repo.
+
 ## Integration notes for the backend team
 - Construct one `AgentSession` per Help-button session; call `start()` (agent speaks
   first), then `handle_patient_input(text, vision=?, seconds_since_last_speech=?)` per

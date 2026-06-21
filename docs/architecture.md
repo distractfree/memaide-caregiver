@@ -178,3 +178,39 @@ real API calls, and writes a timestamped run under `docs/vision-eval-runs/` (per
 `results.json`/`results.md` with copied frames, a top-level `comparison.md` grouped by
 image, and a `run.json` manifest with per-combo cost + mean latency). Drop representative
 `.jpg`/`.png` scenes into the frames dir; the harness globs them.
+
+## Audio + live-media layer (M2, Plan B)
+
+One WebSocket connection per Help session (`server/ws.py`) carries both media streams.
+Inbound messages are demuxed by `type`: `frame` → the vision path, `audio` → the voice
+path, `hello`/`bye` → control. Unknown or malformed messages are ignored. Two concurrent
+tasks run per connection:
+
+- **Vision (continuous):** a `WebSocketFrameSource` feeds the existing `VisionPipeline`,
+  which throttles to one describe per `VISION_INTERVAL_SECONDS`, stores the result as the
+  "latest scene", and echoes a `vision_context` message. The describer supplies only
+  `advisory_flags`; the rule-based `flags` come from an injected `VisionCheck`
+  (`StubVisionCheck` by default until the real CV drop-in lands).
+- **Voice (turn-based):** `VoiceLoop` (`server/voice_loop.py`) consumes STT `final`
+  transcripts and runs the pipeline **STT → text brain → TTS**. `SpeechToText`
+  (`audio/stt.py`, `gpt-4o-mini-transcribe`) and `TextToSpeech` (`audio/tts.py`,
+  `gpt-4o-mini-tts`) are pure converters — no inference happens in them; all reasoning
+  stays in `AgentBrain` and the rule-based `EscalationMonitor`. Each turn calls
+  `AgentSession.handle_patient_input(text, vision=<latest scene>, …)`, sends a `subtitle`,
+  then synthesizes audio and sends `audio_out`. A TTS failure still delivers the subtitle.
+
+A silence timer fires `AgentSession.on_silence_tick(seconds, vision)`, which runs the
+rule-based escalation with no patient text so "silence + abnormal vision" can suggest 911
+without the patient speaking — emitted as an `escalation` message for the caregiver portal.
+
+`REALTIME_MODEL` is deprecated: the STT→brain→TTS pipeline supersedes the bundled realtime
+path, keeping the already-tuned text brain (few-shot + language filter) as the single
+source of reasoning and letting STT/TTS be swapped independently.
+
+### WebSocket message protocol
+
+Client → server: `hello` (session_id + patient context), `frame` (`data_url`), `audio`
+(`pcm` base64 chunk), `bye`. Server → client: `vision_context`
+(`description`/`label`/`advisory_flags`/`ts`), `subtitle` (`text`/`role`), `audio_out`
+(`pcm` base64/`seq`), `escalation` (`reason`/`triggered_by`). The Ray-Ban mobile app (Meta
+Wearables toolkit) implements the client side; on-device capture/encoding is out of scope.
