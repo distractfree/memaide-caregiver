@@ -4,6 +4,7 @@ from typing import Any, Callable
 from memaide import config
 from memaide.safety.escalation import EscalationMonitor
 from memaide.schemas import (
+    EscalationDecision,
     HandoffType,
     PatientContext,
     Role,
@@ -48,6 +49,7 @@ class AgentSession:
         self.handoff_at: datetime | None = None
         self.handoff_type: HandoffType | None = None
         self._final_scene_label: str | None = None
+        self.last_escalation: EscalationDecision | None = None
 
     def start(self) -> Turn:
         opening = Turn(role=Role.AGENT, text=config.OPENING_LINE, ts=self._clock())
@@ -70,6 +72,7 @@ class AgentSession:
         )
 
         escalation = self.escalation.check(text, vision, seconds_since_last_speech)
+        self.last_escalation = escalation
         decision = await self.brain.respond(self.transcript, vision)
         escalate = escalation.escalate or decision.wants_escalation
         if escalate:
@@ -85,6 +88,31 @@ class AgentSession:
         agent_turn = Turn(role=Role.AGENT, text=reply_text, ts=self._clock())
         self.transcript.append(agent_turn)
         return agent_turn
+
+    def on_silence_tick(
+        self,
+        seconds_since_last_speech: float,
+        vision: VisionContext | None = None,
+    ) -> Turn | None:
+        """Let the rule-based silence+abnormal-vision escalation fire without speech.
+
+        Runs the escalation check with no patient text; if it escalates, appends an
+        agent Turn carrying the emergency suggestion and flips ``escalated``. Returns
+        the Turn, or None when nothing escalates. Additive — the normal turn flow is
+        unchanged and the brain is not called.
+        """
+        decision = self.escalation.check(None, vision, seconds_since_last_speech)
+        self.last_escalation = decision
+        if not decision.escalate:
+            return None
+        self.escalated = True
+        if vision is not None:
+            self._final_scene_label = vision.label
+        turn = Turn(
+            role=Role.AGENT, text=config.EMERGENCY_SUGGESTION, ts=self._clock()
+        )
+        self.transcript.append(turn)
+        return turn
 
     def stop(self, handoff_type: HandoffType) -> SessionRecord:
         self.status = SessionStatus.ENDED
