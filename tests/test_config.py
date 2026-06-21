@@ -27,3 +27,15 @@ def test_vision_config_present():
     for model in config.VISION_EVAL_MODELS:
         assert {"in", "out"} <= set(config.VISION_PRICING[model])
         assert config.VISION_PRICING[model]["in"] > 0
+
+
+def test_audio_and_ws_config_present():
+    from memaide import config
+
+    assert config.STT_MODEL == "gpt-4o-mini-transcribe"
+    assert config.TTS_MODEL == "gpt-4o-mini-tts"
+    assert isinstance(config.TTS_VOICE, str) and config.TTS_VOICE
+    assert config.AUDIO_FORMAT
+    assert config.AUDIO_SAMPLE_RATE > 0
+    assert config.WS_HOST
+    assert isinstance(config.WS_PORT, int) and config.WS_PORT > 0

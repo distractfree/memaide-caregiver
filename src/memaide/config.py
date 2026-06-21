@@ -11,7 +11,7 @@ load_dotenv(override=True)
 # --- Models ---
 BRAIN_MODEL = "gpt-5.4-mini"
 VISION_MODEL = "gpt-4o-mini"
-REALTIME_MODEL = "gpt-4o-mini-realtime-preview"  # Milestone 2
+REALTIME_MODEL = "gpt-4o-mini-realtime-preview"  # DEPRECATED (M2): superseded by the STT->brain->TTS pipeline; kept, not wired.
 JUDGE_MODEL = "claude-opus-4-8"
 
 # --- Conversation ---
@@ -58,6 +58,18 @@ VISION_PRICING = {
     "gpt-4o-mini": {"in": 0.15 / 1_000_000, "out": 0.60 / 1_000_000},
     "gpt-5.4-mini": {"in": 0.75 / 1_000_000, "out": 4.50 / 1_000_000},
 }
+
+# --- Audio (Milestone 2, Plan B) ---
+# STT and TTS are pure converters (no inference); all reasoning stays in the text brain.
+STT_MODEL = "gpt-4o-mini-transcribe"  # $0.003/min streaming transcription
+TTS_MODEL = "gpt-4o-mini-tts"  # ~$0.015/min batch synthesis
+TTS_VOICE = "alloy"
+AUDIO_FORMAT = "pcm16"
+AUDIO_SAMPLE_RATE = 24000
+
+# --- WebSocket live-media server (Milestone 2, Plan B) ---
+WS_HOST = "0.0.0.0"
+WS_PORT = 8765
 
 # --- Secrets ---
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
