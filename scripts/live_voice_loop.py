@@ -46,6 +46,10 @@ from memaide.schemas import PatientContext
 SAMPLE_RATE = config.AUDIO_SAMPLE_RATE  # 24000 Hz, matches TTS "pcm" output + realtime pcm
 CHANNELS = 1
 BLOCK = 480                  # 20 ms frames at 24 kHz
+# TTS voice model (independent of the gpt-5.4-mini brain). "tts-1" is OpenAI's
+# real-time-optimized model: lower time-to-first-byte, ~same cost, a bit more robotic and
+# no instruction steering. Set back to config.TTS_MODEL ("gpt-4o-mini-tts") for quality.
+TTS_MODEL = "tts-1"
 THRESHOLD_FACTOR = 4.0       # idle speech RMS must exceed ambient * this
 THRESHOLD_FLOOR = 180.0      # but never trip below this (int16 RMS)
 ECHO_PERCENTILE = 95         # treat this percentile of agent-playback frames as its level
@@ -137,7 +141,7 @@ class StreamingTTS:
     """Streams TTS audio, playing each chunk as it arrives; aborts on a barge-in event."""
 
     def __init__(self, client, barge_event: asyncio.Event, timings: dict,
-                 model: str = config.TTS_MODEL, voice: str = config.TTS_VOICE):
+                 model: str = TTS_MODEL, voice: str = config.TTS_VOICE):
         self._client = client
         self._barge = barge_event
         self._t = timings
@@ -190,7 +194,7 @@ async def warm_up(brain_client: OpenAIClient, tts_client) -> None:
     async def warm_tts():
         try:
             async with tts_client.audio.speech.with_streaming_response.create(
-                model=config.TTS_MODEL, voice=config.TTS_VOICE,
+                model=TTS_MODEL, voice=config.TTS_VOICE,
                 input="ok", response_format="pcm",
             ) as resp:
                 async for _ in resp.iter_bytes(TTS_CHUNK):
@@ -238,13 +242,14 @@ async def main() -> int:
 
     print(f"Input device:  {sd.query_devices(kind='input')['name']}")
     print(f"Output device: {sd.query_devices(kind='output')['name']}")
+    print(f"Brain: {config.BRAIN_MODEL} | STT: {config.STT_MODEL} | TTS: {TTS_MODEL}")
 
     client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
     patient = PatientContext(patient_id="local-test", name="Tester")
     brain_client = OpenAIClient()
     brain = AgentBrain(brain_client, patient)
     session = AgentSession(brain, patient)
-    batch_tts = TextToSpeech(client, response_format="pcm")  # greeting / echo calibration
+    batch_tts = TextToSpeech(client, model=TTS_MODEL, response_format="pcm")  # greeting / echo calibration
 
     T: dict[str, float] = {}
     barge_event = asyncio.Event()
