@@ -5,3 +5,6 @@ __pycache__/
 venv/
 .pytest_cache/
 # Eval runs are archived (and tracked) under docs/eval-runs/<run_id>/.
+
+# Per-session frame recordings (FileSessionRecorder output)
+recordings/

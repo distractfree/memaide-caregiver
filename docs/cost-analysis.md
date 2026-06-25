@@ -28,7 +28,10 @@ Images on `gpt-4o-mini` are billed by scaling the `gpt-4o` base-token count by *
 | Avg patient utterance | 24 tok | measured sample |
 | Avg agent JSON reply | 59 tok (output) | measured sample |
 | Vision context msg | 39 tok | `[VISION CONTEXT]` injected into brain prompt |
-| Vision frames | 42 | `VISION_INTERVAL_SECONDS = 7` → 300 / 7 |
+| Vision frames | 150 | `VISION_INTERVAL_SECONDS = 2` → 300 / 2 |
+
+> Vision sampling moved 7s → 2s (2026-06-25) for fresher scene context; ~3.5× more
+> describe calls. The full ~2 fps frame stream is also recorded to disk (see SessionRecorder).
 
 ## Key cost driver: full-transcript resend
 
@@ -42,22 +45,22 @@ every turn**, so input tokens grow each turn. Over 15 turns this compounds to
 | Component | Input tok | Output tok | Cost |
 |---|---|---|---|
 | Brain (text), 15 turns | 24,255 | 885 | **$0.0042** |
-| Vision — low detail (42 frames) | 122,346 | 1,680 | **$0.0194** |
-| Vision — high detail (42 frames) | 1,074,360 | 1,680 | **$0.1622** |
+| Vision — low detail (150 frames) | 436,950 | 6,000 | **$0.0691** |
+| Vision — high detail (150 frames) | 3,837,000 | 6,000 | **$0.5792** |
 
 ### Total per 5-minute call
 
 | Scenario | Cost |
 |---|---|
 | Text only | **~$0.004** |
-| Text + vision (low detail) | **~$0.024** |
-| Text + vision (high detail) | **~$0.166** |
+| Text + vision (low detail) | **~$0.073** |
+| Text + vision (high detail) | **~$0.583** |
 
 ## Takeaways
 
 - **Vision dwarfs text.** Detail mode is the single biggest cost lever — high detail is
-  ~7× the rest of the call combined. For a wearable sampling every 7s, use **low detail**;
-  that lands a full call at **~2.4 cents**.
+  ~8× the rest of the call combined. For a wearable sampling every 2s, use **low detail**;
+  that lands a full call at **~7.3 cents**.
 - **Prompt caching could roughly halve text cost.** OpenAI auto-caches input prompts
   >1024 tokens at 50% off. The repeated 889-token system prompt + growing transcript
   would bill the cached portion at $0.075/1M — meaningful at volume.
@@ -105,21 +108,22 @@ over 15 turns rather than exploding the total. Fresh speech each turn dominates.
 | Component | Cost |
 |---|---|
 | Text brain | ~$0.004 |
-| Vision (low detail) | ~$0.019 |
+| Vision (low detail) | ~$0.069 |
 | Audio (in + out) | ~$0.07 |
-| **Full call (low-detail vision + audio)** | **~$0.09–0.10** |
+| **Full call (low-detail vision + audio)** | **~$0.14** |
 
 **High-detail vision:**
 
 | Component | Cost |
 |---|---|
 | Text brain | ~$0.004 |
-| Vision (high detail) | ~$0.162 |
+| Vision (high detail) | ~$0.579 |
 | Audio (in + out) | ~$0.07 |
-| **Full call (high-detail vision + audio)** | **~$0.24** |
+| **Full call (high-detail vision + audio)** | **~$0.65** |
 
-With low detail, audio is the single largest component once M2 is live. With high
-detail, vision dominates the entire call.
+With low detail, vision and audio are now comparable (vision is the single largest
+component once the 2s sampling interval is included). With high detail, vision
+dominates the entire call by a wide margin.
 
 ## Other Model Options
 
@@ -142,7 +146,7 @@ row below.
 33.333×. The GPT-5.4 models are **patch-based** instead: 32px patches (cap 1,536),
 multiplied by 1.62 (mini) or 2.46 (nano), billed at the text input rate — **no** 33×
 multiplier. That makes high-detail vision dramatically cheaper on GPT-5.4. Per-frame image
-tokens (42 frames/call):
+tokens (150 frames/call):
 
 | | Low (~512px, 256 patches) | High (1024px, 1,024 patches) |
 |---|---|---|
@@ -157,18 +161,18 @@ Low-detail vision:
 | Component | Cost |
 |---|---|
 | Brain (text), 15 turns | ~$0.0060 |
-| Vision (low detail, on nano) | ~$0.008 |
+| Vision (low detail, on nano) | ~$0.0288 |
 | Audio (gpt-4o-mini-realtime) | ~$0.07 |
-| **Full call** | **~$0.084** |
+| **Full call** | **~$0.105** |
 
 High-detail vision:
 
 | Component | Cost |
 |---|---|
 | Brain (text), 15 turns | ~$0.0060 |
-| Vision (high detail, on nano) | ~$0.024 |
+| Vision (high detail, on nano) | ~$0.0855 |
 | Audio (gpt-4o-mini-realtime) | ~$0.07 |
-| **Full call** | **~$0.10** |
+| **Full call** | **~$0.161** |
 
 ### gpt-5.4-mini
 
@@ -177,23 +181,23 @@ Low-detail vision:
 | Component | Cost |
 |---|---|
 | Brain (text), 15 turns | ~$0.0222 |
-| Vision (low detail, on mini) | ~$0.023 |
+| Vision (low detail, on mini) | ~$0.0827 |
 | Audio (gpt-4o-mini-realtime) | ~$0.07 |
-| **Full call** | **~$0.12** |
+| **Full call** | **~$0.175** |
 
 High-detail vision:
 
 | Component | Cost |
 |---|---|
 | Brain (text), 15 turns | ~$0.0222 |
-| Vision (high detail, on mini) | ~$0.062 |
+| Vision (high detail, on mini) | ~$0.2226 |
 | Audio (gpt-4o-mini-realtime) | ~$0.07 |
-| **Full call** | **~$0.15** |
+| **Full call** | **~$0.315** |
 
 **Takeaway:** the big swing is **vision, not the brain**. Because GPT-5.4 vision is
-patch-based with no 33× multiplier, high-detail vision drops from ~$0.162 on gpt-4o-mini to
-~$0.024 (nano) / ~$0.062 (mini). A full high-detail call on gpt-5.4-nano (~$0.10) is
-actually *cheaper* than the same call on gpt-4o-mini (~$0.166) — and you get a newer
+patch-based with no 33× multiplier, high-detail vision drops from ~$0.579 on gpt-4o-mini to
+~$0.086 (nano) / ~$0.223 (mini). A full high-detail call on gpt-5.4-nano (~$0.161) is
+actually *cheaper* than the same call on gpt-4o-mini (~$0.653) — and you get a newer
 reasoning model. Audio (~$0.07, fixed) is the floor that no model choice can lower.
 
 ## Caveats
