@@ -39,3 +39,8 @@ def test_audio_and_ws_config_present():
     assert config.AUDIO_SAMPLE_RATE > 0
     assert config.WS_HOST
     assert isinstance(config.WS_PORT, int) and config.WS_PORT > 0
+
+
+def test_vision_interval_and_recordings_dir():
+    assert config.VISION_INTERVAL_SECONDS == 2.0
+    assert config.RECORDINGS_DIR == "recordings"

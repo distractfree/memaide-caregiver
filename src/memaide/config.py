@@ -45,7 +45,7 @@ CRITICAL_VISION_FLAGS = {"person_on_floor", "fall_detected", "no_motion"}
 FIXED_TEMPERATURE_MODELS = {"gpt-5-mini"}
 
 # --- Vision (Milestone 2) ---
-VISION_INTERVAL_SECONDS = 7.0
+VISION_INTERVAL_SECONDS = 2.0  # brain consumes one described frame every 2s (was 7s)
 VISION_DETAIL = "low"  # passed to image_url.detail; "low" pins gpt-4o-mini at ~2,833 img tokens
 
 # Vision-describer eval sweep (real API calls; see eval/run_vision_eval.py).
@@ -70,6 +70,9 @@ AUDIO_SAMPLE_RATE = 24000
 # --- WebSocket live-media server (Milestone 2, Plan B) ---
 WS_HOST = "0.0.0.0"
 WS_PORT = 8765
+
+# Directory for per-session frame recordings (opt-in via a FileSessionRecorder).
+RECORDINGS_DIR = "recordings"
 
 # --- Secrets ---
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
