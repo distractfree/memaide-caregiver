@@ -4,9 +4,12 @@ A seam (``SessionRecorder`` Protocol) with a no-op default so recording is opt-i
 never affects the vision/voice tasks. ``FileSessionRecorder`` decodes the data-URL JPEG
 payload and writes one file per frame (``<seq>-<ts>.jpg``) plus an ordered ``manifest.json``
 written on close. All I/O errors and bad payloads are logged and skipped, never raised, so
-recording can't take down a connection.
+recording can't take down a connection. The manifest is only written on close, so an
+unclean process kill leaves the per-frame ``.jpg`` files without a manifest; they remain
+recoverable from their ``<seq>-<ts>.jpg`` filenames.
 """
 
+import asyncio
 import base64
 import json
 import logging
@@ -67,10 +70,10 @@ class FileSessionRecorder:
             return
         name = f"{self._seq:06d}-{ts:.3f}.jpg"
         try:
-            self._ensure_dir()
-            (self._dir / name).write_bytes(jpeg)
-        except OSError as exc:
-            _log.warning("recorder: frame write failed, skipping: %s", exc)
+            await asyncio.to_thread(self._ensure_dir)
+            await asyncio.to_thread((self._dir / name).write_bytes, jpeg)
+        except Exception as exc:  # noqa: BLE001 - persisting a frame must never kill the connection
+            _log.warning("recorder: failed to persist frame, skipping: %s", exc)
             return
         self._entries.append({"seq": self._seq, "ts": ts, "file": name})
         self._seq += 1
@@ -79,7 +82,10 @@ class FileSessionRecorder:
         if not self._entries:
             return
         try:
-            self._ensure_dir()
-            (self._dir / "manifest.json").write_text(json.dumps(self._entries, indent=2))
-        except OSError as exc:
+            await asyncio.to_thread(self._ensure_dir)
+            await asyncio.to_thread(
+                (self._dir / "manifest.json").write_text,
+                json.dumps(self._entries, indent=2),
+            )
+        except Exception as exc:  # noqa: BLE001 - manifest write must never raise
             _log.warning("recorder: manifest write failed: %s", exc)

@@ -66,6 +66,16 @@ async def test_file_recorder_no_manifest_when_no_frames(tmp_path):
     assert not (tmp_path / "s4").exists()
 
 
+async def test_file_recorder_swallows_io_error(tmp_path):
+    # A plain file where the session dir should go makes mkdir raise -> must be swallowed.
+    (tmp_path / "s5").write_bytes(b"i am a file, not a dir")
+    rec = FileSessionRecorder("s5", tmp_path, clock=_clock_from([1.0]))
+    await rec.write(_data_url(b"frame"))  # must NOT raise
+    await rec.close()                      # must NOT raise
+    # The colliding file is untouched and no frame was recorded.
+    assert (tmp_path / "s5").read_bytes() == b"i am a file, not a dir"
+
+
 def _clock_from(values):
     it = iter(values)
     return lambda: next(it)
