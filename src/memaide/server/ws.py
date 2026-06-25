@@ -18,6 +18,7 @@ from typing import Any, AsyncIterator, Callable
 from memaide import config
 from memaide.agent.session import AgentSession
 from memaide.schemas import PatientContext, VisionContext
+from memaide.server.recorder import NullSessionRecorder, SessionRecorder
 from memaide.server.voice_loop import VoiceLoop
 from memaide.vision.pipeline import VisionPipeline
 from memaide.vision.rule_check import StubVisionCheck
@@ -37,6 +38,9 @@ class ServerDeps:
     make_brain: Callable[[PatientContext], Any]
     vision_check: Any = field(default_factory=StubVisionCheck)
     interval: float = config.VISION_INTERVAL_SECONDS
+    make_recorder: Callable[[str], SessionRecorder] = (
+        lambda session_id: NullSessionRecorder()
+    )
 
 
 class _QueueSource:
@@ -121,6 +125,7 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
     session = AgentSession(
         brain=deps.make_brain(patient), patient=patient, session_id=session_id
     )
+    recorder = deps.make_recorder(session_id or "unknown")
     latest: dict[str, VisionContext | None] = {"scene": None}
 
     async def sink(ctx: VisionContext) -> None:
@@ -158,6 +163,7 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
                 continue
             mtype = msg.get("type")
             if mtype == "frame" and isinstance(msg.get("data_url"), str):
+                await recorder.write(msg["data_url"])
                 await frame_source.put(msg["data_url"])
             elif mtype == "audio" and isinstance(msg.get("pcm"), str):
                 try:
@@ -170,6 +176,7 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
     finally:
         await frame_source.close()
         await audio_source.close()
+        await recorder.close()
         await asyncio.gather(vision_task, voice_task, return_exceptions=True)
 
 

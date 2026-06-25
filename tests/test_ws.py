@@ -91,3 +91,25 @@ async def test_handle_exits_cleanly_without_hello():
     ws = FakeWS([json.dumps({"type": "frame", "data_url": "x"})])
     await handle(ws, _deps())
     assert ws.sent == []
+
+
+async def test_handle_records_frames_through_recorder(tmp_path):
+    from memaide.server.recorder import FileSessionRecorder
+
+    ws = FakeWS([_hello(), _frame(), json.dumps({"type": "bye"})])
+    await handle(
+        ws,
+        _deps(make_recorder=lambda sid: FileSessionRecorder(sid, tmp_path)),
+    )
+
+    session_dir = tmp_path / "s1"
+    jpgs = list(session_dir.glob("*.jpg"))
+    assert len(jpgs) == 1
+    assert jpgs[0].read_bytes() == b"ABC"  # _frame() payload is base64 of "ABC"
+    assert (session_dir / "manifest.json").exists()
+
+
+async def test_handle_defaults_to_no_recording(tmp_path):
+    ws = FakeWS([_hello(), _frame(), json.dumps({"type": "bye"})])
+    await handle(ws, _deps())  # default NullSessionRecorder
+    assert list(tmp_path.iterdir()) == []
