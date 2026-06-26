@@ -45,9 +45,9 @@ sealed interface Inbound {
     ) : Inbound
 
     data class Subtitle(val text: String, val role: String) : Inbound
-    data class Escalation(val reason: String, val triggeredBy: String) : Inbound
+    data class Escalation(val reason: String, val triggeredBy: List<String>) : Inbound
     data class AudioOut(val pcm: String, val seq: Int) : Inbound
-    data class AudioError(val message: String) : Inbound
+    data class AudioError(val text: String) : Inbound
 }
 
 object WsCodec {
@@ -75,11 +75,15 @@ object WsCodec {
                 str("ts"),
             )
             "subtitle" -> Inbound.Subtitle(str("text"), str("role"))
-            "escalation" -> Inbound.Escalation(str("reason"), str("triggered_by"))
+            "escalation" -> Inbound.Escalation(
+                str("reason"),
+                (obj["triggered_by"] as? kotlinx.serialization.json.JsonArray)
+                    ?.map { it.jsonPrimitive.content } ?: emptyList(),
+            )
             "audio_out" -> Inbound.AudioOut(
                 str("pcm"), obj["seq"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
             )
-            "audio_error" -> Inbound.AudioError(str("message"))
+            "audio_error" -> Inbound.AudioError(str("text"))
             else -> null
         }
     }

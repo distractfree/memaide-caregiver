@@ -20,6 +20,8 @@ class WsCodecTest {
         assertTrue(WsCodec.encode(Outbound.Audio("QUJD")).contains("\"pcm\":\"QUJD\""))
     }
 
+    // Inbound fixtures below mirror the EXACT payloads src/memaide/server/voice_loop.py and
+    // ws.py emit (triggered_by is a JSON array; audio_error carries "text", not "message").
     @Test fun decodes_known_inbound_types() {
         assertTrue(WsCodec.decode("""{"type":"audio_out","pcm":"QUJD","seq":3}""")
                 is Inbound.AudioOut)
@@ -28,10 +30,24 @@ class WsCodecTest {
         assertTrue(WsCodec.decode(
             """{"type":"vision_context","description":"a kitchen","label":"kitchen","advisory_flags":[],"ts":"t"}"""
         ) is Inbound.VisionContext)
-        assertTrue(WsCodec.decode("""{"type":"escalation","reason":"fall","triggered_by":"vision"}""")
-                is Inbound.Escalation)
-        assertTrue(WsCodec.decode("""{"type":"audio_error","message":"x"}""")
+        assertTrue(WsCodec.decode(
+            """{"type":"escalation","reason":"fall","triggered_by":["vision","keyword"]}"""
+        ) is Inbound.Escalation)
+        assertTrue(WsCodec.decode("""{"type":"audio_error","text":"I'm here."}""")
                 is Inbound.AudioError)
+    }
+
+    @Test fun escalation_decodes_triggered_by_list() {
+        val msg = WsCodec.decode(
+            """{"type":"escalation","reason":"fall","triggered_by":["vision","keyword"]}"""
+        ) as Inbound.Escalation
+        assertEquals("fall", msg.reason)
+        assertEquals(listOf("vision", "keyword"), msg.triggeredBy)
+    }
+
+    @Test fun audio_error_decodes_text_field() {
+        val msg = WsCodec.decode("""{"type":"audio_error","text":"I'm here."}""") as Inbound.AudioError
+        assertEquals("I'm here.", msg.text)
     }
 
     @Test fun unknown_inbound_is_null() {
