@@ -48,6 +48,14 @@ Each task names exact files. Tasks 1–8 are the testable core; 9–12 are devic
 
 ## Task 1: Gradle scaffold + app module
 
+> **DONE 2026-06-25 (commit `7c2482d`).** Version corrections vs. the snippets below, made to
+> match the installed toolchain (cached Gradle 8.14.3; only android-36/36.1 SDK platforms
+> present; JDK 17 at `JAVA_HOME`): **AGP `8.11.1`**, **Kotlin `2.0.21`**, **`compileSdk`/`targetSdk = 36`**,
+> **Robolectric `4.15.1`**. The wrapper was bootstrapped from the cached Gradle dist
+> (`gradle wrapper --gradle-version 8.14.3`). `android/.gitignore` and a gitignored
+> `local.properties` (`sdk.dir`) were added. Verified: `./gradlew :app:testDebugUnitTest` →
+> BUILD SUCCESSFUL (NO-SOURCE). Build commands run from `android/`: `./gradlew <task>`.
+
 **Files:**
 - Create: `android/settings.gradle.kts`, `android/build.gradle.kts`, `android/gradle.properties`, `android/app/build.gradle.kts`, `android/app/src/main/AndroidManifest.xml`
 
