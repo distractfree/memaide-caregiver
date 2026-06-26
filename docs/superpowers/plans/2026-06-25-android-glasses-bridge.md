@@ -915,6 +915,15 @@ git commit -m "feat(android): add FrameEncoder"
 
 ## Task 10: `BridgeSocket` (OkHttp WebSocket + reconnect)
 
+> **Test corrected during impl (commit `bff37c3`).** The `runTest`-based test below is broken:
+> it depends on real OkHttp/MockWebServer background threads, but `runTest` uses a virtual
+> clock so its `delay`/`withTimeout` fast-forward the timeout (~0.6 s real) before the round
+> trip completes. The committed test instead runs in **real time** — plain `@Test`, a
+> `CountDownLatch` with a real timeout, `onSubscription` to register the collector before
+> `connect()` (the inbound SharedFlow has no replay), and it closes the **server-side**
+> WebSocket before `server.shutdown()` (else MockWebServer hangs on the open upgraded
+> connection). `BridgeSocket.kt` itself is unchanged from the snippet below.
+
 **Files:**
 - Create: `android/app/src/main/java/com/memaide/bridge/ws/BridgeSocket.kt`
 - Test: `android/app/src/test/java/com/memaide/bridge/ws/BridgeSocketTest.kt` (MockWebServer)
