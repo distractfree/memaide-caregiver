@@ -12,7 +12,9 @@ class OutboundChannel(frameCapacity: Int = 4) {
     private val frames = ArrayDeque<Outbound.Frame>()
     private val frameCap = frameCapacity
     private val audio = Channel<Outbound.Audio>(Channel.UNLIMITED)
-    private var closed = false
+    // Read lock-free in offerAudio (which only does a thread-safe trySend), so it must be
+    // @Volatile for the close() write to be visible across threads.
+    @Volatile private var closed = false
 
     @Synchronized
     fun offerFrame(f: Outbound.Frame) {
@@ -28,7 +30,11 @@ class OutboundChannel(frameCapacity: Int = 4) {
     @Synchronized
     fun close() { closed = true; audio.close() }
 
-    /** Helper for tests/flush: snapshot of buffered frames then audio. */
+    /**
+     * Test/inspection helper: a NON-destructive snapshot of buffered frames followed by the
+     * drained audio. NOT the Service's send path — the sender coroutine added in the Service
+     * task takes frames destructively (or calls [clearFrames] after sending).
+     */
     @Synchronized
     fun drain(): List<Outbound> {
         val out = ArrayList<Outbound>(frames)

@@ -40,7 +40,7 @@ class BridgeSocket(
     private fun open() {
         if (!running.get()) return
         val request = Request.Builder().url(url).build()
-        ws = client.newWebSocket(request, object : WebSocketListener() {
+        val socket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 backoff.reset()
                 webSocket.send(
@@ -60,6 +60,12 @@ class BridgeSocket(
                 reconnectLater()
             }
         })
+        ws = socket
+        // close() may have raced in while this socket was being created; don't leak it.
+        if (!running.get()) {
+            socket.close(1000, null)
+            ws = null
+        }
     }
 
     private fun reconnectLater() {
