@@ -414,6 +414,13 @@ git commit -m "feat(android): add PCM16 linear Resampler"
 
 ## Task 5: WebSocket DTOs + codec
 
+> **Contract corrected after review (commit `ffff667`).** Two inbound DTOs in the snippet
+> below mismatched the real server (`src/memaide/server/voice_loop.py`): `escalation.triggered_by`
+> is a **JSON array** (decode to `List<String>` like `advisory_flags`, not a scalar), and
+> `audio_error` carries **`text`**, not `message`. The original test fixtures hid this by
+> matching the buggy decoder; they were re-derived from the literal `voice_loop.py` payloads
+> and now assert decoded values (`triggeredBy == ["vision","keyword"]`, `AudioError.text`).
+
 **Files:**
 - Create: `android/app/src/main/java/com/memaide/bridge/ws/WsMessages.kt`
 - Test: `android/app/src/test/java/com/memaide/bridge/ws/WsCodecTest.kt`
