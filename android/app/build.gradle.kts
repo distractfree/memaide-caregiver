@@ -1,18 +1,31 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+// Secrets live in local.properties (gitignored). The GitHub PAT gates the SDK download;
+// the Meta app id / client token feed manifest placeholders for runtime attestation.
+val localProps = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+// Meta Wearables DAT requires Android 10+ (API 29). Present only when a GitHub PAT is available.
+val githubToken: String? = System.getenv("GITHUB_TOKEN") ?: localProps.getProperty("github_token")
+
 android {
     namespace = "com.memaide.bridge"
     compileSdk = 36
     defaultConfig {
         applicationId = "com.memaide.bridge"
-        minSdk = 26
+        minSdk = 29
         targetSdk = 36
         versionCode = 1
         versionName = "0.1"
+        // Meta Wearables DAT attestation, injected into AndroidManifest meta-data.
+        manifestPlaceholders["mwdat_application_id"] = localProps.getProperty("mwdat_application_id") ?: ""
+        manifestPlaceholders["mwdat_client_token"] = localProps.getProperty("mwdat_client_token") ?: ""
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -28,6 +41,15 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
+
+    // Meta Wearables Device Access Toolkit (GitHub Packages). Gated on the PAT so the pure-JVM
+    // unit-test build stays green without a token; drop `github_token` into local.properties to
+    // activate. Coordinates/version confirmed against facebook/meta-wearables-dat-android (v0.8.0).
+    if (githubToken != null) {
+        implementation("com.meta.wearable:mwdat-core:0.8.0")
+        implementation("com.meta.wearable:mwdat-camera:0.8.0")
+        implementation("com.meta.wearable:mwdat-mockdevice:0.8.0")
+    }
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")

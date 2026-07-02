@@ -11,6 +11,14 @@
     <application
         android:label="MemAide Bridge"
         android:allowBackup="false">
+        <!-- Meta Wearables DAT attestation. Values injected from local.properties via
+             manifestPlaceholders (never committed). -->
+        <meta-data
+            android:name="com.meta.wearable.mwdat.APPLICATION_ID"
+            android:value="${mwdat_application_id}" />
+        <meta-data
+            android:name="com.meta.wearable.mwdat.CLIENT_TOKEN"
+            android:value="${mwdat_client_token}" />
         <activity
             android:name=".ui.MainActivity"
             android:exported="true">
