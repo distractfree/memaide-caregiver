@@ -4,7 +4,9 @@ import android.util.Log
 import com.memaide.bridge.model.PatientContext
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -29,6 +31,11 @@ class BridgeSocket(
     )
     val inbound: SharedFlow<Inbound> = _inbound
 
+    // True while a socket is open. The Service watches false->true transitions to clear stale
+    // frames on reconnect (a dropped socket flips this to false; the next onOpen flips it back).
+    private val _connected = MutableStateFlow(false)
+    val connected: StateFlow<Boolean> = _connected
+
     @Volatile private var ws: WebSocket? = null
     private val running = AtomicBoolean(false)
 
@@ -43,6 +50,7 @@ class BridgeSocket(
         val socket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 backoff.reset()
+                _connected.value = true
                 webSocket.send(
                     WsCodec.encode(
                         Outbound.Hello(sessionId, PatientDto(patient.patientId, patient.name))
@@ -54,9 +62,11 @@ class BridgeSocket(
             }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.w("BridgeSocket", "socket failed; reconnecting", t)
+                _connected.value = false
                 reconnectLater()
             }
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                _connected.value = false
                 reconnectLater()
             }
         })
@@ -81,6 +91,7 @@ class BridgeSocket(
 
     fun close() {
         running.set(false)
+        _connected.value = false
         ws?.close(1000, "bye")
         ws = null
     }

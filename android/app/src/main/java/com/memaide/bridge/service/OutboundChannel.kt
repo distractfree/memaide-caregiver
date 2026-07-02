@@ -48,4 +48,19 @@ class OutboundChannel(frameCapacity: Int = 4) {
     /** Clear buffered frames on a socket drop so nothing stale flushes on reconnect. */
     @Synchronized
     fun clearFrames() { frames.clear() }
+
+    /**
+     * Destructive: remove and return the oldest buffered frame, or null if none. The Service's
+     * frame-sender coroutine drives this; frames are best-effort (drop-oldest), so a null just
+     * means "nothing to send right now".
+     */
+    @Synchronized
+    fun pollFrame(): Outbound.Frame? = frames.removeFirstOrNull()
+
+    /**
+     * Suspends until the next audio buffer is available, returning null once the channel is
+     * closed and drained. Audio is never dropped, so the Service's audio-sender coroutine
+     * consumes it in order with this.
+     */
+    suspend fun receiveAudioOrNull(): Outbound.Audio? = audio.receiveCatching().getOrNull()
 }
