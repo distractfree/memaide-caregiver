@@ -74,6 +74,13 @@ WS_PORT = 8765
 # Directory for per-session frame recordings (opt-in via a FileSessionRecorder).
 RECORDINGS_DIR = "recordings"
 
+# --- WhatsApp notify (Meta WhatsApp Cloud API) ---
+# Token is the 24h test token or a permanent System User token; phone_number_id is the
+# sending number's ID (stable). WHATSAPP_TO is the verified recipient for testing.
+WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
+WHATSAPP_PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID")
+WHATSAPP_TO = os.environ.get("WHATSAPP_TO")
+
 # --- Secrets ---
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
