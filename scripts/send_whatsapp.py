@@ -12,6 +12,9 @@ from the environment / .env via memaide.config.
     # Override the recipient (must be a verified number on the test WABA):
     python scripts/send_whatsapp.py --to +15551234567 --template hello_world
 
+    # Template with body variables {{1}}/{{2}}/{{3}} (order matters):
+    python scripts/send_whatsapp.py --template fall_alert --var Anthony --var John --var https://memaide.example/s/abc
+
 Exits non-zero on failure.
 """
 
@@ -32,6 +35,13 @@ def main() -> int:
     parser.add_argument("--text", help="free-form text (only within the 24h session window)")
     parser.add_argument("--template", default="hello_world", help="approved template name for first contact")
     parser.add_argument("--lang", default="en_US", help="template language code")
+    parser.add_argument(
+        "--var",
+        action="append",
+        dest="variables",
+        metavar="VALUE",
+        help="template body variable {{1}}, {{2}}, ... (repeat in order; e.g. fall_alert: --var Anthony --var John --var <link>)",
+    )
     args = parser.parse_args()
 
     missing = [
@@ -54,8 +64,9 @@ def main() -> int:
         print(f"Sending text to {args.to}...")
         ok = sender.send_text(args.to, args.text)
     else:
-        print(f"Sending template '{args.template}' ({args.lang}) to {args.to}...")
-        ok = sender.send_template(args.to, args.template, args.lang)
+        vars_note = f" vars={args.variables}" if args.variables else ""
+        print(f"Sending template '{args.template}' ({args.lang}) to {args.to}{vars_note}...")
+        ok = sender.send_template(args.to, args.template, args.lang, variables=args.variables)
 
     if ok:
         print("OK: WhatsApp API accepted the message. Check the recipient phone.")

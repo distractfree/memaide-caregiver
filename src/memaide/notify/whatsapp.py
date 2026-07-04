@@ -81,12 +81,26 @@ class WhatsAppSender:
             }
         )
 
-    def send_template(self, to: str, template: str = "hello_world", lang: str = "en_US") -> bool:
+    def send_template(
+        self,
+        to: str,
+        template: str = "hello_world",
+        lang: str = "en_US",
+        variables: list[str] | None = None,
+    ) -> bool:
+        payload_template: dict = {"name": template, "language": {"code": lang}}
+        if variables:
+            payload_template["components"] = [
+                {
+                    "type": "body",
+                    "parameters": [{"type": "text", "text": v} for v in variables],
+                }
+            ]
         return self._send(
             {
                 "messaging_product": "whatsapp",
                 "to": to,
                 "type": "template",
-                "template": {"name": template, "language": {"code": lang}},
+                "template": payload_template,
             }
         )

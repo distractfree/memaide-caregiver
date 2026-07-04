@@ -50,6 +50,46 @@ def test_send_template_posts_template_payload():
     }
 
 
+def test_send_template_with_variables_includes_body_components():
+    poster = _FakePoster()
+    ok = _sender(poster).send_template(
+        "+15551234567",
+        "fall_alert",
+        "en_US",
+        variables=["Anthony", "John", "https://memaide.example/s/abc"],
+    )
+
+    assert ok is True
+    _url, _headers, payload = poster.calls[-1]
+    assert payload == {
+        "messaging_product": "whatsapp",
+        "to": "+15551234567",
+        "type": "template",
+        "template": {
+            "name": "fall_alert",
+            "language": {"code": "en_US"},
+            "components": [
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": "Anthony"},
+                        {"type": "text", "text": "John"},
+                        {"type": "text", "text": "https://memaide.example/s/abc"},
+                    ],
+                }
+            ],
+        },
+    }
+
+
+def test_send_template_without_variables_omits_components():
+    poster = _FakePoster()
+    _sender(poster).send_template("+15551234567", "hello_world", "en_US")
+
+    _url, _headers, payload = poster.calls[-1]
+    assert "components" not in payload["template"]
+
+
 def test_send_returns_false_on_http_error_status():
     poster = _FakePoster(HttpResponse(400, '{"error":{"message":"bad"}}'))
     assert _sender(poster).send_text("+15551234567", "x") is False
