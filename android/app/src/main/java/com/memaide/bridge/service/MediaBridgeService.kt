@@ -66,21 +66,24 @@ class MediaBridgeService : Service() {
             patientId = intent.getStringExtra(EXTRA_PATIENT_ID) ?: "unknown",
             name = intent.getStringExtra(EXTRA_PATIENT_NAME) ?: "Patient",
         )
-        startAsForeground()
-        startSession(url, patient)
+        // Frames-only (Part A vision trace) sets this false: the mic/speaker path is skipped
+        // entirely so no RECORD_AUDIO is needed and only the camera stream runs.
+        val audioEnabled = intent.getBooleanExtra(EXTRA_AUDIO_ENABLED, true)
+        startAsForeground(audioEnabled)
+        startSession(url, patient, audioEnabled)
         return START_STICKY
     }
 
-    private fun startSession(url: String, patient: PatientContext) {
+    private fun startSession(url: String, patient: PatientContext, audioEnabled: Boolean) {
         val ch = OutboundChannel().also { channel = it }
         val sock = BridgeSocket(url, patient, sessionId = UUID.randomUUID().toString())
             .also { socket = it }
-        val eng = AudioEngine(applicationContext).also { audio = it }
+        val eng = if (audioEnabled) AudioEngine(applicationContext).also { audio = it } else null
         val frameSource: FrameSource = GlassesFrameSource(applicationContext)
         val encoder = FrameEncoder()
 
         _uiState.update { it.copy(session = SessionState.Connecting) }
-        eng.start()
+        eng?.start()
         sock.connect()
 
         // Frame producer (CPU-bound JPEG encode on Default).
@@ -89,10 +92,12 @@ class MediaBridgeService : Service() {
                 encoder.encode(frameSource.frames()).collect { ch.offerFrame(Outbound.Frame(it)) }
             }.onFailure { Log.e(TAG, "frame producer stopped", it) }
         }
-        // Mic producer (blocking reads on IO).
-        scope.launch(Dispatchers.IO) {
-            runCatching { eng.micPcm().collect { ch.offerAudio(it) } }
-                .onFailure { Log.e(TAG, "mic producer stopped", it) }
+        // Mic producer (blocking reads on IO). Skipped when audio is disabled (frames-only).
+        if (eng != null) {
+            scope.launch(Dispatchers.IO) {
+                runCatching { eng.micPcm().collect { ch.offerAudio(it) } }
+                    .onFailure { Log.e(TAG, "mic producer stopped", it) }
+            }
         }
         // Frame sender — best-effort; idles briefly when the buffer is empty.
         scope.launch {
@@ -102,18 +107,20 @@ class MediaBridgeService : Service() {
                 sock.send(f)
             }
         }
-        // Audio sender — suspends on the channel; audio is never dropped.
-        scope.launch {
-            while (isActive) {
-                val a = ch.receiveAudioOrNull() ?: break
-                sock.send(a)
+        // Audio sender — suspends on the channel; audio is never dropped. Skipped when disabled.
+        if (audioEnabled) {
+            scope.launch {
+                while (isActive) {
+                    val a = ch.receiveAudioOrNull() ?: break
+                    sock.send(a)
+                }
             }
         }
-        // Inbound: play audio, surface text state.
+        // Inbound: play audio (ignored when audio disabled), surface text state.
         scope.launch {
             sock.inbound.collect { msg ->
                 when (msg) {
-                    is Inbound.AudioOut -> eng.play(msg.pcm)
+                    is Inbound.AudioOut -> eng?.play(msg.pcm)
                     is Inbound.Subtitle -> _uiState.update { it.copy(lastSubtitle = msg.text) }
                     is Inbound.VisionContext ->
                         _uiState.update { it.copy(lastVision = msg.description) }
@@ -136,7 +143,7 @@ class MediaBridgeService : Service() {
         }
     }
 
-    private fun startAsForeground() {
+    private fun startAsForeground(audioEnabled: Boolean) {
         val mgr = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (mgr.getNotificationChannel(CHANNEL_ID) == null) {
             mgr.createNotificationChannel(
@@ -145,16 +152,21 @@ class MediaBridgeService : Service() {
         }
         val notification: Notification = Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("MemAide Bridge")
-            .setContentText("Streaming glasses camera and audio")
+            .setContentText(
+                if (audioEnabled) "Streaming glasses camera and audio"
+                else "Streaming glasses camera"
+            )
             .setSmallIcon(android.R.drawable.presence_video_online)
             .setOngoing(true)
             .build()
-        startForeground(
-            NOTIFICATION_ID,
-            notification,
+        // Only declare the microphone FGS type when audio is on; frames-only runs camera-only.
+        val type = if (audioEnabled) {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA,
-        )
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+        } else {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+        }
+        startForeground(NOTIFICATION_ID, notification, type)
     }
 
     override fun onDestroy() {
@@ -185,16 +197,24 @@ class MediaBridgeService : Service() {
         const val EXTRA_SERVER_URL = "server_url"
         const val EXTRA_PATIENT_ID = "patient_id"
         const val EXTRA_PATIENT_NAME = "patient_name"
+        const val EXTRA_AUDIO_ENABLED = "audio_enabled"
 
         private val _uiState = MutableStateFlow(UiState())
         val uiState: StateFlow<UiState> = _uiState
 
-        /** Convenience launcher for the Activity (Task 12). */
-        fun start(context: Context, serverUrl: String, patientId: String, patientName: String) {
+        /** Convenience launcher for the Activity. Pass audioEnabled=false for frames-only (Part A). */
+        fun start(
+            context: Context,
+            serverUrl: String,
+            patientId: String,
+            patientName: String,
+            audioEnabled: Boolean = true,
+        ) {
             val intent = Intent(context, MediaBridgeService::class.java).apply {
                 putExtra(EXTRA_SERVER_URL, serverUrl)
                 putExtra(EXTRA_PATIENT_ID, patientId)
                 putExtra(EXTRA_PATIENT_NAME, patientName)
+                putExtra(EXTRA_AUDIO_ENABLED, audioEnabled)
             }
             context.startForegroundService(intent)
         }

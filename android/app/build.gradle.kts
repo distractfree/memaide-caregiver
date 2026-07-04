@@ -41,6 +41,8 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
+    // lifecycleScope for the minimal MainActivity (Part A launcher).
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
 
     // Meta Wearables Device Access Toolkit (GitHub Packages). Gated on the PAT so the pure-JVM
     // unit-test build stays green without a token; drop `github_token` into local.properties to
