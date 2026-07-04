@@ -91,7 +91,9 @@ class GlassesFrameSource(
         val dup = buffer.duplicate()
         val bytes = ByteArray(dup.remaining())
         dup.get(bytes)
-        return RawFrame(bytes, width, height, PixelFormat.NV21)
+        // The glasses deliver uncompressed I420 planar (Y | U plane | V plane); verified by
+        // decoding a raw dump. The encoder converts I420 -> NV21 for YuvImage.
+        return RawFrame(bytes, width, height, PixelFormat.I420)
     }
 
     companion object {
@@ -103,7 +105,14 @@ class GlassesFrameSource(
         @Synchronized
         private fun ensureInitialized(context: Context) {
             if (initialized) return
-            Wearables.initialize(context.applicationContext).getOrThrow()
+            try {
+                Wearables.initialize(context.applicationContext).getOrThrow()
+            } catch (e: Exception) {
+                // Another entry point (MainActivity) may have initialized the SDK first — that's
+                // fine, the SDK is a process singleton. Rethrow anything that isn't that case.
+                if (e.message?.contains("already initialized", ignoreCase = true) != true) throw e
+                Log.i(TAG, "Wearables already initialized elsewhere; continuing.")
+            }
             initialized = true
             Log.i(TAG, "Wearables initialized (devMode=${Wearables.isDevMode})")
         }
