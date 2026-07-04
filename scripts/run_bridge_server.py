@@ -30,7 +30,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from memaide import config
 from memaide.agent.brain import AgentBrain
-from memaide.audio.stt import StubSpeechToText
 from memaide.audio.tts import StubTextToSpeech
 from memaide.io.openai_client import OpenAIClient
 from memaide.schemas import EscalationDecision, VisionContext
@@ -41,6 +40,23 @@ from memaide.server.ws import ServerDeps, serve
 from memaide.vision.describer import VisionDescriber
 
 _log = logging.getLogger("memaide.bridge")
+
+
+class _AudioProbeSTT:
+    """Drains inbound mic audio and logs receipt, so we can confirm the phone->server audio
+    path works without wiring real transcription. Yields no transcripts (async generator)."""
+
+    async def transcribe(self, audio):
+        chunks = 0
+        total = 0
+        async for chunk in audio:
+            chunks += 1
+            total += len(chunk)
+            if chunks == 1 or chunks % 25 == 0:
+                _log.info("[audio] received %d chunks, %d bytes from the phone mic", chunks, total)
+        _log.info("[audio] stream ended: %d chunks, %d bytes total", chunks, total)
+        if False:  # make this an async generator (yields nothing)
+            yield
 
 
 def _promote_critical_advisory(ctx: VisionContext) -> list[str]:
@@ -96,7 +112,7 @@ async def _main() -> None:
     )
     deps = ServerDeps(
         describer=VisionDescriber(client),
-        stt=StubSpeechToText([]),          # frames-only: no transcripts arrive
+        stt=_AudioProbeSTT(),              # logs any mic audio the phone sends (transport probe)
         tts=StubTextToSpeech(audio=b""),   # idle
         make_brain=lambda patient: AgentBrain(client, patient),
         make_recorder=lambda sid: FileSessionRecorder(sid, config.RECORDINGS_DIR),

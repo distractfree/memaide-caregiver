@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.Gravity
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -34,6 +35,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var regStatus: TextView
     private lateinit var urlField: EditText
+    private lateinit var audioToggle: CheckBox
 
     // DAT camera access is a *Wearables* permission, granted via the Meta AI app — separate from
     // Android's CAMERA permission. Without it the glasses never start a video stream.
@@ -47,15 +49,17 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         urlField = EditText(this).apply {
-            setText(DEFAULT_SERVER_URL)
+            // Remember the last-used server URL so it doesn't need re-typing each launch.
+            setText(getPreferences(MODE_PRIVATE).getString(PREF_URL, DEFAULT_SERVER_URL))
             hint = "ws://<laptop-LAN-IP>:8765"
         }
+        audioToggle = CheckBox(this).apply { text = "Enable mic audio (SCO)" }
         val registerBtn = Button(this).apply {
             text = "Register glasses"
             setOnClickListener { registerGlasses() }
         }
         val startBtn = Button(this).apply {
-            text = "Start (frames-only)"
+            text = "Start"
             setOnClickListener { startStreaming() }
         }
         val stopBtn = Button(this).apply {
@@ -70,6 +74,7 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(48, 96, 48, 48)
             addView(urlField)
+            addView(audioToggle)
             addView(registerBtn)
             addView(startBtn)
             addView(stopBtn)
@@ -111,7 +116,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startStreaming() {
-        val missing = REQUIRED_PERMISSIONS.filter {
+        // Mic audio (test) goes over Bluetooth SCO, so it also needs RECORD_AUDIO.
+        val required = REQUIRED_PERMISSIONS.toMutableList()
+        if (audioToggle.isChecked) required += Manifest.permission.RECORD_AUDIO
+        val missing = required.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
         if (missing.isNotEmpty()) {
@@ -125,14 +133,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun launchService() {
+        val url = urlField.text.toString().trim()
+        getPreferences(MODE_PRIVATE).edit().putString(PREF_URL, url).apply()
         MediaBridgeService.start(
             context = this,
-            serverUrl = urlField.text.toString().trim(),
+            serverUrl = url,
             patientId = "demo",
             patientName = "Patient",
-            audioEnabled = false, // Part A: frames-only
+            audioEnabled = audioToggle.isChecked, // mic test when checked; frames-only otherwise
         )
-        status.text = "Starting stream…"
+        status.text = if (audioToggle.isChecked) "Starting stream (frames + mic)…" else "Starting stream…"
     }
 
     override fun onRequestPermissionsResult(
@@ -153,6 +163,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "MainActivity"
         private const val REQ_PERMS = 1
+        private const val PREF_URL = "server_url"
         private const val DEFAULT_SERVER_URL = "ws://192.168.1.100:8765"
         private val REQUIRED_PERMISSIONS = arrayOf(
             Manifest.permission.CAMERA,
