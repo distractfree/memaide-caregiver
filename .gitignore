@@ -8,3 +8,6 @@ venv/
 
 # Per-session frame recordings (FileSessionRecorder output)
 recordings/
+
+# Live-preview snapshot dir (run_bridge_server: index.html + latest.jpg/json)
+preview/

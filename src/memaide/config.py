@@ -74,12 +74,23 @@ WS_PORT = 8765
 # Directory for per-session frame recordings (opt-in via a FileSessionRecorder).
 RECORDINGS_DIR = "recordings"
 
+# Min seconds between caregiver notifications for one persistent escalation, so a
+# condition seen on every ~2s frame sends at most one WhatsApp per this window.
+ESCALATION_NOTIFY_COOLDOWN = 60.0
+# Live-preview snapshot dir for the bridge server (latest.jpg + latest.json + index.html).
+PREVIEW_DIR = "preview"
+PREVIEW_PORT = 8000
+
 # --- WhatsApp notify (Meta WhatsApp Cloud API) ---
 # Token is the 24h test token or a permanent System User token; phone_number_id is the
 # sending number's ID (stable). WHATSAPP_TO is the verified recipient for testing.
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
 WHATSAPP_PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID")
 WHATSAPP_TO = os.environ.get("WHATSAPP_TO")
+# Escalation alert template. Defaults to hello_world (always approved) until the custom
+# fall_alert template clears Meta review; set WHATSAPP_TEMPLATE=fall_alert to switch.
+WHATSAPP_TEMPLATE = os.environ.get("WHATSAPP_TEMPLATE", "hello_world")
+WHATSAPP_LANG = os.environ.get("WHATSAPP_LANG", "en_US")
 
 # --- Secrets ---
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")

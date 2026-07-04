@@ -75,6 +75,46 @@ brain factory, then `await serve(deps)` (needs `OPENAI_API_KEY` and the `websock
 package). The Ray-Ban mobile app (Meta Wearables toolkit) is the client; on-device capture
 is out of scope for this repo.
 
+### Glasses vision trace + live preview (Part A)
+
+`scripts/run_bridge_server.py` runs the bridge server wired for a **frames-only** trace: the
+real `VisionDescriber`, per-session frame recording, and a `VisionObserver` that logs one
+`[vision] desc=… label=… flags=…` line per described frame and, when the describer reports a
+critical scene (`person_on_floor` / `fall_detected` / `no_motion`), logs `[brain]` +
+`[escalation] TRIGGERED` and fires one WhatsApp alert per cooldown window.
+
+```bash
+python scripts/run_bridge_server.py
+#   WS server : ws://<laptop-LAN-IP>:8765   (point the phone here — use the LAN IP, not 0.0.0.0)
+#   preview   : http://localhost:8000       (the latest glasses frame next to its trace)
+```
+
+The preview is a dependency-free page (stdlib `http.server`) that polls `latest.jpg` +
+`latest.json` every second; the observer writes both per described frame. The phone client is
+the minimal `MainActivity` (register glasses → Start), which runs `MediaBridgeService` with
+`EXTRA_AUDIO_ENABLED=false` (camera only, no mic). Needs `OPENAI_API_KEY`; WhatsApp is optional.
+
+### WhatsApp escalation notify (Cloud API)
+
+`scripts/send_whatsapp.py` sends a test message; the bridge server sends the same on escalation.
+Server-side vars (documented here, **not** in a committed `.env`):
+
+| Var | Purpose |
+| --- | --- |
+| `WHATSAPP_TOKEN` | Meta Cloud API token (24h test token or a permanent System User token). |
+| `WHATSAPP_PHONE_NUMBER_ID` | The sending test number's phone-number ID (stable). |
+| `WHATSAPP_TO` | Verified recipient (E.164, e.g. `+15551234567`). |
+| `WHATSAPP_TEMPLATE` | Escalation template name; defaults to `hello_world` until the custom `fall_alert` clears review. |
+| `WHATSAPP_LANG` | Template language code (default `en_US`). |
+
+Free-form `send_text` only delivers within 24h of the recipient messaging the business number,
+so the escalation alert uses an approved **template** (`send_template`). Templates with body
+variables (`{{1}}/{{2}}/{{3}}`) take `--var` values in order:
+
+```bash
+python scripts/send_whatsapp.py --template fall_alert --var Anthony --var John --var https://…
+```
+
 ## Integration notes for the backend team
 - Construct one `AgentSession` per Help-button session; call `start()` (agent speaks
   first), then `handle_patient_input(text, vision=?, seconds_since_last_speech=?)` per

@@ -41,6 +41,9 @@ class ServerDeps:
     make_recorder: Callable[[str], SessionRecorder] = (
         lambda session_id: NullSessionRecorder()
     )
+    # Optional per-described-frame trace/notify seam (see server.vision_observer).
+    # Default None -> no behavior change; the bridge server injects a real one.
+    observer: Any = None
 
 
 class _QueueSource:
@@ -126,7 +129,7 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
         brain=deps.make_brain(patient), patient=patient, session_id=session_id
     )
     recorder = deps.make_recorder(session_id or "unknown")
-    latest: dict[str, VisionContext | None] = {"scene": None}
+    latest: dict[str, Any] = {"scene": None, "frame_url": None}
 
     async def sink(ctx: VisionContext) -> None:
         ctx = ctx.model_copy(update={"flags": deps.vision_check.check()})
@@ -140,6 +143,9 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
                 "ts": ctx.ts.isoformat(),
             }
         )
+        if deps.observer is not None:
+            # on_scene swallows its own errors, but guard the connection regardless.
+            await deps.observer.on_scene(ctx, session, frame_url=latest["frame_url"])
 
     frame_source = WebSocketFrameSource()
     audio_source = WebSocketAudioSource()
@@ -163,6 +169,7 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
                 continue
             mtype = msg.get("type")
             if mtype == "frame" and isinstance(msg.get("data_url"), str):
+                latest["frame_url"] = msg["data_url"]
                 await recorder.write(msg["data_url"])
                 await frame_source.put(msg["data_url"])
             elif mtype == "audio" and isinstance(msg.get("pcm"), str):

@@ -87,6 +87,31 @@ async def test_handle_demuxes_streams_and_emits_outputs():
     assert "I'm here." in sub["text"]
 
 
+class _RecordingObserver:
+    def __init__(self):
+        self.calls = []
+
+    async def on_scene(self, ctx, session, frame_url=None):
+        self.calls.append((ctx, frame_url))
+
+
+async def test_handle_invokes_observer_with_scene_and_frame():
+    obs = _RecordingObserver()
+    ws = FakeWS([_hello(), _frame(), json.dumps({"type": "bye"})])
+    await handle(ws, _deps(observer=obs))
+
+    assert len(obs.calls) == 1
+    ctx, frame_url = obs.calls[0]
+    assert ctx.label == "kitchen"
+    assert frame_url == "data:image/jpeg;base64,QUJD"
+
+
+async def test_handle_without_observer_is_unaffected():
+    ws = FakeWS([_hello(), _frame(), json.dumps({"type": "bye"})])
+    await handle(ws, _deps())  # observer defaults to None -> no error
+    assert any(m["type"] == "vision_context" for m in ws.sent)
+
+
 async def test_handle_exits_cleanly_without_hello():
     ws = FakeWS([json.dumps({"type": "frame", "data_url": "x"})])
     await handle(ws, _deps())
