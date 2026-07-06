@@ -1,12 +1,47 @@
 # MemAide — Handoff to the Backend / Apps Team
 
-**Snapshot:** tag `v0.1.0` on `main`. One-time handoff — copy what you need and own it.
+**Snapshot:** tag `v0.1.0` on `main`; active integration on `anthony/student3-work`.
 
 This repo is the **standalone MemAide AI agent foundation** (the `memaide` Python package) plus a
-reference WebSocket media server and a throwaway Android bridge used to prove it end-to-end on real
-Ray-Ban glasses. You already have a backend, server, and full Android + watch apps, so the thing to
-take is the **AI agent core**; the server and Android bits are **reference material**, not code to
-adopt wholesale.
+reference WebSocket media server and an Android bridge used to prove it end-to-end on real Ray-Ban
+glasses. Student 2 (koko) has the backend + caregiver portal, Student 1 (Arian) has the phone + watch
+apps, and this is Student 3's AI.
+
+**Integration decision (2026-07-05): my AI runs as its own service, not as code you embed.** koko's
+server is Node and this agent is Python, so rather than porting one into the other, both run as
+separate processes **co-located on koko's DigitalOcean droplet** and talk over the network. koko's
+scripted `ai-sessions` AI (`determineNextAiMessage`) is the placeholder my agent replaces. See the
+integration plan below and the specs in `docs/superpowers/specs/2026-07-05-*`. The Android bridge here
+is **not throwaway** — it is the reference implementation of the glasses/audio pipeline Arian's app
+must gain (see §5 and the Slice 2 spec).
+
+---
+
+## 0. Integration plan (current)
+
+Full design in `docs/superpowers/specs/`:
+- `2026-07-05-ai-agent-backend-integration-slice1-design.md`
+- `2026-07-05-slice2-voice-vision-client-design.md`
+
+**Architecture:** three services, koko's DB is the single source of truth throughout.
+- **koko (Node/Prisma, `:4000`)** — DB + caregiver web portal; owns sessions, patients, persistence.
+- **my AI (Python)** — the brain; runs on the same droplet, called by koko. `/infer` (text) on e.g.
+  `:8080`, WebSocket media on `:8765`. Calls hosted LLM/STT/TTS APIs, so it is lightweight (no GPU).
+- **Arian (Android + Wear)** — patient front-end; today a pure REST client of koko.
+
+**Three slices, built in order:**
+1. **Slice 1 — backend bridge (text path).** koko assembles patient context from its DB and `POST`s
+   my stateless `/infer` endpoint per message instead of running the script; koko persists the reply
+   and drives its state machine, falling back to the script if my service is down. Needs a koko Prisma
+   migration (add `dateOfBirth`/`bioInfo`/`conditions[]` + a `Medication` model, seeded). No Android.
+2. **Slice 2 — voice/vision live session.** Control inverts: my server owns the live WebSocket session
+   and reports events back to koko. koko forwards vitals/beacons + context at start; my server POSTs
+   escalation **in real time** and transcript/summary on conclude. Requires porting the glasses/audio
+   pipeline (§5) from the bridge app into Arian's app + a "listening" UI. Two open decisions: the
+   WebSocket↔context **correlation key/ordering**, and **live transcript streaming vs. end-only**.
+3. **Slice 3 — deployment.** Both servers on koko's droplet, distinct ports (koko `:4000`, WebSocket
+   `:8765`, preview `:8000`, `/infer`/`/session` e.g. `:8080`), run as persistent services; `wss://`
+   for the public media stream.
 
 ---
 
@@ -34,7 +69,10 @@ git archive v0.1.0 src/memaide docs README.md HANDOFF.md -o memaide-handoff-v0.1
 
 ## 2. The integration seam (backend)
 
-Your backend hosts the agent. One `AgentSession` per Help-button session:
+Under the service model (§0), **my Python service** hosts the agent and koko calls it over HTTP/
+WebSocket — koko does **not** embed this code. The snippet below is how my service uses the core
+internally (one `AgentSession` per Help-button session); it also documents the entry points for
+anyone reusing the package directly:
 
 ```python
 from memaide.agent.session import AgentSession
