@@ -156,4 +156,15 @@ Mirrors `AgentDecision` + `EscalationDecision`:
 - Caregiver-portal UI to enter `dateOfBirth`/`bioInfo`/`conditions`/`medications` (Slice 1 seeds them directly).
 - Time-based escalation (silence ticks) — meaningful only on the live voice path, so `seconds_since_last_speech` is always 0 here.
 - Surfacing the new patient-profile fields in Arian's app UI.
+
+### Slice 2 prerequisite (record now, do not forget)
+
+Arian's patient app (`com.example.memaid`) has **no glasses, camera, WebSocket, or audio** code — it is a pure REST client. The glasses-onboarding and media capability exists **only in Student 3's tester app** (`com.memaide.bridge`), which is therefore the **reference implementation**, not throwaway. Slice 2 must **port these modules from the bridge app into Arian's app** (lift rather than rebuild):
+
+- Meta Wearables **DAT SDK** integration (`mwdat 0.8.0` + camera Stream setup).
+- **Glasses pairing/connection flow** (discover, connect, provision the camera stream).
+- **Bluetooth SCO audio bring-up** — `com.memaide.bridge.audio` (`AudioEngine.start()` mic/speaker over HFP, `Resampler`).
+- **WebSocket + audio/frame pipeline** — `com.memaide.bridge.ws` (`BridgeSocket`), `MediaBridgeService`, `FrameEncoder`.
+
+This is what makes the "merge vs. coordinate the two Android apps" decision the central question of Slice 2. It does **not** affect Slice 1 (no Android needed), so it is safely deferred — but must be an explicit line item when Slice 2 is designed: *"port glasses setup + audio/vision pipeline from the bridge tester app into Arian's patient app."*
 ```
