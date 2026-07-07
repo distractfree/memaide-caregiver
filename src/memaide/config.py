@@ -71,6 +71,13 @@ AUDIO_SAMPLE_RATE = 24000
 WS_HOST = "0.0.0.0"
 WS_PORT = 8765
 
+# --- /infer HTTP service (Slice 1: koko backend bridge) ---
+# Shared secret koko sends as the X-Api-Key header. When unset, /infer auth is
+# DISABLED (local dev); production deploy must set it.
+AI_AGENT_API_KEY = os.environ.get("AI_AGENT_API_KEY")
+INFER_HOST = "0.0.0.0"
+INFER_PORT = 8080
+
 # Directory for per-session frame recordings (opt-in via a FileSessionRecorder).
 RECORDINGS_DIR = "recordings"
 

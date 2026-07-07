@@ -88,6 +88,35 @@ async def test_build_messages_appends_advisory_segment_when_present():
     assert "Advisory: person_seated, tv_on" in joined
 
 
+async def test_respond_appends_extra_context_as_system_messages():
+    client = StubClient({"reply_text": "x"})
+    brain = AgentBrain(client=client, patient=_patient())
+    vision = VisionContext(description="A room.", label="living room")
+    await brain.respond(
+        [Turn(role=Role.PATIENT, text="hi")],
+        vision=vision,
+        extra_context=["[VITALS] heart_rate=82", "[LOCATION] bathroom for 240s"],
+    )
+    contents = [m["content"] for m in client.last_messages]
+    system_msgs = [
+        c for m, c in zip(client.last_messages, contents) if m["role"] == "system"
+    ]
+    assert any("[VITALS] heart_rate=82" in c for c in system_msgs)
+    assert any("[LOCATION] bathroom for 240s" in c for c in system_msgs)
+    # extra_context is injected after the transcript but before the vision block
+    vitals_idx = next(i for i, c in enumerate(contents) if "[VITALS]" in c)
+    vision_idx = next(i for i, c in enumerate(contents) if "VISION CONTEXT" in c)
+    assert vitals_idx < vision_idx
+
+
+async def test_respond_without_extra_context_unchanged():
+    client = StubClient({"reply_text": "x"})
+    brain = AgentBrain(client=client, patient=_patient())
+    await brain.respond([Turn(role=Role.PATIENT, text="hi")])
+    system_msgs = [m for m in client.last_messages if m["role"] == "system"]
+    assert len(system_msgs) == 1
+
+
 async def test_build_messages_omits_advisory_segment_when_empty():
     client = StubClient({"reply_text": "x"})
     brain = AgentBrain(client=client, patient=_patient())

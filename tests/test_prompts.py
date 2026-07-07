@@ -1,6 +1,6 @@
 from memaide.prompts.few_shot import FEW_SHOT_EXAMPLES, format_few_shot
 from memaide.prompts.system_prompt import build_system_prompt
-from memaide.schemas import PatientContext
+from memaide.schemas import Medication, PatientContext
 
 
 def _turns(ex):
@@ -73,6 +73,32 @@ def test_system_prompt_covers_dementia_redirect():
 def test_system_prompt_handoff_notes_dementia_episode():
     prompt = build_system_prompt(PatientContext(patient_id="p", name="A")).lower()
     assert "dementia episode" in prompt  # handoff names the episode for the caregiver
+
+
+def test_system_prompt_includes_age_bio_and_medications_when_present():
+    patient = PatientContext(
+        patient_id="p1", name="Rose", age=78, bio_info="Lives alone with a cat.",
+        medications=[Medication(name="Metformin", dose="500mg", schedule="twice daily")],
+    )
+    prompt = build_system_prompt(patient)
+    assert "78" in prompt
+    assert "Lives alone with a cat." in prompt
+    assert "Metformin" in prompt
+    assert "500mg" in prompt
+
+
+def test_system_prompt_omits_medication_line_when_none():
+    prompt = build_system_prompt(PatientContext(patient_id="p", name="Sam"))
+    assert "medications" not in prompt.lower()
+
+
+def test_system_prompt_skips_inactive_medications():
+    patient = PatientContext(
+        patient_id="p", name="Sam",
+        medications=[Medication(name="OldDrug", active=False)],
+    )
+    prompt = build_system_prompt(patient)
+    assert "OldDrug" not in prompt
 
 
 def test_few_shot_has_a_dementia_redirect_example():

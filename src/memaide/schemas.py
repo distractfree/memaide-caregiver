@@ -27,6 +27,13 @@ class SessionStatus(str, Enum):
     ENDED = "ended"
 
 
+class Medication(BaseModel):
+    name: str
+    dose: str | None = None
+    schedule: str | None = None
+    active: bool = True
+
+
 class PatientContext(BaseModel):
     patient_id: str
     name: str
@@ -34,6 +41,9 @@ class PatientContext(BaseModel):
     known_conditions: list[str] = Field(default_factory=list)
     language: str = "en"
     notes: str | None = None
+    age: int | None = None
+    bio_info: str | None = None
+    medications: list[Medication] = Field(default_factory=list)
 
 
 class Turn(BaseModel):

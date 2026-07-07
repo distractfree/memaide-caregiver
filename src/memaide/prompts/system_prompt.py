@@ -1,5 +1,5 @@
 from memaide.prompts.few_shot import format_few_shot
-from memaide.schemas import PatientContext
+from memaide.schemas import Medication, PatientContext
 
 _BASE = """\
 You are MemAide, a calm and reassuring voice companion for an elderly person who has \
@@ -76,17 +76,34 @@ HOW TO REPLY
 """
 
 
+def _format_med(med: Medication) -> str:
+    parts = [med.name]
+    if med.dose:
+        parts.append(med.dose)
+    if med.schedule:
+        parts.append(med.schedule)
+    return " ".join(parts)
+
+
 def _patient_block(patient: PatientContext) -> str:
     call_name = patient.preferred_name or patient.name
     conditions = ", ".join(patient.known_conditions) if patient.known_conditions else "none on file"
     notes = patient.notes if patient.notes else "none"
-    return (
-        "ABOUT THE PERSON YOU ARE HELPING\n"
-        f"- Name: {patient.name} (call them {call_name})\n"
-        f"- Known conditions: {conditions}\n"
-        f"- Preferred language: {patient.language}\n"
-        f"- Notes: {notes}"
-    )
+    lines = [
+        "ABOUT THE PERSON YOU ARE HELPING",
+        f"- Name: {patient.name} (call them {call_name})",
+    ]
+    if patient.age is not None:
+        lines.append(f"- Age: {patient.age}")
+    if patient.bio_info:
+        lines.append(f"- Background: {patient.bio_info}")
+    lines.append(f"- Known conditions: {conditions}")
+    active_meds = [_format_med(m) for m in patient.medications if m.active]
+    if active_meds:
+        lines.append(f"- Current medications: {'; '.join(active_meds)}")
+    lines.append(f"- Preferred language: {patient.language}")
+    lines.append(f"- Notes: {notes}")
+    return "\n".join(lines)
 
 
 def build_system_prompt(patient: PatientContext) -> str:

@@ -44,3 +44,9 @@ def test_audio_and_ws_config_present():
 def test_vision_interval_and_recordings_dir():
     assert config.VISION_INTERVAL_SECONDS == 2.0
     assert config.RECORDINGS_DIR == "recordings"
+
+
+def test_infer_service_config_defaults():
+    assert config.INFER_HOST == "0.0.0.0"
+    assert config.INFER_PORT == 8080
+    assert hasattr(config, "AI_AGENT_API_KEY")

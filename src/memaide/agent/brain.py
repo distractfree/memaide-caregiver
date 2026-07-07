@@ -24,10 +24,17 @@ class AgentBrain:
         self._model = model
         self._system_prompt = build_system_prompt(patient)
 
-    def _build_messages(self, transcript: list[Turn], vision: VisionContext | None) -> list[dict]:
+    def _build_messages(
+        self,
+        transcript: list[Turn],
+        vision: VisionContext | None,
+        extra_context: list[str] | None = None,
+    ) -> list[dict]:
         messages: list[dict] = [{"role": "system", "content": self._system_prompt}]
         for turn in transcript:
             messages.append({"role": _ROLE_MAP[turn.role], "content": turn.text})
+        for note in extra_context or []:
+            messages.append({"role": "system", "content": note})
         if vision is not None:
             flags = ", ".join(vision.flags) if vision.flags else "none"
             content = (
@@ -40,9 +47,12 @@ class AgentBrain:
         return messages
 
     async def respond(
-        self, transcript: list[Turn], vision: VisionContext | None = None
+        self,
+        transcript: list[Turn],
+        vision: VisionContext | None = None,
+        extra_context: list[str] | None = None,
     ) -> AgentDecision:
-        messages = self._build_messages(transcript, vision)
+        messages = self._build_messages(transcript, vision, extra_context)
         data = await self._client.complete_json(messages, model=self._model)
         decision = AgentDecision.model_validate(data)
         return decision.model_copy(

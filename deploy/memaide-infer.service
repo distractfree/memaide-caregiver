@@ -1,0 +1,24 @@
+[Unit]
+# MemAide /infer HTTP service (Slice 1: koko backend bridge), port 8080.
+Description=MemAide /infer service (koko backend bridge)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=memaide
+Group=memaide
+WorkingDirectory=/opt/memaide
+EnvironmentFile=/etc/memaide/memaide.env
+ExecStart=/opt/memaide/.venv/bin/python scripts/run_infer_server.py
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+ReadWritePaths=/opt/memaide
+
+[Install]
+WantedBy=multi-user.target

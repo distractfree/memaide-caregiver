@@ -4,6 +4,7 @@ from memaide.schemas import (
     AgentDecision,
     EscalationDecision,
     HandoffType,
+    Medication,
     PatientContext,
     Role,
     SessionRecord,
@@ -11,6 +12,23 @@ from memaide.schemas import (
     Turn,
     VisionContext,
 )
+
+
+def test_patient_context_new_fields_default_empty():
+    p = PatientContext(patient_id="p1", name="Rose")
+    assert p.age is None
+    assert p.bio_info is None
+    assert p.medications == []
+
+
+def test_patient_context_accepts_medications():
+    p = PatientContext(
+        patient_id="p1", name="Rose", age=78, bio_info="Lives alone.",
+        medications=[Medication(name="Metformin", dose="500mg", schedule="twice daily")],
+    )
+    assert p.age == 78
+    assert p.medications[0].name == "Metformin"
+    assert p.medications[0].active is True
 
 
 def test_patient_context_defaults():
