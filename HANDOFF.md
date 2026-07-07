@@ -1,6 +1,9 @@
 # MemAide — Handoff to the Backend / Apps Team
 
 **Snapshot:** tag `v0.1.0` on `main`; active integration on `anthony/student3-work`.
+**Slice 1 (`/infer` text path) is complete on my side** — the stateless HTTP service is built, tested,
+and deployable; koko's Prisma migration + call-site swap are the remaining Slice-1 work (his side).
+Next up is **Slice 2 (voice/vision live session)**; its two open decisions (§0) must be settled first.
 
 This repo is the **standalone MemAide AI agent foundation** (the `memaide` Python package) plus a
 reference WebSocket media server and an Android bridge used to prove it end-to-end on real Ray-Ban
@@ -30,10 +33,18 @@ Full design in `docs/superpowers/specs/`:
 - **Arian (Android + Wear)** — patient front-end; today a pure REST client of koko.
 
 **Three slices, built in order:**
-1. **Slice 1 — backend bridge (text path).** koko assembles patient context from its DB and `POST`s
-   my stateless `/infer` endpoint per message instead of running the script; koko persists the reply
-   and drives its state machine, falling back to the script if my service is down. Needs a koko Prisma
-   migration (add `dateOfBirth`/`bioInfo`/`conditions[]` + a `Medication` model, seeded). No Android.
+1. **Slice 1 — backend bridge (text path). ✅ My side DONE.** koko assembles patient context from its
+   DB and `POST`s my stateless `/infer` endpoint per message instead of running the script; koko
+   persists the reply and drives its state machine, falling back to the script if my service is down.
+   No Android.
+   - **Shipped (this repo):** `src/memaide/service/` (`schemas.py`, `infer.py`, `auth.py`, `app.py`) —
+     a FastAPI `POST /infer` (+ `GET /health`) that rebuilds an ephemeral `PatientContext` + transcript
+     per call, runs one `AgentBrain.respond()` turn, ORs in the rule-based `EscalationMonitor`, and maps
+     to a reply + escalation decision. `X-Api-Key` auth (disabled when `AI_AGENT_API_KEY` unset).
+     Entry point `scripts/run_infer_server.py`; systemd unit `deploy/memaide-infer.service` (port 8080).
+     Plan: `docs/superpowers/plans/2026-07-06-slice1-infer-service.md`.
+   - **Remaining (koko's side):** the Prisma migration (add `dateOfBirth`/`bioInfo`/`conditions[]` +
+     a `Medication` model, seeded) and swapping `determineNextAiMessage` to call `/infer`.
 2. **Slice 2 — voice/vision live session.** Control inverts: my server owns the live WebSocket session
    and reports events back to koko. koko forwards vitals/beacons + context at start; my server POSTs
    escalation **in real time** and transcript/summary on conclude. Requires porting the glasses/audio
@@ -55,10 +66,11 @@ Full design in `docs/superpowers/specs/`:
 | `src/memaide/safety/` (`escalation.py`, `language_filter.py`) | ✅ **Core** | LLM-independent, rule-based escalation. |
 | `src/memaide/notify/whatsapp.py` | ✅ **Core** | WhatsApp Cloud API alert sender (templates + variables). |
 | `src/memaide/schemas.py`, `config.py`, `io/openai_client.py` | ✅ **Core** | Data contracts, config, the async OpenAI wrapper. |
+| `src/memaide/service/` + `scripts/run_infer_server.py` | ✅ **Core (Slice 1)** | The `POST /infer` HTTP service koko calls per message — the text-path brain. |
 | `src/memaide/server/` + `scripts/run_bridge_server.py` | ⚠️ **Reference** | Shows how to wire the agent to a live frame/audio stream (you likely use your own server). |
 | `android/` | ⚠️ **Learnings only** | You have real apps; take the device notes in §5, not the code. |
 | `docs/superpowers/specs/`, `README.md` | ✅ | Design context + the "Integration notes" section. |
-| `tests/` | ✅ (optional) | 124 pytest tests documenting expected behavior. |
+| `tests/` | ✅ (optional) | 158 pytest tests documenting expected behavior (incl. the `/infer` service). |
 
 Export just the transferable parts:
 ```bash
@@ -97,6 +109,24 @@ Key entry points:
 - **`VisionDescriber.describe(frame_data_url) -> VisionContext`** — frame is a base64 `data:` URL.
 - **`EscalationMonitor.check(text, vision, seconds) -> EscalationDecision`** — rule-based, no LLM.
 - **`WhatsAppSender.send_template(to, template, lang, variables=[...])`** — caregiver alert.
+
+### Slice 1 `/infer` HTTP contract (what koko calls today)
+
+`POST /infer` — header `X-Api-Key: <AI_AGENT_API_KEY>` (omit only in dev, when the key is unset).
+Stateless: koko sends the full context every call; my service retains nothing.
+
+- **Request:** `{ session{session_id,...}, patient{patient_id,name,age?,bio_info?,language?,`
+  `known_conditions[],medications[{name,dose?,schedule?,active}],caregiver{name,phone}?,notes?},`
+  `vitals{heart_rate?,motion_state?,step_count?}?, beacons_triggered[{room,dwell_seconds?,`
+  `estimated_distance_m?}], history[{role,text}], latest_message, seconds_since_last_speech }`.
+  Roles in `history`: `ai` / `patient` / `system`.
+- **Response:** `{ reply_text, escalate, escalation{reason,triggered_by[]}, handoff_ready, intent }`.
+  Escalation is OR-ed (rule-based monitor OR the brain); on escalate, `reply_text` gets the emergency
+  suggestion appended. koko persists `reply_text` and drives its state machine off `escalate`.
+- **Errors:** `401` bad/missing key, `422` malformed body, `502` upstream/brain failure → koko should
+  fall back to its script on `502`. `GET /health` → `{"status":"ok"}`.
+
+Schemas are the source of truth: `src/memaide/service/schemas.py` (`InferRequest` / `InferResponse`).
 
 ## 3. What you must provide
 
