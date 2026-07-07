@@ -1,0 +1,39 @@
+[Unit]
+# MemAide bridge server: WebSocket media server (port 8765) + live preview (port 8000),
+# both in one Python process (scripts/run_bridge_server.py).
+Description=MemAide bridge server (glasses WS + vision preview)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Runs as an unprivileged user, NOT root. Create it once: `adduser --system --group memaide`
+User=memaide
+Group=memaide
+
+# Where you cloned the repo on the droplet.
+WorkingDirectory=/opt/memaide
+
+# Secrets + config live here, out of git. See deploy/README.md for the required keys.
+EnvironmentFile=/etc/memaide/memaide.env
+
+# Use the venv's python directly (no `source activate` needed under systemd).
+ExecStart=/opt/memaide/.venv/bin/python scripts/run_bridge_server.py
+
+# Restart on crash; give the OpenAI/websocket loop a moment between restarts.
+Restart=on-failure
+RestartSec=3
+
+# Logs go to the journal: `journalctl -u memaide-bridge -f`
+StandardOutput=journal
+StandardError=journal
+
+# --- Light hardening (safe defaults; loosen if something legitimately needs write access) ---
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+# recordings/ and preview/ are written under WorkingDirectory, so keep it writable.
+ReadWritePaths=/opt/memaide
+
+[Install]
+WantedBy=multi-user.target
