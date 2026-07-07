@@ -2,8 +2,7 @@ import { getAdminToken } from './adminTokenStorage'
 import type { AdminLoginResponse, AdminCaregiver, AdminCaregiverDetail, AdminUser } from './types'
 import type { AiSession, AiSessionsQuery } from '@/types/domain'
 import { ApiClientError } from '@/services/apiClient' // Reuse error class
-
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000').replace(/\/$/, '')
+import { buildApiUrl } from '@/services/apiBaseUrl'
 
 let adminUnauthorizedHandler: (() => void) | null = null
 
@@ -31,7 +30,7 @@ async function rawAdminRequest<T>(path: string, options: RequestOptions = {}): P
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const url = `${BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
+  const url = buildApiUrl(path)
 
   let response: Response
   try {

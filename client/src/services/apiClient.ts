@@ -38,8 +38,7 @@ import type {
   VitalReportQuery,
 } from '@/types/domain'
 import { getToken } from '@/services/tokenStorage'
-
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000').replace(/\/$/, '')
+import { buildApiUrl } from '@/services/apiBaseUrl'
 
 export class ApiClientError extends Error {
   status: number
@@ -75,14 +74,7 @@ interface EnvelopeResult<T> {
 }
 
 function buildUrl(path: string, query?: RequestOptions['query']): string {
-  const normalized = path.startsWith('/') ? path : `/${path}`
-  const url = new URL(`${BASE_URL}${normalized}`)
-  if (query) {
-    for (const [k, v] of Object.entries(query)) {
-      if (v !== undefined) url.searchParams.set(k, String(v))
-    }
-  }
-  return url.toString()
+  return buildApiUrl(path, query)
 }
 
 async function rawRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
