@@ -18,6 +18,7 @@ import type {
   HelpEventsQuery,
   LoginResponse,
   Patient,
+  PatientOverview,
   RegisterInput,
   Reminder,
   ReminderEvent,
@@ -175,6 +176,9 @@ export const api = {
 
   getPatient: (id: string): Promise<Patient> =>
     request<Patient>(`/api/patients/${encodeURIComponent(id)}`),
+
+  getPatientOverview: (id: string): Promise<PatientOverview> =>
+    request<PatientOverview>(`/api/patients/${encodeURIComponent(id)}/overview`),
 
   createPatient: (input: CreatePatientInput): Promise<Patient> =>
     request<Patient>('/api/patients', { method: 'POST', body: input }),

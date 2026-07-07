@@ -6,15 +6,19 @@ import { Topbar } from '@/components/layout/Topbar'
 
 export function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Desktop sidebar (fixed) */}
+      {/* Desktop sidebar (fixed) — Sidebar handles its own width transition */}
       <div className="hidden lg:block fixed inset-y-0 left-0 z-30">
-        <Sidebar />
+        <Sidebar
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed((prev) => !prev)}
+        />
       </div>
 
-      {/* Mobile sidebar drawer */}
+      {/* Mobile sidebar drawer — completely unchanged */}
       <AnimatePresence>
         {mobileOpen && (
           <>
@@ -39,7 +43,11 @@ export function AppLayout() {
         )}
       </AnimatePresence>
 
-      <div className="lg:pl-sidebar-width">
+      <div
+        className={`transition-all duration-300 ease-bezier ${
+          sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-sidebar-width'
+        }`}
+      >
         <Topbar onOpenMenu={() => setMobileOpen(true)} />
         <main className="px-4 sm:px-6 lg:px-margin-desktop py-6 lg:py-8">
           <div className="mx-auto max-w-app-shell">

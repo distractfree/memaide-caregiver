@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Calendar, Check, Eye, Pencil, Phone, Smartphone, Trash2 } from 'lucide-react'
+import { Calendar, Check, Pencil, Phone, Smartphone, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
 import { cn } from '@/utils/cn'
@@ -123,11 +123,6 @@ export function PatientCard({
           className="mt-auto flex items-center justify-end gap-1 border-t border-outline-variant/30 pt-3"
           onClick={(e) => e.stopPropagation()}
         >
-          {iconButton({
-            label: 'View patient details',
-            icon: <Eye className="h-4 w-4" />,
-            onClick: stop(onView),
-          })}
           {iconButton({
             label: isSelected ? 'Already selected' : 'Set as selected patient',
             icon: <Check className="h-4 w-4" />,

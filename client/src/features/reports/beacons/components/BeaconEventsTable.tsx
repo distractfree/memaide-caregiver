@@ -8,7 +8,7 @@ import { formatApproximateDistance, formatDateTime, formatDurationSeconds } from
 import type { BeaconEventSourceDevice, BeaconReportEvent } from '@/types/domain'
 
 const DEVICE_LABEL: Record<BeaconEventSourceDevice, string> = {
-  phone: 'Patient app',
+  phone: 'App',
   system: 'System',
 }
 
@@ -27,11 +27,11 @@ interface BeaconEventsTableProps {
 function SourceDeviceLabel({ device }: { device: string }) {
   const known = device in DEVICE_LABEL ? (device as BeaconEventSourceDevice) : null
   if (!known) {
-    return <span className="text-sm text-on-surface-variant">{device}</span>
+    return <span className="text-sm text-on-surface-variant whitespace-nowrap">{device}</span>
   }
   const Icon = DEVICE_ICON[known]
   return (
-    <span className="inline-flex items-center gap-1.5 text-sm text-on-surface-variant">
+    <span className="inline-flex items-center gap-1.5 text-sm text-on-surface-variant whitespace-nowrap">
       <Icon className="h-3.5 w-3.5" />
       {DEVICE_LABEL[known]}
     </span>

@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { HeartPulse, Smartphone, UserPlus } from 'lucide-react'
-import { Badge } from '@/components/ui/Badge'
+import { UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { LoadingState } from '@/components/ui/LoadingState'
@@ -17,10 +15,8 @@ import {
   WellnessFilters,
   type DateRange,
 } from '@/features/reports/vitals/components/WellnessFilters'
-import { WellnessInfoCard } from '@/features/reports/vitals/components/WellnessInfoCard'
 import { WellnessKpis } from '@/features/reports/vitals/components/WellnessKpis'
 import { api, ApiClientError } from '@/services/apiClient'
-import { initialsFromName } from '@/utils/formatting'
 import type { VitalReport } from '@/types/domain'
 
 type PageStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -28,7 +24,7 @@ type PageStatus = 'idle' | 'loading' | 'ready' | 'error'
 const INITIAL_FILTERS: DateRange = { from: null, to: null }
 
 export function WellnessTrendsPage() {
-  const { selectedPatient, selectedPatientId } = usePatients()
+  const { selectedPatientId } = usePatients()
 
   const [filters, setFilters] = useState<DateRange>(INITIAL_FILTERS)
   const [report, setReport] = useState<VitalReport | null>(null)
@@ -143,13 +139,6 @@ export function WellnessTrendsPage() {
     >
       <PageHeader />
 
-      {selectedPatient && <SelectedPatientPill patient={selectedPatient} />}
-
-      <WellnessInfoCard
-        positioning={report?.notes?.positioning}
-        availability={report?.notes?.availability}
-      />
-
       <WellnessFilters
         filters={filters}
         onChange={setFilters}
@@ -198,43 +187,9 @@ export function WellnessTrendsPage() {
 function PageHeader() {
   return (
     <div className="flex flex-col gap-2">
-      <Badge tone="muted" leftIcon={<HeartPulse className="h-3 w-3" />}>
-        Best-effort wellness context
-      </Badge>
       <h1 className="text-3xl font-semibold tracking-tight text-on-surface">Wellness Trends</h1>
-      <p className="text-sm text-on-surface-variant max-w-2xl">
-        Review best-effort wearable wellness and activity trends for the selected patient.
-        Wellness data is best-effort and intended for caregiver coordination, not diagnosis or a
-        medical device.
-      </p>
     </div>
   )
 }
 
-function SelectedPatientPill({
-  patient,
-}: {
-  patient: NonNullable<ReturnType<typeof usePatients>['selectedPatient']>
-}) {
-  return (
-    <Card padded={false} className="flex items-center gap-3 px-4 py-3">
-      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-accent-dark text-sm font-semibold">
-        {initialsFromName(patient.name)}
-      </span>
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-on-surface">{patient.name}</p>
-        <p className="inline-flex items-center gap-1.5 text-[11px] text-text-muted">
-          <Smartphone className="h-3 w-3" />
-          {patient.deviceId ? (
-            <span className="truncate font-mono">{patient.deviceId}</span>
-          ) : (
-            <span>No device paired</span>
-          )}
-        </p>
-      </div>
-      <Badge tone="accent" dot className="ml-auto">
-        Selected
-      </Badge>
-    </Card>
-  )
-}
+

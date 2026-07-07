@@ -1,22 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, Radar, Smartphone, UserPlus, X } from 'lucide-react'
+import { Plus, Radar, UserPlus, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { usePatients } from '@/features/patients/PatientContext'
 import { BeaconFilters, type BeaconActiveFilter } from '@/features/beacons/components/BeaconFilters'
 import { BeaconFormModal } from '@/features/beacons/components/BeaconFormModal'
-import { BeaconInfoCard } from '@/features/beacons/components/BeaconInfoCard'
 import { BeaconList } from '@/features/beacons/components/BeaconList'
-import { BeaconStatCards } from '@/features/beacons/components/BeaconStatCards'
 import { DeleteBeaconModal } from '@/features/beacons/components/DeleteBeaconModal'
 import { api, ApiClientError } from '@/services/apiClient'
-import { initialsFromName } from '@/utils/formatting'
 import type { Beacon } from '@/types/domain'
 
 type ModalState =
@@ -28,7 +23,7 @@ type ModalState =
 type PageStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 export function BeaconsPage() {
-  const { selectedPatient, selectedPatientId } = usePatients()
+  const { selectedPatientId } = usePatients()
 
   const [beacons, setBeacons] = useState<Beacon[]>([])
   const [status, setStatus] = useState<PageStatus>('idle')
@@ -105,15 +100,7 @@ export function BeaconsPage() {
     })
   }, [beacons, searchTerm, filter])
 
-  const activeCount = useMemo(() => beacons.filter((b) => b.active).length, [beacons])
-  const inactiveCount = beacons.length - activeCount
-  const roomsCount = useMemo(
-    () =>
-      new Set(
-        beacons.map((b) => b.roomName.trim().toLowerCase()).filter((r) => r.length > 0),
-      ).size,
-    [beacons],
-  )
+
 
   const filterActive = searchTerm.trim().length > 0 || filter !== 'all'
 
@@ -202,9 +189,7 @@ export function BeaconsPage() {
     >
       <PageHeader hasSelectedPatient={true} onCreate={openCreate} />
 
-      {selectedPatient && <SelectedPatientPill patient={selectedPatient} />}
 
-      <BeaconInfoCard />
 
       {status === 'loading' && beacons.length === 0 ? (
         <LoadingState label="Loading beacons…" />
@@ -216,12 +201,6 @@ export function BeaconsPage() {
         />
       ) : (
         <>
-          <BeaconStatCards
-            total={beacons.length}
-            activeCount={activeCount}
-            inactiveCount={inactiveCount}
-            roomsCount={roomsCount}
-          />
 
           {actionError && (
             <div
@@ -318,12 +297,7 @@ function PageHeader({
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <Badge tone="muted">Approximate BLE proximity</Badge>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-on-surface">Beacons</h1>
-        <p className="mt-1 text-sm text-on-surface-variant max-w-2xl">
-          Configure room beacons used by the patient app for approximate proximity context. This
-          is best-effort caregiver coordination, not exact indoor tracking or a medical device.
-        </p>
+        <h1 className="text-3xl font-semibold tracking-tight text-on-surface">Beacons</h1>
       </div>
       <Button
         leftIcon={<Plus className="h-4 w-4" />}
@@ -337,33 +311,7 @@ function PageHeader({
   )
 }
 
-function SelectedPatientPill({
-  patient,
-}: {
-  patient: NonNullable<ReturnType<typeof usePatients>['selectedPatient']>
-}) {
-  return (
-    <Card padded={false} className="flex items-center gap-3 px-4 py-3">
-      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-accent-dark text-sm font-semibold">
-        {initialsFromName(patient.name)}
-      </span>
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-on-surface">{patient.name}</p>
-        <p className="inline-flex items-center gap-1.5 text-[11px] text-text-muted">
-          <Smartphone className="h-3 w-3" />
-          {patient.deviceId ? (
-            <span className="truncate font-mono">{patient.deviceId}</span>
-          ) : (
-            <span>No device paired</span>
-          )}
-        </p>
-      </div>
-      <Badge tone="accent" dot className="ml-auto">
-        Selected
-      </Badge>
-    </Card>
-  )
-}
+
 
 function sortBeacons(list: Beacon[]): Beacon[] {
   // Match backend order: roomName asc, then createdAt asc.

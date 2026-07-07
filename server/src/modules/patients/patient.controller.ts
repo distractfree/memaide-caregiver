@@ -33,6 +33,14 @@ export const getOne = asyncHandler(async (req: Request, res: Response) => {
   res.status(200).json({ success: true, data: patient });
 });
 
+export const overview = asyncHandler(async (req: Request, res: Response) => {
+  const data = await patientService.getPatientOverview(
+    req.caregiverId!,
+    req.params.patientId
+  );
+  res.status(200).json({ success: true, data });
+});
+
 export const update = asyncHandler(async (req: Request, res: Response) => {
   const input = updatePatientSchema.parse(req.body);
   const patient = await patientService.updatePatient(

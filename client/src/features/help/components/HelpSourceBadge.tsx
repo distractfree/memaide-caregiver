@@ -1,5 +1,4 @@
 import { HelpCircle, Server, Smartphone, Watch, type LucideIcon } from 'lucide-react'
-import { Badge } from '@/components/ui/Badge'
 import type { HelpEventSourceDevice } from '@/types/domain'
 
 interface HelpSourceBadgeProps {
@@ -17,8 +16,9 @@ export function HelpSourceBadge({ source }: HelpSourceBadgeProps) {
   const Icon = entry?.icon ?? HelpCircle
   const label = entry?.label ?? source
   return (
-    <Badge tone="neutral" leftIcon={<Icon className="h-3 w-3" />}>
-      {label}
-    </Badge>
+    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-text-muted whitespace-nowrap">
+      <Icon className="h-3.5 w-3.5" />
+      <span>{label}</span>
+    </span>
   )
 }

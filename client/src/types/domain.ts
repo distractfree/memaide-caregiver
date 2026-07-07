@@ -15,6 +15,40 @@ export interface Patient {
   updatedAt: string
 }
 
+export type PatientOverviewCardStatus = 'normal' | 'attention' | 'urgent' | 'empty'
+export type PatientOverviewAttentionSeverity = 'info' | 'warning' | 'urgent'
+export type PatientOverviewTimelineType = 'reminder' | 'location' | 'wellness' | 'help' | 'stream'
+
+export interface PatientOverviewSummaryCard {
+  key: 'reminders' | 'location' | 'wellness' | 'help'
+  label: string
+  value: string
+  status: PatientOverviewCardStatus
+  detail: string
+}
+
+export interface PatientOverviewAttentionItem {
+  severity: PatientOverviewAttentionSeverity
+  message: string
+}
+
+export interface PatientOverviewTimelineItem {
+  id: string
+  type: PatientOverviewTimelineType
+  title: string
+  detail: string
+  timestamp: string
+}
+
+export interface PatientOverview {
+  patientId: string
+  patientName: string
+  generatedAt: string
+  summaryCards: PatientOverviewSummaryCard[]
+  attentionItems: PatientOverviewAttentionItem[]
+  timeline: PatientOverviewTimelineItem[]
+}
+
 export interface HealthStatus {
   status: string
   service: string

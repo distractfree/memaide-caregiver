@@ -1,23 +1,17 @@
 import { Monitor, Smartphone, Watch, type LucideIcon } from 'lucide-react'
-import { Badge } from '@/components/ui/Badge'
-import type { VitalEventSourceDevice } from '@/types/domain'
 
-const LABELS: Record<VitalEventSourceDevice, string> = {
-  watch: 'Watch',
-  phone: 'Patient app',
-  system: 'System',
-}
-
-const ICONS: Record<VitalEventSourceDevice, LucideIcon> = {
-  watch: Watch,
-  phone: Smartphone,
-  system: Monitor,
-}
-
-const TONES: Record<VitalEventSourceDevice, 'accent' | 'muted'> = {
-  watch: 'accent',
-  phone: 'accent',
-  system: 'muted',
+function getNormalizedDevice(device: string): { label: string; icon: LucideIcon } {
+  const lower = device.toLowerCase()
+  if (lower === 'watch') {
+    return { label: 'Watch', icon: Watch }
+  }
+  if (lower === 'patient_app' || lower === 'patient app' || lower === 'app' || lower === 'phone') {
+    return { label: 'App', icon: Smartphone }
+  }
+  if (lower === 'system') {
+    return { label: 'System', icon: Monitor }
+  }
+  return { label: device, icon: Monitor }
 }
 
 interface WellnessSourceBadgeProps {
@@ -25,13 +19,12 @@ interface WellnessSourceBadgeProps {
 }
 
 export function WellnessSourceBadge({ device }: WellnessSourceBadgeProps) {
-  const known = device in LABELS ? (device as VitalEventSourceDevice) : null
-  const Icon = known ? ICONS[known] : Monitor
-  const label = known ? LABELS[known] : device
-  const tone = known ? TONES[known] : 'muted'
+  const { label, icon: Icon } = getNormalizedDevice(device)
+
   return (
-    <Badge tone={tone} leftIcon={<Icon className="h-3 w-3" />}>
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-sm text-on-surface-variant">
+      <Icon className="h-3.5 w-3.5" />
       {label}
-    </Badge>
+    </span>
   )
 }

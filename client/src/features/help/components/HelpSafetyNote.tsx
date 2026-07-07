@@ -1,24 +1,26 @@
 import { Info } from 'lucide-react'
+import { Card } from '@/components/ui/Card'
 
 export function HelpSafetyNote() {
   return (
-    <div
-      role="note"
-      className="flex items-start gap-3 rounded-xl border border-outline-variant/40 bg-surface-container-low p-4"
-    >
-      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent-dark">
-        <Info className="h-4 w-4" />
-      </span>
+    <Card className="flex flex-col gap-3">
+      <div className="flex items-center gap-3">
+        <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-surface-container-high text-on-surface-variant">
+          <Info className="h-5 w-5" />
+        </span>
+        <h2 className="text-lg font-semibold text-on-surface">How help works</h2>
+      </div>
       <div className="text-[13px] leading-relaxed text-on-surface-variant">
         <p>
-          The patient app opens WhatsApp to the configured contact. Actual call
-          behavior depends on WhatsApp and the patient device.
+          <span className="font-semibold text-on-surface">Caregiver coordination only. </span>
+          The help button opens WhatsApp to the configured contact on the patient&rsquo;s
+          device. It is not an emergency service and does not provide medical monitoring.
         </p>
-        <p className="mt-1 text-text-muted">
-          Patient perspective stream status is handled separately in the Stream
-          Status section.
+        <p className="mt-2 text-text-muted">
+          Actual call behavior depends on WhatsApp and the patient&rsquo;s device. Patient
+          perspective stream status is handled separately in Stream Status.
         </p>
       </div>
-    </div>
+    </Card>
   )
 }

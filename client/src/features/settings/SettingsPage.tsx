@@ -2,23 +2,11 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
-  BarChart3,
-  Bell,
-  CheckCircle2,
   ExternalLink,
-  HeartPulse,
-  LayoutDashboard,
-  LifeBuoy,
   LogOut,
   Mail,
-  Radar,
-  Radio,
-  Settings,
-  ShieldCheck,
   User2,
   Users,
-  Video,
-  type LucideIcon,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -28,31 +16,9 @@ import { usePatients } from '@/features/patients/PatientContext'
 import { cn } from '@/utils/cn'
 import { formatDate, formatPhone, initialsFromName } from '@/utils/formatting'
 
-interface ModuleItem {
-  label: string
-  route: string
-  icon: LucideIcon
-}
 
-const MODULES: ModuleItem[] = [
-  { label: 'Overview', route: '/', icon: LayoutDashboard },
-  { label: 'Patients', route: '/patients', icon: Users },
-  { label: 'Reminders', route: '/reminders', icon: Bell },
-  { label: 'Reminder Reports', route: '/reports/reminders', icon: BarChart3 },
-  { label: 'Help', route: '/help', icon: LifeBuoy },
-  { label: 'Beacons', route: '/beacons', icon: Radio },
-  { label: 'Beacon Reports', route: '/reports/beacons', icon: Radar },
-  { label: 'Wellness Trends', route: '/reports/vitals', icon: HeartPulse },
-  { label: 'Stream Status', route: '/stream', icon: Video },
-  { label: 'Settings', route: '/settings', icon: Settings },
-]
 
-const SAFETY_NOTES = [
-  'Wellness data is best-effort and not diagnosis.',
-  'BLE proximity is approximate.',
-  'Stream status depends on device, app, and network.',
-  'Reminder reports show acknowledgment context, not medical compliance.',
-]
+
 
 export function SettingsPage() {
   const { caregiver, status: authStatus, logout } = useAuth()
@@ -88,9 +54,6 @@ export function SettingsPage() {
         />
       </div>
 
-      <ModuleStatusCard />
-
-      <ProductSafetyCard />
     </motion.div>
   )
 }
@@ -98,13 +61,7 @@ export function SettingsPage() {
 function PageHeader() {
   return (
     <div className="flex flex-col gap-2">
-      <Badge tone="muted" leftIcon={<Settings className="h-3 w-3" />}>
-        Portal settings
-      </Badge>
       <h1 className="text-3xl font-semibold tracking-tight text-on-surface">Settings</h1>
-      <p className="text-sm text-on-surface-variant max-w-2xl">
-        Review caregiver portal account, patient context, and available sections.
-      </p>
     </div>
   )
 }
@@ -248,82 +205,9 @@ function SelectedPatientCard({
   )
 }
 
-function ModuleStatusCard() {
-  return (
-    <Card className="flex h-full flex-col gap-5">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <Badge tone="accent" leftIcon={<CheckCircle2 className="h-3 w-3" />}>
-            Portal modules
-          </Badge>
-          <h2 className="mt-3 text-lg font-semibold text-on-surface">Available sections</h2>
-          <p className="mt-1 text-sm text-on-surface-variant">
-            Quick links to caregiver portal sections for the selected patient.
-          </p>
-        </div>
-        <Badge tone="success" dot>
-          Complete
-        </Badge>
-      </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {MODULES.map((item) => {
-          const Icon = item.icon
-          return (
-            <Link
-              key={item.route}
-              to={item.route}
-              className="group rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              <div className="flex h-full items-center gap-3 rounded-2xl border border-outline-variant/30 bg-surface-section px-3 py-3 transition-all duration-300 ease-bezier group-hover:border-accent/40 group-hover:bg-surface-container-lowest group-hover:shadow-card">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-container-high text-on-surface">
-                  <Icon className="h-4 w-4" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-on-surface">{item.label}</p>
-                  <p className="text-[11px] text-text-muted">Open section</p>
-                </div>
-                <Badge tone="success">Available</Badge>
-              </div>
-            </Link>
-          )
-        })}
-      </div>
-    </Card>
-  )
-}
 
-function ProductSafetyCard() {
-  return (
-    <Card className="flex flex-col gap-5">
-      <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-accent/10 text-accent-dark">
-          <ShieldCheck className="h-4 w-4" />
-        </span>
-        <div>
-          <Badge tone="muted">Product positioning</Badge>
-          <h2 className="mt-3 text-lg font-semibold text-on-surface">Safety wording</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-on-surface-variant">
-            MemAide / GuardiaNova is a caregiver coordination tool for independent living support.
-            It is not a medical device, emergency system, or replacement for WhatsApp camera feed.
-          </p>
-        </div>
-      </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {SAFETY_NOTES.map((note) => (
-          <div
-            key={note}
-            className="flex gap-2 rounded-2xl border border-outline-variant/30 bg-surface-section px-3 py-3 text-sm text-on-surface-variant"
-          >
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-            <span>{note}</span>
-          </div>
-        ))}
-      </div>
-    </Card>
-  )
-}
 
 function DetailItem({
   label,

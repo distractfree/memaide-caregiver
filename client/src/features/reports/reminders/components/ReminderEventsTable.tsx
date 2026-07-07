@@ -9,7 +9,7 @@ import { formatDateTime, formatDurationSeconds } from '@/utils/formatting'
 import type { ReminderEventSourceDevice, ReminderReportEvent } from '@/types/domain'
 
 const DEVICE_LABEL: Record<ReminderEventSourceDevice, string> = {
-  phone: 'Patient app',
+  phone: 'App',
   watch: 'Watch',
   system: 'System',
 }
@@ -56,12 +56,12 @@ export function ReminderEventsTable({ events, onClearFilters, hasActiveFilter }:
           <table className="min-w-full divide-y divide-outline-variant/40 text-sm">
             <thead className="bg-surface-container-low">
               <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                <th scope="col" className="px-4 py-3">Scheduled</th>
-                <th scope="col" className="px-4 py-3">Reminder</th>
-                <th scope="col" className="px-4 py-3">Status</th>
-                <th scope="col" className="px-4 py-3">Source</th>
-                <th scope="col" className="px-4 py-3">Acknowledged at</th>
-                <th scope="col" className="px-4 py-3">Time to ack</th>
+                <th scope="col" className="whitespace-nowrap px-4 py-3">Scheduled</th>
+                <th scope="col" className="whitespace-nowrap px-4 py-3">Reminder</th>
+                <th scope="col" className="whitespace-nowrap px-4 py-3">Status</th>
+                <th scope="col" className="whitespace-nowrap px-4 py-3">Source</th>
+                <th scope="col" className="whitespace-nowrap px-4 py-3">Acknowledged at</th>
+                <th scope="col" className="whitespace-nowrap px-4 py-3">Time to ack</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/30">
@@ -147,7 +147,7 @@ function SourceDeviceLabel({ device }: { device: string }) {
   }
   const Icon = DEVICE_ICON[known]
   return (
-    <span className="inline-flex items-center gap-1.5 text-sm text-on-surface-variant">
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-sm text-on-surface-variant">
       <Icon className="h-3.5 w-3.5" />
       {DEVICE_LABEL[known]}
     </span>

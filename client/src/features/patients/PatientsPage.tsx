@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Plus, Search, Users } from 'lucide-react'
-import { Badge } from '@/components/ui/Badge'
+// import { Badge } from '@/components/ui/Badge' // Temporarily unused per UI cleanup request
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { Input } from '@/components/ui/Input'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { usePatients } from '@/features/patients/PatientContext'
-import { PatientStatCards } from '@/features/patients/components/PatientStatCards'
+// import { PatientStatCards } from '@/features/patients/components/PatientStatCards' // Temporarily hidden per UI cleanup request
 import { PatientList } from '@/features/patients/components/PatientList'
 import { PatientDetailsPanel } from '@/features/patients/components/PatientDetailsPanel'
 import { PatientFormModal } from '@/features/patients/components/PatientFormModal'
@@ -55,10 +55,10 @@ export function PatientsPage() {
     return selectedPatient
   }, [patients, viewedPatientId, selectedPatient])
 
-  const withDeviceCount = useMemo(
-    () => patients.filter((p) => p.deviceId).length,
-    [patients],
-  )
+  // const withDeviceCount = useMemo(
+  //   () => patients.filter((p) => p.deviceId).length,
+  //   [patients],
+  // ) // Temporarily unused per UI cleanup request
 
   function openCreate() {
     setModal({ kind: 'create' })
@@ -113,24 +113,26 @@ export function PatientsPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <Badge tone="muted">Patient management</Badge>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-on-surface">Patients</h1>
-          <p className="mt-1 text-sm text-on-surface-variant max-w-2xl">
-            Manage patient profiles connected to caregiver coordination, reminder support, and
-            device setup.
-          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-3xl font-semibold tracking-tight text-on-surface">Patients</h1>
+            {patients.length > 0 && (
+              <span className="text-sm text-on-surface-variant">
+                Total: {patients.length}
+              </span>
+            )}
+          </div>
         </div>
         <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreate}>
           Add patient
         </Button>
       </div>
 
-      {/* Summary stats */}
-      <PatientStatCards
+      {/* Summary stats - temporarily hidden per UI cleanup request */}
+      {/* <PatientStatCards
         total={patients.length}
         withDeviceCount={withDeviceCount}
         selectedPatient={selectedPatient}
-      />
+      /> */}
 
       {/* Search */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

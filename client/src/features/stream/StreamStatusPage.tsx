@@ -1,23 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Smartphone, UserPlus, Video } from 'lucide-react'
-import { Badge } from '@/components/ui/Badge'
+import { UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { usePatients } from '@/features/patients/PatientContext'
 import { StreamCurrentStatusCard } from '@/features/stream/components/StreamCurrentStatusCard'
-import {
-  StreamFilters,
-  type StreamFilterState,
-} from '@/features/stream/components/StreamFilters'
-import { StreamInfoCard } from '@/features/stream/components/StreamInfoCard'
-import { StreamSessionHistory } from '@/features/stream/components/StreamSessionHistory'
+import { StreamSessionHistory, type StreamFilterState } from '@/features/stream/components/StreamSessionHistory'
 import { api, ApiClientError } from '@/services/apiClient'
-import { initialsFromName } from '@/utils/formatting'
 import type { StreamSession, StreamStatusSummary } from '@/types/domain'
 
 type PageStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -30,7 +22,7 @@ const INITIAL_FILTERS: StreamFilterState = {
 }
 
 export function StreamStatusPage() {
-  const { selectedPatient, selectedPatientId } = usePatients()
+  const { selectedPatientId } = usePatients()
 
   const [filters, setFilters] = useState<StreamFilterState>(INITIAL_FILTERS)
   const [summary, setSummary] = useState<StreamStatusSummary | null>(null)
@@ -101,11 +93,15 @@ export function StreamStatusPage() {
     }
 
     if (prev && prev !== selectedPatientId) {
-      // Patient changed, so clear old data and reload with empty filters.
+      // Patient changed, so clear old data and reload with default filters.
+      // Use a fresh object (not the stable INITIAL_FILTERS reference) so the
+      // filters state always changes identity — otherwise, when filters were
+      // already default, React bails out of the update, this effect never
+      // re-runs, and the new patient's summary/sessions are never fetched.
       requestIdRef.current++
       setSummary(null)
       setSessions(null)
-      setFilters(INITIAL_FILTERS)
+      setFilters({ ...INITIAL_FILTERS })
       return
     }
 
@@ -158,10 +154,6 @@ export function StreamStatusPage() {
     >
       <PageHeader />
 
-      {selectedPatient && <SelectedPatientPill patient={selectedPatient} />}
-
-      <StreamInfoCard />
-
       {showInitialLoader ? (
         <LoadingState label="Loading stream status…" />
       ) : showFatalError ? (
@@ -183,17 +175,14 @@ export function StreamStatusPage() {
 
           {summary && <StreamCurrentStatusCard summary={summary} />}
 
-          <StreamFilters
-            filters={filters}
-            onChange={setFilters}
-            validationError={validationError}
-          />
-
           {sessions && (
             <StreamSessionHistory
               sessions={sessions}
               hasActiveFilter={hasActiveFilter}
               onClearFilters={handleClearFilters}
+              filters={filters}
+              onFiltersChange={setFilters}
+              validationError={validationError}
             />
           )}
         </>
@@ -205,43 +194,7 @@ export function StreamStatusPage() {
 function PageHeader() {
   return (
     <div className="flex flex-col gap-2">
-      <Badge tone="muted" leftIcon={<Video className="h-3 w-3" />}>
-        Patient perspective stream
-      </Badge>
       <h1 className="text-3xl font-semibold tracking-tight text-on-surface">Stream Status</h1>
-      <p className="text-sm text-on-surface-variant max-w-2xl">
-        Review patient perspective stream session status for the selected patient.
-        Stream status is for caregiver coordination &mdash; it does not replace WhatsApp camera
-        feed or emergency services.
-      </p>
     </div>
-  )
-}
-
-function SelectedPatientPill({
-  patient,
-}: {
-  patient: NonNullable<ReturnType<typeof usePatients>['selectedPatient']>
-}) {
-  return (
-    <Card padded={false} className="flex items-center gap-3 px-4 py-3">
-      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-accent-dark text-sm font-semibold">
-        {initialsFromName(patient.name)}
-      </span>
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-on-surface">{patient.name}</p>
-        <p className="inline-flex items-center gap-1.5 text-[11px] text-text-muted">
-          <Smartphone className="h-3 w-3" />
-          {patient.deviceId ? (
-            <span className="truncate font-mono">{patient.deviceId}</span>
-          ) : (
-            <span>No device paired</span>
-          )}
-        </p>
-      </div>
-      <Badge tone="accent" dot className="ml-auto">
-        Selected
-      </Badge>
-    </Card>
   )
 }

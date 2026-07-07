@@ -1,4 +1,4 @@
-import { Badge } from '@/components/ui/Badge'
+import { cn } from '@/utils/cn'
 import type { ReminderEventStatus } from '@/types/domain'
 
 const STATUS_LABEL: Record<ReminderEventStatus, string> = {
@@ -8,11 +8,11 @@ const STATUS_LABEL: Record<ReminderEventStatus, string> = {
   missed: 'Missed',
 }
 
-const STATUS_TONE: Record<ReminderEventStatus, 'neutral' | 'accent' | 'success' | 'danger'> = {
-  scheduled: 'neutral',
-  delivered: 'accent',
-  acknowledged: 'success',
-  missed: 'danger',
+const STATUS_COLOR_CLASS: Record<ReminderEventStatus, string> = {
+  scheduled: 'text-text-muted',
+  delivered: 'text-accent-dark',
+  acknowledged: 'text-green-700',
+  missed: 'text-error',
 }
 
 interface ReminderStatusBadgeProps {
@@ -24,14 +24,14 @@ export function ReminderStatusBadge({ status, className }: ReminderStatusBadgePr
   const known = (status in STATUS_LABEL) ? (status as ReminderEventStatus) : null
   if (!known) {
     return (
-      <Badge tone="muted" className={className}>
+      <span className={cn('text-[11px] font-semibold uppercase tracking-wider text-text-muted', className)}>
         {String(status)}
-      </Badge>
+      </span>
     )
   }
   return (
-    <Badge tone={STATUS_TONE[known]} dot className={className}>
+    <span className={cn('text-[11px] font-semibold uppercase tracking-wider', STATUS_COLOR_CLASS[known], className)}>
       {STATUS_LABEL[known]}
-    </Badge>
+    </span>
   )
 }

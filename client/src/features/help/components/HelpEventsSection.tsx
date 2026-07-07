@@ -3,7 +3,7 @@ import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { LoadingState } from '@/components/ui/LoadingState'
-import { HelpEventCard } from '@/features/help/components/HelpEventCard'
+import { HelpEventTimeline } from '@/features/help/components/HelpEventTimeline'
 import {
   HelpEventsFilters,
   type HelpEventsFiltersValue,
@@ -15,6 +15,7 @@ interface HelpEventsSectionProps {
   status: 'idle' | 'loading' | 'ready' | 'error'
   error: string | null
   filters: HelpEventsFiltersValue
+  validationError: string | null
   onFiltersChange: (next: HelpEventsFiltersValue) => void
   onRetry: () => void
 }
@@ -24,26 +25,37 @@ export function HelpEventsSection({
   status,
   error,
   filters,
+  validationError,
   onFiltersChange,
   onRetry,
 }: HelpEventsSectionProps) {
-  const hasActiveFilter = filters.sourceDevice !== undefined || filters.status !== undefined
+  const hasActiveFilter =
+    filters.sourceDevice !== undefined ||
+    filters.status !== undefined ||
+    filters.from !== undefined ||
+    filters.to !== undefined
 
   return (
-    <Card className="flex flex-col gap-5">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <Card className="flex h-full flex-col gap-5">
+      <header className="flex flex-col gap-4">
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-accent/10 text-accent-dark">
             <History className="h-5 w-5" />
           </span>
           <div>
-            <h2 className="text-lg font-semibold text-on-surface">Help button events</h2>
+            <h2 className="text-lg font-semibold text-on-surface">Recent help events</h2>
             <p className="text-xs text-text-muted">
-              Help flow activity from the patient app and watch, newest first.
+              Each entry records a press of the help button on the patient&rsquo;s phone or
+              watch.
             </p>
           </div>
         </div>
         <HelpEventsFilters filters={filters} onChange={onFiltersChange} />
+        {validationError && (
+          <p role="alert" className="text-[12px] font-medium text-error">
+            {validationError}
+          </p>
+        )}
       </header>
 
       {status === 'loading' && events.length === 0 ? (
@@ -59,7 +71,7 @@ export function HelpEventsSection({
           {status === 'error' && error && (
             <div
               role="alert"
-              className="rounded-xl border border-error/30 bg-error-container/60 px-3 py-2.5 text-sm text-error font-medium"
+              className="rounded-xl border border-error/30 bg-error-container/60 px-3 py-2.5 text-sm font-medium text-error"
             >
               {error}
             </div>
@@ -68,22 +80,18 @@ export function HelpEventsSection({
             hasActiveFilter ? (
               <EmptyState
                 icon={Inbox}
-                title="No help events match these filters"
-                message="Try clearing filters to see all recorded help button events."
+                title="No events match these filters"
+                message="Clear the filters to see all recorded help events."
               />
             ) : (
               <EmptyState
                 icon={LifeBuoy}
-                title="No help button events found yet"
-                message="When the patient triggers the help button, events will appear here."
+                title="No help events yet"
+                message="When the patient uses the help button, each event will appear here with its source and outcome."
               />
             )
           ) : (
-            <div className="flex flex-col gap-3">
-              {events.map((event, idx) => (
-                <HelpEventCard key={event.id} event={event} index={idx} />
-              ))}
-            </div>
+            <HelpEventTimeline events={events} />
           )}
         </>
       )}

@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../middleware/error.middleware";
 import type { CreatePatientInput, UpdatePatientInput, ListPatientsQuery } from "./patient.schemas";
+export { getPatientOverview } from "./patient-overview.service";
 
 export async function listPatients(caregiverId: string, query: ListPatientsQuery) {
   const { search, page, limit } = query;

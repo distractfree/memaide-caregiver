@@ -36,10 +36,6 @@ function ChartTooltip({ active, payload }: { active?: boolean; payload?: Tooltip
 export function BeaconRoomChart({ rooms }: BeaconRoomChartProps) {
   const isEmpty = rooms.length === 0
 
-  const topByDwell = [...rooms]
-    .sort((a, b) => b.totalDwellSeconds - a.totalDwellSeconds)
-    .slice(0, 3)
-
   const chartHeight = Math.max(220, rooms.length * 56)
 
   return (
@@ -69,57 +65,39 @@ export function BeaconRoomChart({ rooms }: BeaconRoomChartProps) {
           </p>
         </div>
       ) : (
-        <>
-          <div style={{ width: '100%', height: chartHeight }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                layout="vertical"
-                data={rooms}
-                margin={{ top: 8, right: 24, bottom: 8, left: 8 }}
-              >
-                <CartesianGrid stroke="rgba(198,198,205,0.3)" horizontal={false} />
-                <XAxis
-                  type="number"
-                  allowDecimals={false}
-                  tick={{ fontSize: 11, fill: '#4B5563' }}
-                  stroke="rgba(198,198,205,0.6)"
-                />
-                <YAxis
-                  type="category"
-                  dataKey="roomName"
-                  width={120}
-                  tick={{ fontSize: 12, fill: '#1f2937' }}
-                  stroke="rgba(198,198,205,0.6)"
-                />
-                <Tooltip
-                  cursor={{ fill: 'rgba(242,101,34,0.06)' }}
-                  content={<ChartTooltip />}
-                />
-                <Bar dataKey="eventCount" radius={[0, 8, 8, 0]} isAnimationActive>
-                  {rooms.map((room, idx) => (
-                    <Cell key={room.roomName} fill={PALETTE[idx % PALETTE.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {topByDwell.map((room) => (
-              <div
-                key={room.roomName}
-                className="flex flex-col gap-0.5 rounded-xl border border-outline-variant/40 bg-surface-container-low px-3 py-2"
-              >
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                  Avg dwell · {room.roomName}
-                </span>
-                <span className="text-sm font-semibold text-on-surface">
-                  {formatDurationSeconds(room.averageDwellSeconds)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </>
+        <div style={{ width: '100%', height: chartHeight }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              layout="vertical"
+              data={rooms}
+              margin={{ top: 8, right: 24, bottom: 8, left: 8 }}
+            >
+              <CartesianGrid stroke="rgba(198,198,205,0.3)" horizontal={false} />
+              <XAxis
+                type="number"
+                allowDecimals={false}
+                tick={{ fontSize: 11, fill: '#4B5563' }}
+                stroke="rgba(198,198,205,0.6)"
+              />
+              <YAxis
+                type="category"
+                dataKey="roomName"
+                width={120}
+                tick={{ fontSize: 12, fill: '#1f2937' }}
+                stroke="rgba(198,198,205,0.6)"
+              />
+              <Tooltip
+                cursor={{ fill: 'rgba(242,101,34,0.06)' }}
+                content={<ChartTooltip />}
+              />
+              <Bar dataKey="eventCount" radius={[0, 8, 8, 0]} isAnimationActive>
+                {rooms.map((room, idx) => (
+                  <Cell key={room.roomName} fill={PALETTE[idx % PALETTE.length]} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       )}
     </Card>
   )

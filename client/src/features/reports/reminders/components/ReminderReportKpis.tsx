@@ -9,37 +9,29 @@ interface ReminderReportKpisProps {
 }
 
 export function ReminderReportKpis({ summary }: ReminderReportKpisProps) {
-  const hasScheduled = summary.totalScheduled > 0
-  const ackPct = hasScheduled ? `${Math.round(summary.acknowledgmentRate * 100)}% acknowledgment rate` : '—'
-  const missPct = hasScheduled ? `${Math.round(summary.missedRate * 100)}% missed rate` : '—'
-
   return (
-    <div className="grid gap-gutter sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-gutter sm:grid-cols-2">
       <KpiCard
         label="Total scheduled"
         value={summary.totalScheduled}
-        sub={`${summary.totalDelivered} delivered`}
         icon={CalendarClock}
         tone="accent"
       />
       <KpiCard
         label="Acknowledged"
         value={summary.totalAcknowledged}
-        sub={ackPct}
         icon={CheckCircle2}
         tone="success"
       />
       <KpiCard
         label="Missed"
         value={summary.totalMissed}
-        sub={missPct}
         icon={AlertCircle}
         tone="danger"
       />
       <KpiCard
         label="Avg response time"
         value={formatDurationSeconds(summary.averageTimeToAcknowledgeSeconds)}
-        sub="Across acknowledged reminders"
         icon={Timer}
         tone="accent"
       />
@@ -58,12 +50,11 @@ const TONE_CHIP: Record<Tone, string> = {
 interface KpiCardProps {
   label: string
   value: string | number
-  sub: string
   icon: LucideIcon
   tone: Tone
 }
 
-function KpiCard({ label, value, sub, icon: Icon, tone }: KpiCardProps) {
+function KpiCard({ label, value, icon: Icon, tone }: KpiCardProps) {
   return (
     <Card className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -73,7 +64,6 @@ function KpiCard({ label, value, sub, icon: Icon, tone }: KpiCardProps) {
         </span>
       </div>
       <p className="text-3xl font-semibold tracking-tight text-on-surface">{value}</p>
-      <p className="text-xs text-text-muted">{sub}</p>
     </Card>
   )
 }

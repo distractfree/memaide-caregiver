@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
+import { Select } from '@/components/ui/Select'
 import { api, ApiClientError } from '@/services/apiClient'
 import { cn } from '@/utils/cn'
 import type { CreateReminderInput, Reminder, UpdateReminderInput } from '@/types/domain'
@@ -26,16 +27,69 @@ interface FieldErrors {
 
 const TIME_REGEX = /^\d{2}:\d{2}$/
 
+const PREDEFINED_TYPES = [
+  'Medication',
+  'Water',
+  'Meal',
+  'Activity',
+  'Exercise',
+  'Appointment',
+  'Bathroom',
+  'Sleep',
+  'Game',
+  'Check-in',
+]
+
+const dropdownOptions = [
+  { value: '', label: 'Select a type...' },
+  ...PREDEFINED_TYPES.map((t) => ({ value: t, label: t })),
+  { value: 'Other', label: 'Other' },
+]
+
+const PREDEFINED_FREQUENCIES = [
+  'Daily',
+  'Twice daily',
+  'Three times daily',
+  'Weekdays',
+  'Weekends',
+  'Weekly',
+  'Monthly',
+  'As needed',
+]
+
+const frequencyDropdownOptions = [
+  { value: '', label: 'Select a frequency...' },
+  ...PREDEFINED_FREQUENCIES.map((f) => ({ value: f, label: f })),
+  { value: 'Other', label: 'Other' },
+]
+
 function validate(
-  type: string,
+  selectedType: string,
+  customType: string,
   description: string,
   timeOfDay: string,
-  frequency: string,
+  selectedFrequency: string,
+  customFrequency: string,
 ): FieldErrors {
   const errs: FieldErrors = {}
-  const t = type.trim()
-  if (t.length === 0) errs.type = 'Type is required.'
-  else if (t.length > 50) errs.type = 'Type must be 50 characters or fewer.'
+  
+  if (selectedType === '') {
+    errs.type = 'Type is required.'
+  } else if (selectedType === 'Other') {
+    const t = customType.trim()
+    if (t.length === 0) {
+      errs.type = 'Custom type is required.'
+    } else if (t.length > 50) {
+      errs.type = 'Type must be 50 characters or fewer.'
+    }
+  } else {
+    const t = selectedType.trim()
+    if (t.length === 0) {
+      errs.type = 'Type is required.'
+    } else if (t.length > 50) {
+      errs.type = 'Type must be 50 characters or fewer.'
+    }
+  }
 
   const d = description.trim()
   if (d.length === 0) errs.description = 'Description is required.'
@@ -45,9 +99,23 @@ function validate(
   if (time.length === 0) errs.timeOfDay = 'Time of day is required.'
   else if (!TIME_REGEX.test(time)) errs.timeOfDay = 'Use 24-hour HH:mm format (e.g. 08:00).'
 
-  const f = frequency.trim()
-  if (f.length === 0) errs.frequency = 'Frequency is required.'
-  else if (f.length > 50) errs.frequency = 'Frequency must be 50 characters or fewer.'
+  if (selectedFrequency === '') {
+    errs.frequency = 'Frequency is required.'
+  } else if (selectedFrequency === 'Other') {
+    const f = customFrequency.trim()
+    if (f.length === 0) {
+      errs.frequency = 'Custom frequency is required.'
+    } else if (f.length > 50) {
+      errs.frequency = 'Frequency must be 50 characters or fewer.'
+    }
+  } else {
+    const f = selectedFrequency.trim()
+    if (f.length === 0) {
+      errs.frequency = 'Frequency is required.'
+    } else if (f.length > 50) {
+      errs.frequency = 'Frequency must be 50 characters or fewer.'
+    }
+  }
 
   return errs
 }
@@ -76,32 +144,85 @@ export function ReminderFormModal({
 }: ReminderFormModalProps) {
   const initial = mode === 'edit' && reminder ? reminder : null
 
-  const [type, setType] = useState(initial?.type ?? '')
+  const [selectedType, setSelectedType] = useState<string>(() => {
+    if (mode === 'edit' && initial?.type) {
+      const matched = PREDEFINED_TYPES.find(
+        (t) => t.toLowerCase() === initial.type.trim().toLowerCase()
+      )
+      return matched ? matched : 'Other'
+    }
+    return ''
+  })
+
+  const [customType, setCustomType] = useState<string>(() => {
+    if (mode === 'edit' && initial?.type) {
+      const matched = PREDEFINED_TYPES.find(
+        (t) => t.toLowerCase() === initial.type.trim().toLowerCase()
+      )
+      return matched ? '' : initial.type
+    }
+    return ''
+  })
+
   const [description, setDescription] = useState(initial?.description ?? '')
   const [timeOfDay, setTimeOfDay] = useState(initial?.timeOfDay ?? '')
-  const [frequency, setFrequency] = useState(initial?.frequency ?? '')
+  
+  const [selectedFrequency, setSelectedFrequency] = useState<string>(() => {
+    if (mode === 'edit' && initial?.frequency) {
+      const matched = PREDEFINED_FREQUENCIES.find(
+        (f) => f.toLowerCase() === initial.frequency.trim().toLowerCase()
+      )
+      return matched ? matched : 'Other'
+    }
+    return ''
+  })
+
+  const [customFrequency, setCustomFrequency] = useState<string>(() => {
+    if (mode === 'edit' && initial?.frequency) {
+      const matched = PREDEFINED_FREQUENCIES.find(
+        (f) => f.toLowerCase() === initial.frequency.trim().toLowerCase()
+      )
+      return matched ? '' : initial.frequency
+    }
+    return ''
+  })
+
   const [active, setActive] = useState(initial ? initial.active : true)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const typeInputRef = useRef<HTMLInputElement>(null)
+
+  const typeSelectRef = useRef<HTMLSelectElement>(null)
+  const customTypeInputRef = useRef<HTMLInputElement>(null)
+  const frequencySelectRef = useRef<HTMLSelectElement>(null)
+  const customFrequencyInputRef = useRef<HTMLInputElement>(null)
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setSubmitError(null)
 
-    const errs = validate(type, description, timeOfDay, frequency)
+    const errs = validate(
+      selectedType,
+      customType,
+      description,
+      timeOfDay,
+      selectedFrequency,
+      customFrequency,
+    )
     if (Object.keys(errs).length > 0) {
       setFieldErrors(errs)
       return
     }
     setFieldErrors({})
 
+    const finalType = selectedType === 'Other' ? customType : selectedType
+    const finalFrequency = selectedFrequency === 'Other' ? customFrequency : selectedFrequency
+
     const payload: CreateReminderInput = {
-      type: type.trim(),
+      type: finalType.trim(),
       description: description.trim(),
       timeOfDay: timeOfDay.trim(),
-      frequency: frequency.trim(),
+      frequency: finalFrequency.trim(),
       active,
     }
 
@@ -140,29 +261,64 @@ export function ReminderFormModal({
       onClose={onClose}
       title={title}
       description={description_}
-      initialFocusRef={typeInputRef}
+      initialFocusRef={typeSelectRef}
       size="md"
     >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <Input
-          ref={typeInputRef}
-          label="Type"
+        <Select
+          ref={typeSelectRef}
+          label={
+            (
+              <span>
+                Type <span className="text-error font-medium">*</span>
+              </span>
+            ) as any
+          }
           required
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-          error={fieldErrors.type}
-          hint="Free-form label shown in the patient app (e.g. medication, hydration, activity)."
-          maxLength={50}
-          autoComplete="off"
-          placeholder="e.g. medication"
+          value={selectedType}
+          onChange={(e) => {
+            const val = e.target.value
+            setSelectedType(val)
+            if (val !== 'Other') {
+              setCustomType('')
+            }
+            setFieldErrors((prev) => {
+              const next = { ...prev }
+              delete next.type
+              return next
+            })
+          }}
+          error={selectedType !== 'Other' ? fieldErrors.type : undefined}
+          options={dropdownOptions}
         />
+
+        {selectedType === 'Other' && (
+          <Input
+            ref={customTypeInputRef}
+            label={
+              (
+                <span>
+                  Custom Type <span className="text-error font-medium">*</span>
+                </span>
+              ) as any
+            }
+            required
+            value={customType}
+            onChange={(e) => setCustomType(e.target.value)}
+            error={fieldErrors.type}
+            hint="Enter a custom reminder type."
+            maxLength={50}
+            autoComplete="off"
+            placeholder="e.g. Physical Therapy"
+          />
+        )}
 
         <div className="flex flex-col gap-1.5">
           <label
             htmlFor="reminder-description"
             className="text-[13px] font-semibold text-on-surface-variant"
           >
-            Description
+            Description <span className="text-error font-medium">*</span>
           </label>
           <textarea
             id="reminder-description"
@@ -192,7 +348,13 @@ export function ReminderFormModal({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Input
-            label="Time of day"
+            label={
+              (
+                <span>
+                  Time of day <span className="text-error font-medium">*</span>
+                </span>
+              ) as any
+            }
             type="time"
             required
             value={timeOfDay}
@@ -200,18 +362,54 @@ export function ReminderFormModal({
             error={fieldErrors.timeOfDay}
             hint="24-hour time used by the patient app."
           />
-          <Input
-            label="Frequency"
+          <Select
+            ref={frequencySelectRef}
+            label={
+              (
+                <span>
+                  Frequency <span className="text-error font-medium">*</span>
+                </span>
+              ) as any
+            }
             required
-            value={frequency}
-            onChange={(e) => setFrequency(e.target.value)}
-            error={fieldErrors.frequency}
-            hint="e.g. daily, weekly, weekdays."
-            maxLength={50}
-            autoComplete="off"
-            placeholder="e.g. daily"
+            value={selectedFrequency}
+            onChange={(e) => {
+              const val = e.target.value
+              setSelectedFrequency(val)
+              if (val !== 'Other') {
+                setCustomFrequency('')
+              }
+              setFieldErrors((prev) => {
+                const next = { ...prev }
+                delete next.frequency
+                return next
+              })
+            }}
+            error={selectedFrequency !== 'Other' ? fieldErrors.frequency : undefined}
+            options={frequencyDropdownOptions}
           />
         </div>
+
+        {selectedFrequency === 'Other' && (
+          <Input
+            ref={customFrequencyInputRef}
+            label={
+              (
+                <span>
+                  Custom Frequency <span className="text-error font-medium">*</span>
+                </span>
+              ) as any
+            }
+            required
+            value={customFrequency}
+            onChange={(e) => setCustomFrequency(e.target.value)}
+            error={fieldErrors.frequency}
+            hint="Enter a custom reminder frequency."
+            maxLength={50}
+            autoComplete="off"
+            placeholder="e.g. every 4 hours"
+          />
+        )}
 
         <label className="inline-flex items-center gap-2 cursor-pointer select-none">
           <input

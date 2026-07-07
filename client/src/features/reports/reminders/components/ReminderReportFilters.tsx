@@ -58,9 +58,6 @@ export function ReminderReportFilters({ filters, onChange, validationError }: Re
             <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
               Date range
             </p>
-            <p className="mt-0.5 text-xs text-text-muted">
-              Filter the acknowledgment report. Leave both empty to see all available data.
-            </p>
           </div>
         </div>
         {hasAny && (

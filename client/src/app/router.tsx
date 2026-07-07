@@ -2,7 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { LoginPage } from '@/features/auth/LoginPage'
-import { DashboardOverviewPage } from '@/features/dashboard/DashboardOverviewPage'
+// import { DashboardOverviewPage } from '@/features/dashboard/DashboardOverviewPage' // Temporarily unused per UI cleanup request
 import { PatientsPage } from '@/features/patients/PatientsPage'
 import { RemindersPage } from '@/features/reminders/RemindersPage'
 import { ReminderReportsPage } from '@/features/reports/reminders/ReminderReportsPage'
@@ -46,7 +46,7 @@ export function AppRouter() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<DashboardOverviewPage />} />
+        <Route index element={<Navigate to="/patients" replace />} />
         <Route path="patients" element={<PatientsPage />} />
         <Route path="reminders" element={<RemindersPage />} />
         <Route path="reports/reminders" element={<ReminderReportsPage />} />

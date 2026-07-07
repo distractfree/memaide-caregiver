@@ -35,7 +35,7 @@
 
 ### 5. Admin Portal Tour
 - **Admin Login:** Open `http://localhost:5273/admin` and explain how admin auth is entirely separate from caregiver auth, using its own JWT token and a plain `.env` password for student demo simplicity.
-- **Admin Dashboard:** Log in with the admin password. Show the read-only list of caregivers and summary metrics.
+- **Admin Dashboard:** Log in with the admin password (`admin123` by default). Show the read-only list of caregivers and summary metrics.
 - **Caregiver Details:** Click "View details" for a caregiver to show the `AdminCaregiverDetailPage`.
 - **Patient Context Panel:** Click on a patient to open the context panel, explaining that it displays only safe, non-medical context (e.g., "Independent living support profile"). Mention that caregiver Enable/Disable features are deferred to a future schema update.
 

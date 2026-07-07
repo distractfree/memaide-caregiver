@@ -16,11 +16,12 @@ const ICONS: Record<VitalEventMotionState, LucideIcon> = {
   unknown: CircleHelp,
 }
 
-// Motion state is only context, so avoid success or danger colors.
-const TONES: Record<VitalEventMotionState, 'neutral' | 'accent' | 'muted'> = {
+// All motion states use the same consistent calm neutral badge style ('muted')
+// as previously used by 'idle', avoiding accent or alert colors.
+const TONES: Record<VitalEventMotionState, 'muted'> = {
   idle: 'muted',
-  walking: 'accent',
-  active: 'accent',
+  walking: 'muted',
+  active: 'muted',
   unknown: 'muted',
 }
 

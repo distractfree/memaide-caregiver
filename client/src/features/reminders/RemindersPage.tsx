@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Bell, Plus, Smartphone, UserPlus, X } from 'lucide-react'
+import { Bell, Plus, UserPlus, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { Badge } from '@/components/ui/Badge'
+// import { Badge } from '@/components/ui/Badge' // Temporarily unused per UI cleanup request
 import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
+// import { Card } from '@/components/ui/Card' // Temporarily unused per UI cleanup request
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { LoadingState } from '@/components/ui/LoadingState'
@@ -13,9 +13,9 @@ import { DeleteReminderModal } from '@/features/reminders/components/DeleteRemin
 import { ReminderFilters, type ReminderActiveFilter } from '@/features/reminders/components/ReminderFilters'
 import { ReminderFormModal } from '@/features/reminders/components/ReminderFormModal'
 import { ReminderList } from '@/features/reminders/components/ReminderList'
-import { ReminderStatCards } from '@/features/reminders/components/ReminderStatCards'
+// import { ReminderStatCards } from '@/features/reminders/components/ReminderStatCards' // Temporarily hidden per UI cleanup request
 import { api, ApiClientError } from '@/services/apiClient'
-import { initialsFromName } from '@/utils/formatting'
+// import { initialsFromName } from '@/utils/formatting' // Temporarily unused per UI cleanup request
 import type { Reminder } from '@/types/domain'
 
 type ModalState =
@@ -27,7 +27,7 @@ type ModalState =
 type PageStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 export function RemindersPage() {
-  const { selectedPatient, selectedPatientId } = usePatients()
+  const { selectedPatientId } = usePatients()
 
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [status, setStatus] = useState<PageStatus>('idle')
@@ -96,8 +96,8 @@ export function RemindersPage() {
     })
   }, [reminders, searchTerm, filter])
 
-  const activeCount = useMemo(() => reminders.filter((r) => r.active).length, [reminders])
-  const inactiveCount = reminders.length - activeCount
+  // const activeCount = useMemo(() => reminders.filter((r) => r.active).length, [reminders]) // Temporarily unused per UI cleanup request
+  // const inactiveCount = reminders.length - activeCount // Temporarily unused per UI cleanup request
 
   const filterActive = searchTerm.trim().length > 0 || filter !== 'all'
 
@@ -187,8 +187,6 @@ export function RemindersPage() {
     >
       <PageHeader hasSelectedPatient={true} onCreate={openCreate} />
 
-      {selectedPatient && <SelectedPatientPill patient={selectedPatient} />}
-
       {status === 'loading' && reminders.length === 0 ? (
         <LoadingState label="Loading reminders…" />
       ) : status === 'error' ? (
@@ -199,11 +197,12 @@ export function RemindersPage() {
         />
       ) : (
         <>
-          <ReminderStatCards
+          {/* Reminder stat cards - temporarily hidden per UI cleanup request */}
+          {/* <ReminderStatCards
             total={reminders.length}
             activeCount={activeCount}
             inactiveCount={inactiveCount}
-          />
+          /> */}
 
           {actionError && (
             <div
@@ -300,12 +299,7 @@ function PageHeader({
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <Badge tone="muted">Reminder support</Badge>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-on-surface">Reminders</h1>
-        <p className="mt-1 text-sm text-on-surface-variant max-w-2xl">
-          Create and manage reminder schedules for the selected patient. Schedules surface
-          gently in the patient app, with acknowledgment trends available in reports.
-        </p>
+        <h1 className="text-3xl font-semibold tracking-tight text-on-surface">Reminders</h1>
       </div>
       <Button
         leftIcon={<Plus className="h-4 w-4" />}
@@ -319,29 +313,29 @@ function PageHeader({
   )
 }
 
-function SelectedPatientPill({ patient }: { patient: NonNullable<ReturnType<typeof usePatients>['selectedPatient']> }) {
-  return (
-    <Card padded={false} className="flex items-center gap-3 px-4 py-3">
-      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-accent-dark text-sm font-semibold">
-        {initialsFromName(patient.name)}
-      </span>
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-on-surface">{patient.name}</p>
-        <p className="inline-flex items-center gap-1.5 text-[11px] text-text-muted">
-          <Smartphone className="h-3 w-3" />
-          {patient.deviceId ? (
-            <span className="truncate font-mono">{patient.deviceId}</span>
-          ) : (
-            <span>No device paired</span>
-          )}
-        </p>
-      </div>
-      <Badge tone="accent" dot className="ml-auto">
-        Selected
-      </Badge>
-    </Card>
-  )
-}
+// function SelectedPatientPill({ patient }: { patient: NonNullable<ReturnType<typeof usePatients>['selectedPatient']> }) {
+//   return (
+//     <Card padded={false} className="flex items-center gap-3 px-4 py-3">
+//       <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-accent-dark text-sm font-semibold">
+//         {initialsFromName(patient.name)}
+//       </span>
+//       <div className="min-w-0">
+//         <p className="truncate text-sm font-semibold text-on-surface">{patient.name}</p>
+//         <p className="inline-flex items-center gap-1.5 text-[11px] text-text-muted">
+//           <Smartphone className="h-3 w-3" />
+//           {patient.deviceId ? (
+//             <span className="truncate font-mono">{patient.deviceId}</span>
+//           ) : (
+//             <span>No device paired</span>
+//           )}
+//         </p>
+//       </div>
+//       <Badge tone="accent" dot className="ml-auto">
+//         Selected
+//       </Badge>
+//     </Card>
+//   )
+// }
 
 function sortReminders(list: Reminder[]): Reminder[] {
   // Match backend order: timeOfDay asc, then createdAt asc.

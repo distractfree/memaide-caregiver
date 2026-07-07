@@ -6,7 +6,9 @@ const prisma = new PrismaClient();
 const DEMO_PASSWORD = "Password123!";
 const DEMO_EMAIL = "demo@memaide.local";
 
-const at = (iso: string) => new Date(iso);
+const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60 * 1000);
+const minutesAfter = (date: Date, minutes: number) =>
+  new Date(date.getTime() + minutes * 60 * 1000);
 
 async function seedCaregiver() {
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
@@ -136,14 +138,19 @@ async function seedReminders(maryId: string, robertId: string) {
 }
 
 async function seedReminderEvents(maryId: string) {
+  const medicationScheduledAt = minutesAgo(210);
+  const hydrationScheduledAt = minutesAgo(135);
+  const lunchScheduledAt = minutesAgo(75);
+  const walkScheduledAt = minutesAgo(25);
+
   const events = [
     {
       id: "demo-reminder-event-mary-medication-ack",
       patientId: maryId,
       reminderId: "demo-reminder-mary-medication",
-      scheduledAt: at("2026-05-22T15:00:00.000Z"),
-      deliveredAt: at("2026-05-22T15:00:30.000Z"),
-      acknowledgedAt: at("2026-05-22T15:04:00.000Z"),
+      scheduledAt: medicationScheduledAt,
+      deliveredAt: minutesAfter(medicationScheduledAt, 1),
+      acknowledgedAt: minutesAfter(medicationScheduledAt, 4),
       status: "acknowledged",
       sourceDevice: "watch",
     },
@@ -151,8 +158,8 @@ async function seedReminderEvents(maryId: string) {
       id: "demo-reminder-event-mary-hydration-delivered",
       patientId: maryId,
       reminderId: "demo-reminder-mary-hydration",
-      scheduledAt: at("2026-05-22T18:00:00.000Z"),
-      deliveredAt: at("2026-05-22T18:00:20.000Z"),
+      scheduledAt: hydrationScheduledAt,
+      deliveredAt: minutesAfter(hydrationScheduledAt, 1),
       acknowledgedAt: null,
       status: "delivered",
       sourceDevice: "phone",
@@ -161,8 +168,8 @@ async function seedReminderEvents(maryId: string) {
       id: "demo-reminder-event-mary-lunch-missed",
       patientId: maryId,
       reminderId: "demo-reminder-mary-lunch",
-      scheduledAt: at("2026-05-22T19:30:00.000Z"),
-      deliveredAt: at("2026-05-22T19:30:15.000Z"),
+      scheduledAt: lunchScheduledAt,
+      deliveredAt: minutesAfter(lunchScheduledAt, 1),
       acknowledgedAt: null,
       status: "missed",
       sourceDevice: "phone",
@@ -171,9 +178,9 @@ async function seedReminderEvents(maryId: string) {
       id: "demo-reminder-event-mary-walk-ack",
       patientId: maryId,
       reminderId: "demo-reminder-mary-walk",
-      scheduledAt: at("2026-05-23T00:00:00.000Z"),
-      deliveredAt: at("2026-05-23T00:00:25.000Z"),
-      acknowledgedAt: at("2026-05-23T00:07:00.000Z"),
+      scheduledAt: walkScheduledAt,
+      deliveredAt: minutesAfter(walkScheduledAt, 1),
+      acknowledgedAt: minutesAfter(walkScheduledAt, 7),
       status: "acknowledged",
       sourceDevice: "watch",
     },
@@ -207,11 +214,12 @@ async function seedHelp(maryId: string) {
     },
   });
 
+  const helpTriggeredAt = minutesAgo(55);
   const events = [
     {
       id: "demo-help-event-mary-watch-triggered",
       patientId: maryId,
-      triggeredAt: at("2026-05-22T20:10:00.000Z"),
+      triggeredAt: helpTriggeredAt,
       sourceDevice: "watch",
       whatsappNumber: "+18185550123",
       status: "triggered",
@@ -219,7 +227,7 @@ async function seedHelp(maryId: string) {
     {
       id: "demo-help-event-mary-phone-whatsapp-opened",
       patientId: maryId,
-      triggeredAt: at("2026-05-22T20:11:00.000Z"),
+      triggeredAt: minutesAfter(helpTriggeredAt, 1),
       sourceDevice: "phone",
       whatsappNumber: "+18185550123",
       status: "whatsapp_opened",
@@ -286,14 +294,19 @@ async function seedBeacons(maryId: string) {
 }
 
 async function seedBeaconEvents(maryId: string) {
+  const kitchenMorning = minutesAgo(240);
+  const livingRoomMidday = minutesAgo(150);
+  const bedroomAfternoon = minutesAgo(70);
+  const kitchenEvening = minutesAgo(18);
+
   const events = [
     {
       id: "demo-beacon-event-mary-kitchen-morning",
       patientId: maryId,
       beaconId: "demo-beacon-mary-kitchen",
       roomName: "Kitchen",
-      detectedAt: at("2026-05-22T15:12:00.000Z"),
-      exitedAt: at("2026-05-22T15:26:00.000Z"),
+      detectedAt: kitchenMorning,
+      exitedAt: minutesAfter(kitchenMorning, 14),
       dwellSeconds: 840,
       estimatedDistanceM: 2.2,
       sourceDevice: "phone",
@@ -303,8 +316,8 @@ async function seedBeaconEvents(maryId: string) {
       patientId: maryId,
       beaconId: "demo-beacon-mary-living-room",
       roomName: "Living Room",
-      detectedAt: at("2026-05-22T18:25:00.000Z"),
-      exitedAt: at("2026-05-22T19:05:00.000Z"),
+      detectedAt: livingRoomMidday,
+      exitedAt: minutesAfter(livingRoomMidday, 40),
       dwellSeconds: 2400,
       estimatedDistanceM: 2.8,
       sourceDevice: "phone",
@@ -314,8 +327,8 @@ async function seedBeaconEvents(maryId: string) {
       patientId: maryId,
       beaconId: "demo-beacon-mary-bedroom",
       roomName: "Bedroom",
-      detectedAt: at("2026-05-22T21:15:00.000Z"),
-      exitedAt: at("2026-05-22T21:35:00.000Z"),
+      detectedAt: bedroomAfternoon,
+      exitedAt: minutesAfter(bedroomAfternoon, 20),
       dwellSeconds: 1200,
       estimatedDistanceM: 1.9,
       sourceDevice: "phone",
@@ -325,8 +338,8 @@ async function seedBeaconEvents(maryId: string) {
       patientId: maryId,
       beaconId: "demo-beacon-mary-kitchen",
       roomName: "Kitchen",
-      detectedAt: at("2026-05-23T00:20:00.000Z"),
-      exitedAt: at("2026-05-23T00:42:00.000Z"),
+      detectedAt: kitchenEvening,
+      exitedAt: null,
       dwellSeconds: 1320,
       estimatedDistanceM: 2.4,
       sourceDevice: "phone",
@@ -348,7 +361,7 @@ async function seedVitals(maryId: string) {
     {
       id: "demo-vital-mary-0800",
       patientId: maryId,
-      timestamp: at("2026-05-22T15:00:00.000Z"),
+      timestamp: minutesAgo(210),
       heartRate: 72,
       motionState: "walking",
       stepCount: 650,
@@ -357,7 +370,7 @@ async function seedVitals(maryId: string) {
     {
       id: "demo-vital-mary-1000",
       patientId: maryId,
-      timestamp: at("2026-05-22T17:00:00.000Z"),
+      timestamp: minutesAgo(150),
       heartRate: 68,
       motionState: "idle",
       stepCount: 980,
@@ -366,7 +379,7 @@ async function seedVitals(maryId: string) {
     {
       id: "demo-vital-mary-1230",
       patientId: maryId,
-      timestamp: at("2026-05-22T19:30:00.000Z"),
+      timestamp: minutesAgo(90),
       heartRate: 82,
       motionState: "walking",
       stepCount: 1630,
@@ -375,7 +388,7 @@ async function seedVitals(maryId: string) {
     {
       id: "demo-vital-mary-1500",
       patientId: maryId,
-      timestamp: at("2026-05-22T22:00:00.000Z"),
+      timestamp: minutesAgo(35),
       heartRate: 88,
       motionState: "active",
       stepCount: 2140,
@@ -384,7 +397,7 @@ async function seedVitals(maryId: string) {
     {
       id: "demo-vital-mary-1800",
       patientId: maryId,
-      timestamp: at("2026-05-23T01:00:00.000Z"),
+      timestamp: minutesAgo(12),
       heartRate: 78,
       motionState: "walking",
       stepCount: 2450,
@@ -403,13 +416,16 @@ async function seedVitals(maryId: string) {
 }
 
 async function seedStreamSessions(maryId: string) {
+  const endedStartedAt = minutesAgo(65);
+  const activeStartedAt = minutesAgo(50);
+
   await prisma.streamSession.upsert({
     where: { id: "demo-stream-mary-ended" },
     update: {
       patientId: maryId,
       helpEventId: "demo-help-event-mary-watch-triggered",
-      startedAt: at("2026-05-22T20:12:00.000Z"),
-      endedAt: at("2026-05-22T20:24:00.000Z"),
+      startedAt: endedStartedAt,
+      endedAt: minutesAfter(endedStartedAt, 12),
       source: "mock",
       status: "ended",
       viewerUrl: null,
@@ -419,8 +435,8 @@ async function seedStreamSessions(maryId: string) {
       id: "demo-stream-mary-ended",
       patientId: maryId,
       helpEventId: "demo-help-event-mary-watch-triggered",
-      startedAt: at("2026-05-22T20:12:00.000Z"),
-      endedAt: at("2026-05-22T20:24:00.000Z"),
+      startedAt: endedStartedAt,
+      endedAt: minutesAfter(endedStartedAt, 12),
       source: "mock",
       status: "ended",
       viewerUrl: null,
@@ -433,7 +449,7 @@ async function seedStreamSessions(maryId: string) {
     update: {
       patientId: maryId,
       helpEventId: "demo-help-event-mary-phone-whatsapp-opened",
-      startedAt: at("2026-05-23T00:35:00.000Z"),
+      startedAt: activeStartedAt,
       endedAt: null,
       source: "glasses",
       status: "active",
@@ -444,7 +460,7 @@ async function seedStreamSessions(maryId: string) {
       id: "demo-stream-mary-active",
       patientId: maryId,
       helpEventId: "demo-help-event-mary-phone-whatsapp-opened",
-      startedAt: at("2026-05-23T00:35:00.000Z"),
+      startedAt: activeStartedAt,
       endedAt: null,
       source: "glasses",
       status: "active",
@@ -456,6 +472,9 @@ async function seedStreamSessions(maryId: string) {
 
 async function seedAiSessions(maryId: string) {
   const sessionId = "demo-ai-session-mary-resolved";
+  const startedAt = minutesAgo(52);
+  const caregiverJoinedAt = minutesAgo(49);
+  const endedAt = minutesAgo(42);
 
   await prisma.aiSession.upsert({
     where: { id: sessionId },
@@ -463,20 +482,20 @@ async function seedAiSessions(maryId: string) {
       patientId: maryId,
       helpEventId: "demo-help-event-mary-phone-whatsapp-opened",
       status: "resolved",
-      startedAt: at("2026-05-22T20:15:00.000Z"),
-      caregiverJoinedAt: at("2026-05-22T20:18:00.000Z"),
-      endedAt: at("2026-05-22T20:25:00.000Z"),
-      summary: "Patient reported minor discomfort but declined emergency services. Caregiver joined and resolved the session.",
+      startedAt,
+      caregiverJoinedAt,
+      endedAt,
+      summary: "Patient requested help. Caregiver joined and resolved the care coordination session.",
     },
     create: {
       id: sessionId,
       patientId: maryId,
       helpEventId: "demo-help-event-mary-phone-whatsapp-opened",
       status: "resolved",
-      startedAt: at("2026-05-22T20:15:00.000Z"),
-      caregiverJoinedAt: at("2026-05-22T20:18:00.000Z"),
-      endedAt: at("2026-05-22T20:25:00.000Z"),
-      summary: "Patient reported minor discomfort but declined emergency services. Caregiver joined and resolved the session.",
+      startedAt,
+      caregiverJoinedAt,
+      endedAt,
+      summary: "Patient requested help. Caregiver joined and resolved the care coordination session.",
     },
   });
 
@@ -486,56 +505,56 @@ async function seedAiSessions(maryId: string) {
       aiSessionId: sessionId,
       senderType: "system",
       message: "Support session started.",
-      createdAt: at("2026-05-22T20:15:00.000Z"),
+      createdAt: startedAt,
     },
     {
       id: "demo-ai-msg-2",
       aiSessionId: sessionId,
       senderType: "ai",
       message: "Hi, I'm here with you.",
-      createdAt: at("2026-05-22T20:15:02.000Z"),
+      createdAt: minutesAfter(startedAt, 1),
     },
     {
       id: "demo-ai-msg-3",
       aiSessionId: sessionId,
       senderType: "ai",
       message: "Can you tell me what happened?",
-      createdAt: at("2026-05-22T20:15:04.000Z"),
+      createdAt: minutesAfter(startedAt, 2),
     },
     {
       id: "demo-ai-msg-4",
       aiSessionId: sessionId,
       senderType: "patient",
-      message: "I feel a bit dizzy.",
-      createdAt: at("2026-05-22T20:16:30.000Z"),
+      message: "I pressed the help button.",
+      createdAt: minutesAfter(startedAt, 3),
     },
     {
       id: "demo-ai-msg-5",
       aiSessionId: sessionId,
       senderType: "ai",
-      message: "Are you hurt?",
-      createdAt: at("2026-05-22T20:16:32.000Z"),
+      message: "I will keep this session open while your caregiver is notified.",
+      createdAt: minutesAfter(startedAt, 4),
     },
     {
       id: "demo-ai-msg-6",
       aiSessionId: sessionId,
       senderType: "patient",
-      message: "No, just resting.",
-      createdAt: at("2026-05-22T20:17:15.000Z"),
+      message: "Okay.",
+      createdAt: minutesAfter(startedAt, 5),
     },
     {
       id: "demo-ai-msg-7",
       aiSessionId: sessionId,
       senderType: "event",
       message: "Caregiver joined the support session.",
-      createdAt: at("2026-05-22T20:18:00.000Z"),
+      createdAt: caregiverJoinedAt,
     },
     {
       id: "demo-ai-msg-8",
       aiSessionId: sessionId,
       senderType: "event",
       message: "Session resolved.",
-      createdAt: at("2026-05-22T20:25:00.000Z"),
+      createdAt: endedAt,
     },
   ];
 
