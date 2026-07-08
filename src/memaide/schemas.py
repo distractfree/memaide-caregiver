@@ -20,6 +20,7 @@ class HandoffType(str, Enum):
     CAREGIVER_JOINED = "caregiver_joined"
     TIMEOUT = "timeout"
     PATIENT_RESOLVED = "patient_resolved"
+    PATIENT_ENDED = "patient_ended"
 
 
 class SessionStatus(str, Enum):

@@ -42,3 +42,23 @@ def test_infer_response_defaults():
     assert resp.escalation.reason == ""
     assert resp.escalation.triggered_by == []
     assert resp.intent == "assist"
+
+
+def test_session_start_request_parses_minimal_and_full():
+    from memaide.service.schemas import SessionStartRequest
+
+    minimal = SessionStartRequest(
+        session_id="s1", patient={"patient_id": "p1", "name": "Rose"}
+    )
+    assert minimal.session_id == "s1"
+    assert minimal.beacons == []
+    assert minimal.vitals is None
+
+    full = SessionStartRequest(
+        session_id="s2",
+        patient={"patient_id": "p1", "name": "Rose"},
+        vitals={"heart_rate": 88},
+        beacons=[{"room": "kitchen"}],
+    )
+    assert full.vitals.heart_rate == 88
+    assert full.beacons[0].room == "kitchen"

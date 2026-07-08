@@ -78,6 +78,12 @@ AI_AGENT_API_KEY = os.environ.get("AI_AGENT_API_KEY")
 INFER_HOST = "0.0.0.0"
 INFER_PORT = 8080
 
+# --- koko callbacks (Slice 2: my server -> koko) ---
+# Base URL my server POSTs escalation/conclude to. Unset -> KokoReporter is a no-op (dev).
+KOKO_BASE_URL = os.environ.get("KOKO_BASE_URL")
+# Shared secret my server sends to koko as X-Api-Key on those callbacks.
+KOKO_API_KEY = os.environ.get("KOKO_API_KEY")
+
 # Directory for per-session frame recordings (opt-in via a FileSessionRecorder).
 RECORDINGS_DIR = "recordings"
 

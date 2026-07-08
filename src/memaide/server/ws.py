@@ -17,7 +17,7 @@ from typing import Any, AsyncIterator, Callable
 
 from memaide import config
 from memaide.agent.session import AgentSession
-from memaide.schemas import PatientContext, VisionContext
+from memaide.schemas import HandoffType, PatientContext, VisionContext
 from memaide.server.recorder import NullSessionRecorder, SessionRecorder
 from memaide.server.voice_loop import VoiceLoop
 from memaide.vision.pipeline import VisionPipeline
@@ -44,6 +44,11 @@ class ServerDeps:
     # Optional per-described-frame trace/notify seam (see server.vision_observer).
     # Default None -> no behavior change; the bridge server injects a real one.
     observer: Any = None
+    # Slice 2: when set, hello correlates context by session_id via the registry, and
+    # session events are reported back to koko. Both default None -> legacy behavior
+    # (patient carried in hello, no koko callbacks) so the bridge tester app still works.
+    registry: Any = None
+    reporter: Any = None
 
 
 class _QueueSource:
@@ -93,37 +98,56 @@ def _parse(raw: Any) -> dict | None:
     return msg if isinstance(msg, dict) else None
 
 
-async def _await_hello(websocket: Any) -> tuple[PatientContext | None, str | None]:
+_OUTCOME_HANDOFF = {
+    "patient_ended": HandoffType.PATIENT_ENDED,
+    "caregiver_joined": HandoffType.CAREGIVER_JOINED,
+    "disconnected": None,
+}
+
+
+async def _await_hello(websocket: Any) -> dict | None:
     async for raw in websocket:
         msg = _parse(raw)
-        if not msg or msg.get("type") != "hello":
-            continue
-        data = msg.get("patient") or {}
-        try:
-            patient = (
-                PatientContext(**data)
-                if data
-                else PatientContext(
-                    patient_id=msg.get("session_id", "unknown"), name="Patient"
-                )
-            )
-        except Exception:  # noqa: BLE001 - bad patient payload -> safe default
-            patient = PatientContext(patient_id="unknown", name="Patient")
-        return patient, msg.get("session_id")
-    return None, None
+        if msg and msg.get("type") == "hello":
+            return msg
+    return None
+
+
+def _patient_from_hello(msg: dict) -> PatientContext:
+    """Legacy path: build the patient from the hello payload (bridge tester app)."""
+    data = msg.get("patient") or {}
+    try:
+        return (
+            PatientContext(**data)
+            if data
+            else PatientContext(patient_id=msg.get("session_id", "unknown"), name="Patient")
+        )
+    except Exception:  # noqa: BLE001 - bad patient payload -> safe default
+        return PatientContext(patient_id="unknown", name="Patient")
 
 
 async def handle(websocket: Any, deps: ServerDeps) -> None:
-    """Run one connection: read hello, fan frames/audio to the two tasks, clean up."""
+    """Run one connection: correlate the session, fan frames/audio to the two tasks,
+    then conclude (report the SessionRecord to koko) on exit."""
     send_lock = asyncio.Lock()
 
     async def send(msg: dict) -> None:
         async with send_lock:
             await websocket.send(json.dumps(msg))
 
-    patient, session_id = await _await_hello(websocket)
-    if patient is None:
+    hello = await _await_hello(websocket)
+    if hello is None:
         return
+    session_id = hello.get("session_id")
+
+    if deps.registry is not None and session_id is not None:
+        ctx = await deps.registry.wait_context(session_id)
+        if ctx is None:
+            await send({"type": "error", "text": "unknown session"})
+            return
+        patient = ctx.patient
+    else:
+        patient = _patient_from_hello(hello)
 
     session = AgentSession(
         brain=deps.make_brain(patient), patient=patient, session_id=session_id
@@ -147,6 +171,11 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
             # on_scene swallows its own errors, but guard the connection regardless.
             await deps.observer.on_scene(ctx, session, frame_url=latest["frame_url"])
 
+    on_escalation = None
+    if deps.reporter is not None and session_id is not None:
+        async def on_escalation(decision):  # noqa: E306 - closure over session_id/reporter
+            await deps.reporter.escalation(session_id, decision)
+
     frame_source = WebSocketFrameSource()
     audio_source = WebSocketAudioSource()
     pipeline = VisionPipeline(
@@ -158,10 +187,12 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
         tts=deps.tts,
         send=send,
         get_vision=lambda: latest["scene"],
+        on_escalation=on_escalation,
     )
 
     vision_task = asyncio.create_task(pipeline.run())
     voice_task = asyncio.create_task(loop.run(audio_source))
+    outcome = "disconnected"
     try:
         async for raw in websocket:
             msg = _parse(raw)
@@ -178,6 +209,7 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
                 except Exception:  # noqa: BLE001 - bad base64 -> drop the chunk
                     continue
             elif mtype == "bye":
+                outcome = "patient_ended"
                 break
             # unknown / malformed -> ignored (forward-compatible)
     finally:
@@ -185,6 +217,11 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
         await audio_source.close()
         await recorder.close()
         await asyncio.gather(vision_task, voice_task, return_exceptions=True)
+        record = session.stop(_OUTCOME_HANDOFF.get(outcome))
+        if deps.reporter is not None and session_id is not None:
+            await deps.reporter.conclude(session_id, record, outcome)
+        if deps.registry is not None and session_id is not None:
+            deps.registry.drop(session_id)
 
 
 async def serve(deps: ServerDeps, host: str = config.WS_HOST, port: int = config.WS_PORT):

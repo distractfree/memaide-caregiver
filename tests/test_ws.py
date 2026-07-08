@@ -1,10 +1,13 @@
 import base64
 import json
 
+import pytest
+
 from memaide.audio.stt import STTEvent, StubSpeechToText
 from memaide.audio.tts import StubTextToSpeech
-from memaide.schemas import AgentDecision, VisionContext
+from memaide.schemas import AgentDecision, PatientContext, VisionContext
 from memaide.server.ws import ServerDeps, _parse, handle
+from memaide.service.session_registry import SessionContext, SessionRegistry
 
 
 class FakeWS:
@@ -138,3 +141,62 @@ async def test_handle_defaults_to_no_recording(tmp_path):
     ws = FakeWS([_hello(), _frame(), json.dumps({"type": "bye"})])
     await handle(ws, _deps())  # default NullSessionRecorder
     assert list(tmp_path.iterdir()) == []
+
+
+class FakeReporter:
+    def __init__(self):
+        self.escalations = []
+        self.concludes = []
+
+    async def escalation(self, session_id, decision):
+        self.escalations.append((session_id, decision))
+
+    async def conclude(self, session_id, record, outcome):
+        self.concludes.append((session_id, record, outcome))
+
+
+def _hello_id_only(sid="s1"):
+    return json.dumps({"type": "hello", "session_id": sid})
+
+
+def _registry_with(sid="s1"):
+    reg = SessionRegistry(wait_timeout=0.1)
+    reg.put_context(
+        sid, SessionContext(session_id=sid, patient=PatientContext(patient_id="p1", name="Rose"))
+    )
+    return reg
+
+
+async def test_hello_correlates_context_from_registry():
+    reg = _registry_with("s1")
+    ws = FakeWS([_hello_id_only("s1"), _frame(), json.dumps({"type": "bye"})])
+    await handle(ws, _deps(registry=reg))
+    assert any(m["type"] == "vision_context" for m in ws.sent)
+
+
+async def test_unknown_session_closes_with_error():
+    reg = SessionRegistry(wait_timeout=0.05)  # no context put
+    ws = FakeWS([_hello_id_only("nope"), _frame()])
+    await handle(ws, _deps(registry=reg))
+    assert ws.sent == [{"type": "error", "text": "unknown session"}]
+
+
+async def test_bye_concludes_with_patient_ended_and_drops_context():
+    reg = _registry_with("s1")
+    rep = FakeReporter()
+    ws = FakeWS([_hello_id_only("s1"), _frame(), json.dumps({"type": "bye"})])
+    await handle(ws, _deps(registry=reg, reporter=rep))
+    assert len(rep.concludes) == 1
+    sid, record, outcome = rep.concludes[0]
+    assert sid == "s1" and outcome == "patient_ended"
+    assert record.handoff_type.value == "patient_ended"
+    assert await reg.wait_context("s1", timeout=0.01) is None  # dropped
+
+
+async def test_disconnect_without_bye_concludes_with_disconnected():
+    reg = _registry_with("s1")
+    rep = FakeReporter()
+    ws = FakeWS([_hello_id_only("s1"), _frame()])  # stream ends, no bye
+    await handle(ws, _deps(registry=reg, reporter=rep))
+    assert rep.concludes[0][2] == "disconnected"
+    assert rep.concludes[0][1].handoff_type is None

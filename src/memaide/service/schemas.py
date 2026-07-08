@@ -79,3 +79,10 @@ class InferResponse(BaseModel):
     escalation: EscalationInfo = Field(default_factory=EscalationInfo)
     handoff_ready: bool = False
     intent: str = "assist"
+
+
+class SessionStartRequest(BaseModel):
+    session_id: str
+    patient: InferPatient
+    vitals: Vitals | None = None
+    beacons: list[BeaconEvent] = Field(default_factory=list)

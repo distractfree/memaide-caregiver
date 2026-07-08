@@ -25,6 +25,7 @@ class VoiceLoop:
         send: Callable[[dict], Awaitable[None]],
         get_vision: Callable[[], VisionContext | None] | None = None,
         clock: Callable[[], float] | None = None,
+        on_escalation: Callable[[Any], Awaitable[None]] | None = None,
     ):
         self._session = session
         self._stt = stt
@@ -34,6 +35,8 @@ class VoiceLoop:
         self._clock = clock or time.monotonic
         self._last_speech_at = self._clock()
         self._seq = 0
+        self._on_escalation = on_escalation
+        self._escalation_reported = False
 
     async def run(self, audio: AsyncIterator[bytes]) -> None:
         """Drive turns from the patient's audio until the stream ends.
@@ -75,6 +78,9 @@ class VoiceLoop:
                     "triggered_by": list(decision.triggered_by),
                 }
             )
+            if self._on_escalation is not None and not self._escalation_reported:
+                self._escalation_reported = True
+                await self._on_escalation(decision)
         try:
             audio = await self._tts.synthesize(turn.text)
         except Exception as exc:  # noqa: BLE001 - audio failure must not lose the reply

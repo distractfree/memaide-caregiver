@@ -89,3 +89,9 @@ def test_vision_context_advisory_flags_default_empty_and_separate_from_flags():
     )
     assert ctx2.flags == []
     assert ctx2.advisory_flags == ["tv_on", "person_seated"]
+
+
+def test_handoff_type_has_patient_ended():
+    from memaide.schemas import HandoffType
+
+    assert HandoffType.PATIENT_ENDED.value == "patient_ended"

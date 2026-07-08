@@ -75,6 +75,22 @@ brain factory, then `await serve(deps)` (needs `OPENAI_API_KEY` and the `websock
 package). The Ray-Ban mobile app (Meta Wearables toolkit) is the client; on-device capture
 is out of scope for this repo.
 
+### Live session server (Slice 2: koko integration)
+
+`scripts/run_session_server.py` runs the `/infer` + `/session/start` HTTP service (`:8080`)
+and the media WebSocket (`:8765`) in **one process** sharing a `SessionRegistry`, so koko's
+per-session context POST (`/session/start`) and the device's media stream correlate by
+`session_id`. My server owns the live session: on escalation it POSTs koko in real time; on
+session end it POSTs the transcript. Env vars (documented here, **not** in a committed `.env`):
+
+| Var | Purpose |
+| --- | --- |
+| `AI_AGENT_API_KEY` | Shared secret koko sends as `X-Api-Key` on inbound `/infer` and `/session/start`. Unset → inbound auth is disabled (dev only). |
+| `KOKO_BASE_URL` | Base URL my server POSTs escalation (`/ai-sessions/:id/escalation`) and conclude (`/ai-sessions/:id/conclude`) callbacks to. Unset → those callbacks become logged no-ops (standalone dev). |
+| `KOKO_API_KEY` | Secret my server sends to koko as `X-Api-Key` on the callbacks above. Symmetric to `AI_AGENT_API_KEY`. |
+
+Needs `OPENAI_API_KEY` (brain + vision + STT/TTS) and the `websockets` + `uvicorn` packages.
+
 ### Glasses vision trace + live preview (Part A)
 
 `scripts/run_bridge_server.py` runs the bridge server wired for a **frames-only** trace: the

@@ -108,3 +108,38 @@ async def test_tts_failure_still_sends_subtitle_but_no_audio_out():
     types = [m["type"] for m in sent]
     assert "subtitle" in types
     assert "audio_out" not in types
+
+
+async def test_on_escalation_fires_once_across_multiple_escalating_turns():
+    session = _session(StubBrain())
+    sent, send = _collector()
+    reported = []
+
+    async def on_escalation(decision):
+        reported.append(decision)
+
+    loop = VoiceLoop(
+        session=session,
+        stt=StubSpeechToText([STTEvent("final", "I fell"), STTEvent("final", "I fell again")]),
+        tts=StubTextToSpeech(audio=b"WAV"),
+        send=send,
+        on_escalation=on_escalation,
+    )
+    await loop.run(_audio((b"x", b"y")))
+
+    # "I fell" trips the rule-based monitor on the first turn; callback fires exactly once.
+    assert len(reported) == 1
+    assert reported[0].escalate is True
+
+
+async def test_no_on_escalation_callback_is_fine():
+    session = _session(StubBrain())
+    sent, send = _collector()
+    loop = VoiceLoop(
+        session=session,
+        stt=StubSpeechToText([STTEvent("final", "I fell")]),
+        tts=StubTextToSpeech(audio=b"WAV"),
+        send=send,
+    )
+    await loop.run(_audio())  # no callback provided -> must not raise
+    assert any(m["type"] == "escalation" for m in sent)
