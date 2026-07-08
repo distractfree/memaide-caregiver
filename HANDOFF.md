@@ -139,7 +139,7 @@ Schemas are the source of truth: `src/memaide/service/schemas.py` (`InferRequest
 >   side. These now cross the public internet (koko is a **separate droplet**,
 >   `134.122.115.15:4000`), so they are mandatory, not optional.
 > - **WhatsApp caregiver alerts** — `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`,
->   `WHATSAPP_TO`, plus an **approved** `WHATSAPP_TEMPLATE=fall_alert` (currently the
+>   `WHATSAPP_TO`, plus an **approved** `WHATSAPP_TEMPLATE=caregiver_alert` (`WHATSAPP_LANG=en`) (currently the
 >   placeholder `hello_world`). Provisioned from Meta's WhatsApp Cloud API dashboard; left
 >   commented-out in `/etc/memaide/memaide.env` until real credentials exist.
 > - **TLS** — move the public media WS + `/infer` behind `wss://`/`https://` with a real
@@ -169,8 +169,11 @@ pins access to one network — if Arian's IP changes (mobile data / ISP rotation
 be re-run with the new IP. This is a **temporary** measure — replace with `wss://` per the
 checklist above (and `ufw delete` the 8765 rule) before real use.
 
-- **`OPENAI_API_KEY`** (brain + vision describer). Optional `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID`
-  / `WHATSAPP_TO` / `WHATSAPP_TEMPLATE` for alerts (documented in the README — no `.env.example`).
+- **`OPENAI_API_KEY`** (brain + vision describer). For live-session caregiver alerts, set
+  `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_TO`, `WHATSAPP_TEMPLATE=caregiver_alert`
+  + `WHATSAPP_LANG=en` (4-var template: caregiver, patient, situation, session link), and
+  `CAREGIVER_PORTAL_BASE_URL` (+ `CAREGIVER_SESSION_PATH` if koko's route differs from
+  `/session/{id}`). Documented in the README — no `.env.example`.
 - **A real `VisionCheck`** (`src/memaide/vision/rule_check.py`) — the default `StubVisionCheck` returns
   no flags. Your CV pipeline implements `check(frame) -> list[str]` to populate the rule-based `flags`
   that drive deterministic escalation (`person_on_floor`, `fall_detected`, `no_motion`). **Note:** the

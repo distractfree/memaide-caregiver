@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from memaide.schemas import PatientContext
+from memaide.service.schemas import CaregiverInfo
 
 
 @dataclass
@@ -19,6 +20,7 @@ class SessionContext:
     patient: PatientContext
     vitals: Any = None
     beacons: list = field(default_factory=list)
+    caregiver: CaregiverInfo | None = None
 
 
 class SessionRegistry:

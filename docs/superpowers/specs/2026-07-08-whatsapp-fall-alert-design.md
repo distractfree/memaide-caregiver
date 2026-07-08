@@ -7,7 +7,7 @@
 ## Problem
 
 When a live glasses session escalates (a rule-based `EscalationDecision` with
-`escalate=true`), the caregiver should get a WhatsApp `fall_alert` message. Today:
+`escalate=true`), the caregiver should get a WhatsApp `caregiver_alert` message. Today:
 
 - The **sender** (`notify/whatsapp.py` `send_template`) already supports N ordered body
   variables — no change needed there.
@@ -34,8 +34,10 @@ Hello {{1}}, your patient {{2}} is seeking immediate help. We are detecting sign
 | `{{3}}` | situation phrase | "a possible fall and can not get up situation" | AI escalation (code→phrase map) |
 | `{{4}}` | live-session URL | https://example.com/session/123 | AI constructs from config |
 
-The `fall_alert` template is **already approved** by Meta; going live is just setting
-`WHATSAPP_TEMPLATE=fall_alert` in the env.
+The `caregiver_alert` template is approved on the **test** WABA (language `en`, **not**
+`en_US`); switching to it is setting `WHATSAPP_TEMPLATE=caregiver_alert` and
+`WHATSAPP_LANG=en` in the env. Going live on the production (GuardiaNova) WABA additionally
+requires re-creating + getting the template approved there (templates do not cross WABAs).
 
 ## Data gap to close first
 

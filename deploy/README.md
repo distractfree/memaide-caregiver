@@ -78,14 +78,28 @@ server reads these:
 | `WHATSAPP_TOKEN` | optional | Caregiver escalation alerts |
 | `WHATSAPP_PHONE_NUMBER_ID` | optional | Sending number ID |
 | `WHATSAPP_TO` | optional | Verified test recipient |
-| `WHATSAPP_TEMPLATE` | optional | Defaults to `hello_world`; set `fall_alert` once approved |
-| `WHATSAPP_LANG` | optional | Defaults to `en_US` |
+| `WHATSAPP_TEMPLATE` | optional | Defaults to `hello_world`; set `caregiver_alert` for live-session alerts |
+| `WHATSAPP_LANG` | optional | Defaults to `en_US`; the `caregiver_alert` template is `en`, so set `WHATSAPP_LANG=en` |
+| `CAREGIVER_PORTAL_BASE_URL` | for fall alerts | Base URL of koko's caregiver portal (e.g. `https://caregiver.guardianova.com`) — used for the `{{4}}` live-session link |
+| `CAREGIVER_SESSION_PATH` | optional | Path template to one session; defaults to `/session/{id}` |
 | `AI_AGENT_API_KEY` | **yes (cross-host)** | Shared secret koko sends as `X-Api-Key` on `/infer` + `/session/start`. Since koko is on a different droplet, this is **mandatory**, not optional — it's the only thing gating your public endpoints. Must match koko's `AI_AGENT_API_KEY`. |
 | `KOKO_BASE_URL` | **yes for live sessions** | koko's backend base URL — my server POSTs escalation + transcript callbacks here. Cross-host value: `http://134.122.115.15:4000`. Unset = callbacks are logged no-ops (standalone dev). |
 | `KOKO_API_KEY` | if koko requires it | Secret my server sends as `X-Api-Key` on the escalation/conclude callbacks. Set to whatever koko expects; unset = callbacks sent with no auth header. |
 
 `KOKO_BASE_URL` / `KOKO_API_KEY` are only used by the **session server** (§6a). The
 older `/infer`-only and bridge services ignore them.
+
+**Caregiver-alert WhatsApp (live-session escalation).** On escalation the session server
+sends the caregiver the approved `caregiver_alert` template with 4 variables: `{{1}}`
+caregiver name, `{{2}}` patient name, `{{3}}` situation phrase (derived from the
+escalation), `{{4}}` a link to the live session in koko's caregiver portal. To enable it:
+set `WHATSAPP_TEMPLATE=caregiver_alert` **and `WHATSAPP_LANG=en`** (the template's language
+is `en`, not `en_US`; `hello_world` takes no variables and is rejected), `WHATSAPP_TOKEN` /
+`WHATSAPP_PHONE_NUMBER_ID`, and `CAREGIVER_PORTAL_BASE_URL`. Set `CAREGIVER_SESSION_PATH` if
+koko's route differs from the default `/session/{id}` — **confirm this route with koko**, a
+wrong path 404s the link in the caregiver's message. The recipient is the caregiver's phone
+from koko's `/session/start` payload, falling back to `WHATSAPP_TO`. Without `WHATSAPP_TOKEN`
+the notifier isn't built and the session runs normally.
 
 Ports (`WS_PORT=8765`, `PREVIEW_PORT=8000`) live in `src/memaide/config.py`; override via
 env only if you change them.

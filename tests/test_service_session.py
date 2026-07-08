@@ -37,6 +37,19 @@ def test_session_start_registers_context(monkeypatch):
     assert reg._ctx["s1"].vitals.heart_rate == 90
 
 
+def test_session_start_preserves_caregiver(monkeypatch):
+    reg = SessionRegistry()
+    client = _client(reg, monkeypatch)
+    payload = _payload()
+    payload["patient"]["caregiver"] = {"name": "Anthony", "phone": "+15551234567"}
+    r = client.post("/session/start", json=payload)
+    assert r.status_code == 200
+    cg = reg._ctx["s1"].caregiver
+    assert cg is not None
+    assert cg.name == "Anthony"
+    assert cg.phone == "+15551234567"
+
+
 def test_session_start_rejects_bad_api_key(monkeypatch):
     client = _client(SessionRegistry(), monkeypatch, api_key="secret")
     r = client.post("/session/start", json=_payload(), headers={"X-Api-Key": "wrong"})

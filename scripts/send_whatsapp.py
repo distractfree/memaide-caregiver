@@ -12,8 +12,8 @@ from the environment / .env via memaide.config.
     # Override the recipient (must be a verified number on the test WABA):
     python scripts/send_whatsapp.py --to +15551234567 --template hello_world
 
-    # Template with body variables {{1}}/{{2}}/{{3}} (order matters):
-    python scripts/send_whatsapp.py --template fall_alert --var Anthony --var John --var https://memaide.example/s/abc
+    # Template with body variables {{1}}..{{4}} (order matters). caregiver_alert is `en`:
+    python scripts/send_whatsapp.py --template caregiver_alert --lang en --var Anthony --var John --var "a possible fall" --var https://memaide.example/s/abc
 
 Exits non-zero on failure.
 """
@@ -40,7 +40,7 @@ def main() -> int:
         action="append",
         dest="variables",
         metavar="VALUE",
-        help="template body variable {{1}}, {{2}}, ... (repeat in order; e.g. fall_alert: --var Anthony --var John --var <link>)",
+        help="template body variable {{1}}, {{2}}, ... (repeat in order; e.g. caregiver_alert: --var Anthony --var John --var <situation> --var <link>)",
     )
     args = parser.parse_args()
 

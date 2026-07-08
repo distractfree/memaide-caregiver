@@ -80,8 +80,8 @@ def _build_notify():
     template, lang, to = config.WHATSAPP_TEMPLATE, config.WHATSAPP_LANG, config.WHATSAPP_TO
 
     def notify(decision: EscalationDecision, ctx: VisionContext) -> None:
-        # hello_world (the pre-approval fallback) takes no variables. When fall_alert is
-        # approved, set WHATSAPP_TEMPLATE=fall_alert and pass {{1}}/{{2}}/{{3}} here.
+        # hello_world (the pre-approval fallback) takes no variables. For the real alert set
+        # WHATSAPP_TEMPLATE=caregiver_alert (WHATSAPP_LANG=en) and pass its body vars here.
         _log.warning("[notify] sending WhatsApp template %r to %s (%s)", template, to, decision.reason)
         sender.send_template(to, template, lang)
 

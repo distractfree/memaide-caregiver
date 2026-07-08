@@ -15,5 +15,6 @@ def register_session(req: SessionStartRequest, registry: SessionRegistry) -> Non
         patient=_to_patient_context(req.patient),
         vitals=req.vitals,
         beacons=list(req.beacons),
+        caregiver=req.patient.caregiver,
     )
     registry.put_context(req.session_id, ctx)

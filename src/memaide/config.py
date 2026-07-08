@@ -100,10 +100,18 @@ PREVIEW_PORT = 8000
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
 WHATSAPP_PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID")
 WHATSAPP_TO = os.environ.get("WHATSAPP_TO")
-# Escalation alert template. Defaults to hello_world (always approved) until the custom
-# fall_alert template clears Meta review; set WHATSAPP_TEMPLATE=fall_alert to switch.
+# Escalation alert template. Defaults to hello_world (always approved, en_US). The custom
+# caregiver alert is named `caregiver_alert` and its language is `en` (NOT en_US), so switch
+# with WHATSAPP_TEMPLATE=caregiver_alert AND WHATSAPP_LANG=en.
 WHATSAPP_TEMPLATE = os.environ.get("WHATSAPP_TEMPLATE", "hello_world")
 WHATSAPP_LANG = os.environ.get("WHATSAPP_LANG", "en_US")
+
+# --- Caregiver portal (for the {{4}} live-session link in fall-alert WhatsApps) ---
+# Base URL of koko's caregiver portal + the path template to one live session.
+# NOTE: CONFIRM the exact path with koko — a wrong path yields a 404 in the caregiver's
+# message. Default path mirrors the template example (/session/<id>).
+CAREGIVER_PORTAL_BASE_URL = os.environ.get("CAREGIVER_PORTAL_BASE_URL", "")
+CAREGIVER_SESSION_PATH = os.environ.get("CAREGIVER_SESSION_PATH", "/session/{id}")
 
 # --- Secrets ---
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")

@@ -49,6 +49,9 @@ class ServerDeps:
     # (patient carried in hello, no koko callbacks) so the bridge tester app still works.
     registry: Any = None
     reporter: Any = None
+    # Slice 2: when set, an escalation also sends the caregiver a WhatsApp fall alert.
+    # Default None -> no WhatsApp (dev / no key). Built by run_session_server.
+    notifier: Any = None
 
 
 class _QueueSource:
@@ -140,12 +143,14 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
         return
     session_id = hello.get("session_id")
 
+    caregiver = None
     if deps.registry is not None and session_id is not None:
         ctx = await deps.registry.wait_context(session_id)
         if ctx is None:
             await send({"type": "error", "text": "unknown session"})
             return
         patient = ctx.patient
+        caregiver = ctx.caregiver
     else:
         patient = _patient_from_hello(hello)
 
@@ -172,9 +177,12 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
             await deps.observer.on_scene(ctx, session, frame_url=latest["frame_url"])
 
     on_escalation = None
-    if deps.reporter is not None and session_id is not None:
-        async def on_escalation(decision):  # noqa: E306 - closure over session_id/reporter
-            await deps.reporter.escalation(session_id, decision)
+    if (deps.reporter is not None or deps.notifier is not None) and session_id is not None:
+        async def on_escalation(decision):  # noqa: E306 - closure over session_id/deps
+            if deps.reporter is not None:
+                await deps.reporter.escalation(session_id, decision)
+            if deps.notifier is not None:
+                await deps.notifier.notify(session_id, patient.name, caregiver, decision)
 
     frame_source = WebSocketFrameSource()
     audio_source = WebSocketAudioSource()

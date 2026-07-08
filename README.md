@@ -120,15 +120,15 @@ Server-side vars (documented here, **not** in a committed `.env`):
 | `WHATSAPP_TOKEN` | Meta Cloud API token (24h test token or a permanent System User token). |
 | `WHATSAPP_PHONE_NUMBER_ID` | The sending test number's phone-number ID (stable). |
 | `WHATSAPP_TO` | Verified recipient (E.164, e.g. `+15551234567`). |
-| `WHATSAPP_TEMPLATE` | Escalation template name; defaults to `hello_world` until the custom `fall_alert` clears review. |
-| `WHATSAPP_LANG` | Template language code (default `en_US`). |
+| `WHATSAPP_TEMPLATE` | Escalation template name; defaults to `hello_world` until the custom `caregiver_alert` is used. |
+| `WHATSAPP_LANG` | Template language code (default `en_US`; the `caregiver_alert` template is `en`, not `en_US`). |
 
 Free-form `send_text` only delivers within 24h of the recipient messaging the business number,
 so the escalation alert uses an approved **template** (`send_template`). Templates with body
 variables (`{{1}}/{{2}}/{{3}}`) take `--var` values in order:
 
 ```bash
-python scripts/send_whatsapp.py --template fall_alert --var Anthony --var John --var https://…
+python scripts/send_whatsapp.py --template caregiver_alert --lang en --var Anthony --var John --var https://…
 ```
 
 ## Integration notes for the backend team

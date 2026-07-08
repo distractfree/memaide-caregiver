@@ -143,6 +143,43 @@ async def test_handle_defaults_to_no_recording(tmp_path):
     assert list(tmp_path.iterdir()) == []
 
 
+class FakeNotifier:
+    def __init__(self):
+        self.calls = []
+
+    async def notify(self, session_id, patient_name, caregiver, decision):
+        self.calls.append((session_id, patient_name, caregiver, decision))
+
+
+async def test_escalation_invokes_notifier_with_caregiver():
+    from memaide.service.schemas import CaregiverInfo
+
+    reg = SessionRegistry()
+    reg.put_context(
+        "s1",
+        SessionContext(
+            session_id="s1",
+            patient=PatientContext(patient_id="p1", name="Rose"),
+            caregiver=CaregiverInfo(name="Anthony", phone="+15551234567"),
+        ),
+    )
+    notifier = FakeNotifier()
+    ws = FakeWS([_hello(), _audio(), json.dumps({"type": "bye"})])
+    deps = _deps(
+        stt=StubSpeechToText([STTEvent("final", "I can't breathe")]),
+        registry=reg,
+        notifier=notifier,
+    )
+    await handle(ws, deps)
+
+    assert len(notifier.calls) == 1
+    session_id, patient_name, caregiver, decision = notifier.calls[0]
+    assert session_id == "s1"
+    assert patient_name == "Rose"
+    assert caregiver.name == "Anthony"
+    assert decision.escalate is True
+
+
 class FakeReporter:
     def __init__(self):
         self.escalations = []

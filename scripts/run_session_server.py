@@ -36,6 +36,24 @@ from memaide.vision.describer import VisionDescriber
 _log = logging.getLogger("memaide.session")
 
 
+def _build_notifier():
+    """Build the WhatsApp escalation notifier, or None when no token is configured."""
+    if not config.WHATSAPP_TOKEN or not config.WHATSAPP_PHONE_NUMBER_ID:
+        return None
+    from memaide.notify.escalation_alert import EscalationNotifier
+    from memaide.notify.whatsapp import WhatsAppSender
+
+    sender = WhatsAppSender(config.WHATSAPP_TOKEN, config.WHATSAPP_PHONE_NUMBER_ID)
+    return EscalationNotifier(
+        sender,
+        template=config.WHATSAPP_TEMPLATE,
+        lang=config.WHATSAPP_LANG,
+        portal_base_url=config.CAREGIVER_PORTAL_BASE_URL,
+        session_path=config.CAREGIVER_SESSION_PATH,
+        fallback_to=config.WHATSAPP_TO,
+    )
+
+
 def build_components(client):
     """Build the FastAPI app and the WebSocket ServerDeps sharing ONE SessionRegistry.
 
@@ -44,6 +62,7 @@ def build_components(client):
     """
     registry = SessionRegistry()
     reporter = KokoReporter(config.KOKO_BASE_URL, config.KOKO_API_KEY)
+    notifier = _build_notifier()
     app = create_app(
         ServiceDeps(make_brain=lambda p: AgentBrain(client, p), registry=registry)
     )
@@ -54,6 +73,7 @@ def build_components(client):
         make_brain=lambda p: AgentBrain(client, p),
         registry=registry,
         reporter=reporter,
+        notifier=notifier,
     )
     return app, ws_deps, registry
 
