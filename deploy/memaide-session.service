@@ -1,0 +1,48 @@
+[Unit]
+# MemAide live session server (Slice 2): /session/start + /infer over HTTP (port 8080)
+# AND the glasses/phone media WebSocket (port 8765) in ONE process, sharing one
+# SessionRegistry (scripts/run_session_server.py).
+#
+# IMPORTANT: this supersedes BOTH older services. It re-hosts /infer on 8080 (so it
+# replaces memaide-infer) and owns the media WS on 8765 (so it replaces the bridge).
+# Do NOT run this alongside memaide-infer or memaide-bridge — the ports collide.
+# Disable the other two first:
+#   systemctl disable --now memaide-infer memaide-bridge
+Description=MemAide live session server (session/infer HTTP + glasses WS)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Runs as an unprivileged user, NOT root. Create it once: `adduser --system --group memaide`
+User=memaide
+Group=memaide
+
+# Where you cloned the repo on the droplet.
+WorkingDirectory=/opt/memaide
+
+# Secrets + config live here, out of git. See deploy/README.md for the required keys
+# (adds KOKO_BASE_URL + KOKO_API_KEY on top of OPENAI_API_KEY / AI_AGENT_API_KEY).
+EnvironmentFile=/etc/memaide/memaide.env
+
+# Use the venv's python directly (no `source activate` needed under systemd).
+# Needs the service extra installed: pip install -e ".[service]" (fastapi+uvicorn).
+ExecStart=/opt/memaide/.venv/bin/python scripts/run_session_server.py
+
+# Restart on crash; give the OpenAI/websocket loop a moment between restarts.
+Restart=on-failure
+RestartSec=3
+
+# Logs go to the journal: `journalctl -u memaide-session -f`
+StandardOutput=journal
+StandardError=journal
+
+# --- Light hardening (safe defaults; loosen if something legitimately needs write access) ---
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+# recordings/ and preview/ are written under WorkingDirectory, so keep it writable.
+ReadWritePaths=/opt/memaide
+
+[Install]
+WantedBy=multi-user.target

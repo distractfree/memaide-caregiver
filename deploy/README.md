@@ -71,6 +71,11 @@ server reads these:
 | `WHATSAPP_TEMPLATE` | optional | Defaults to `hello_world`; set `fall_alert` once approved |
 | `WHATSAPP_LANG` | optional | Defaults to `en_US` |
 | `AI_AGENT_API_KEY` | **yes (prod)** | Shared secret koko sends as `X-Api-Key`; unset = auth disabled (dev only) |
+| `KOKO_BASE_URL` | **yes for live sessions** | Base URL of koko's backend; my server POSTs escalation + transcript callbacks here. Unset = callbacks are logged no-ops (standalone dev) |
+| `KOKO_API_KEY` | optional | Bearer/secret my server sends on those callbacks, if koko requires one |
+
+`KOKO_BASE_URL` / `KOKO_API_KEY` are only used by the **session server** (§6a). The
+older `/infer`-only and bridge services ignore them.
 
 Ports (`WS_PORT=8765`, `PREVIEW_PORT=8000`) live in `src/memaide/config.py`; override via
 env only if you change them.
@@ -115,6 +120,39 @@ koko sets `AI_AGENT_URL=http://<droplet-ip>:8080` and `AI_AGENT_API_KEY` to the 
 secret you put in `/etc/memaide/memaide.env`. Since koko is co-located on the same droplet,
 `/infer` can stay bound to the private interface / firewalled to localhost rather than
 exposed publicly.
+
+### 6a. Session server (Slice 2) — SUPERSEDES the infer + bridge services
+
+`scripts/run_session_server.py` runs **one** process that hosts `/session/start` **and**
+`/infer` on port **8080** *and* the glasses/phone media WebSocket on port **8765**, all
+sharing one `SessionRegistry`. This is the live voice/vision path: koko POSTs
+`/session/start` with patient context, the device opens the WS with `hello {session_id}`,
+my server correlates the two and POSTs escalation (real-time) + the transcript (on
+conclude) back to koko.
+
+Because it re-hosts `/infer` (8080) and owns the media WS (8765), it **collides with both
+older services** — you cannot run all three. The session server *replaces* them:
+
+```bash
+# Stop + disable the two it supersedes (both ports are now owned by the session server):
+systemctl disable --now memaide-infer memaide-bridge
+
+# Install the session service (needs the service extra: pip install -e ".[service]"):
+cp /opt/memaide/deploy/memaide-session.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now memaide-session
+systemctl status memaide-session         # should be active (running)
+curl -s http://127.0.0.1:8080/health     # -> {"status":"ok"}
+journalctl -u memaide-session -f         # live logs
+```
+
+Requires `KOKO_BASE_URL` (+ `KOKO_API_KEY`) in `/etc/memaide/memaide.env` for the callbacks
+to koko; without them the server still runs but logs the callbacks as no-ops. nginx (§8)
+still fronts the media WS on `/`; koko→me `/session/start` can stay on `127.0.0.1:8080`.
+
+> Only migrate once koko's `/session/start` caller + inbound callback endpoints and the
+> device client exist — until then the session server starts and idles with nothing to
+> drive the live loop. Running the older `memaide-infer` service is fine in the meantime.
 
 ## 7. Firewall
 
