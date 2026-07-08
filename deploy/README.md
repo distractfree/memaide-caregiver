@@ -197,24 +197,37 @@ ufw status                                        # confirm the rules are active
 ## 8. TLS + `wss://` (production) — needs a domain
 
 Browsers and the mobile app require **`wss://`** (secure) outside of localhost, and Let's
-Encrypt won't issue a cert for a bare IP. So:
+Encrypt won't issue a cert for a bare IP. One cert fronts **both** services the session
+server hosts: the media WS (8765) **and** `/infer` + `/session/` (8080). This matters
+because koko is a **separate droplet** (`134.122.115.15`), so `/infer` — which carries
+patient context + the shared `X-Api-Key` — crosses the public internet and must be TLS'd
+too, not just the browser-facing WS.
 
-1. Point a DNS A record (e.g. `memaide.example.com`) at `67.205.153.42`.
+`guardianova.com` already exists (koko's portal is live at `caregiver.guardianova.com`),
+so no new registrar is needed — just a **subdomain A record for this droplet**, which koko
+adds since he owns DNS:
+
+1. Have koko point a subdomain A record (e.g. `ai.guardianova.com`) at `67.205.153.42`.
+   Confirm with `dig +short <subdomain>`.
 2. Install the proxy config:
    ```bash
    cp /opt/memaide/deploy/nginx-memaide.conf /etc/nginx/sites-available/memaide
    ln -s /etc/nginx/sites-available/memaide /etc/nginx/sites-enabled/memaide
-   # edit the file: replace YOUR_DOMAIN
+   # edit the file: replace YOUR_DOMAIN with the subdomain
    nginx -t && systemctl reload nginx
    ```
 3. Get the cert:
    ```bash
    apt install -y certbot python3-certbot-nginx
-   certbot --nginx -d memaide.example.com
+   certbot --nginx -d ai.guardianova.com
    ```
+4. **Cutover (cross-student):** koko sets `AI_AGENT_URL=https://ai.guardianova.com` (was
+   `http://67.205.153.42:8080`); Arian points the app at `wss://ai.guardianova.com/` (was
+   `ws://67.205.153.42:8765`) and drops `usesCleartextTraffic`. Then close the raw ports:
+   `ufw delete allow 8765` and re-scope 8080 to localhost (traffic now arrives on 443).
 
-The glasses/phone app then connects to `wss://memaide.example.com/`; preview is at
-`https://memaide.example.com/preview/`.
+The glasses/phone app then connects to `wss://ai.guardianova.com/`; `/infer` is at
+`https://ai.guardianova.com/infer`; preview is at `https://ai.guardianova.com/preview/`.
 
 **No domain yet?** For a quick internal test, skip Nginx and point the app at
 `ws://67.205.153.42:8765` (with `ufw allow 8765`). Move to `wss://` before any real use.
