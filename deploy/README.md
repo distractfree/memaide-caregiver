@@ -222,20 +222,41 @@ so no new registrar is needed — just a **subdomain A record for this droplet**
 adds since he owns DNS:
 
 1. Have koko point a subdomain A record (e.g. `ai.guardianova.com`) at `67.205.153.42`.
-   Confirm with `dig +short <subdomain>`.
-2. Install the proxy config:
+   Confirm with `dig +short <subdomain>` (must print `67.205.153.42`).
+2. **Get the cert first, with `--standalone`.** `certbot --nginx` can't be used here: the
+   proxy config ships `listen 443 ssl` with the `ssl_certificate` lines commented, so
+   `nginx -t` fails until a cert exists — a chicken-and-egg. `--standalone` sidesteps it by
+   binding `:80` itself to answer the ACME challenge *before* nginx is wired. nginx must not
+   hold `:80` during issuance:
+   ```bash
+   apt install -y certbot
+   systemctl stop nginx 2>/dev/null || true
+   certbot certonly --standalone -d ai.guardianova.com \
+       --non-interactive --agree-tos -m anthonytaylor7755@gmail.com
+   ```
+3. Install the proxy config, filling in the domain **and** uncommenting the two
+   `ssl_certificate` lines (they now exist under `/etc/letsencrypt/live/…`):
    ```bash
    cp /opt/memaide/deploy/nginx-memaide.conf /etc/nginx/sites-available/memaide
+   sed -i -e 's/YOUR_DOMAIN/ai.guardianova.com/g' \
+          -e 's/^\( *\)# \(ssl_certificate\)/\1\2/' \
+          /etc/nginx/sites-available/memaide
+   rm -f /etc/nginx/sites-enabled/default        # don't let the default site grab the domain
    ln -s /etc/nginx/sites-available/memaide /etc/nginx/sites-enabled/memaide
-   # edit the file: replace YOUR_DOMAIN with the subdomain
-   nginx -t && systemctl reload nginx
+   nginx -t && systemctl restart nginx
    ```
-3. Get the cert:
+4. **Auto-renew without downtime surprises.** Standalone renewal needs `:80`, which nginx now
+   holds, so add hooks that stop/start nginx around every renewal (a few seconds, ~every 60
+   days):
    ```bash
-   apt install -y certbot python3-certbot-nginx
-   certbot --nginx -d ai.guardianova.com
+   mkdir -p /etc/letsencrypt/renewal-hooks/pre /etc/letsencrypt/renewal-hooks/post
+   printf '#!/bin/sh\nsystemctl stop nginx\n'  > /etc/letsencrypt/renewal-hooks/pre/stop-nginx.sh
+   printf '#!/bin/sh\nsystemctl start nginx\n' > /etc/letsencrypt/renewal-hooks/post/start-nginx.sh
+   chmod +x /etc/letsencrypt/renewal-hooks/pre/stop-nginx.sh \
+            /etc/letsencrypt/renewal-hooks/post/start-nginx.sh
+   certbot renew --dry-run                       # confirm the hook flow works
    ```
-4. **Cutover (cross-student):** koko sets `AI_AGENT_URL=https://ai.guardianova.com` (was
+5. **Cutover (cross-student):** koko sets `AI_AGENT_URL=https://ai.guardianova.com` (was
    `http://67.205.153.42:8080`); Arian points the app at `wss://ai.guardianova.com/` (was
    `ws://67.205.153.42:8765`) and drops `usesCleartextTraffic`. Then close the raw ports:
    `ufw delete allow 8765` and re-scope 8080 to localhost (traffic now arrives on 443).
