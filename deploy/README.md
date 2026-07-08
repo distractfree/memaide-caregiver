@@ -7,6 +7,16 @@ for the WebSocket.
 
 Target host in this project: `root@67.205.153.42`.
 
+> **Topology (confirmed 2026-07-07): two separate droplets, NOT co-located.**
+> - **My AI service** (this repo): `67.205.153.42`
+> - **koko's backend** (Node/Prisma): `134.122.115.15:4000`
+>
+> Because we are on different machines, all cross-service calls use **public IPs, not
+> `127.0.0.1`**, port 8080/8765 must be **opened to koko/devices in the firewall** (§7), and
+> `AI_AGENT_API_KEY` / `KOKO_API_KEY` are **mandatory** (the traffic crosses the public
+> internet). Anything below that says "co-located / localhost" is the old assumption —
+> follow the cross-host instructions.
+
 ---
 
 ## 1. First login — lock down SSH
@@ -70,9 +80,9 @@ server reads these:
 | `WHATSAPP_TO` | optional | Verified test recipient |
 | `WHATSAPP_TEMPLATE` | optional | Defaults to `hello_world`; set `fall_alert` once approved |
 | `WHATSAPP_LANG` | optional | Defaults to `en_US` |
-| `AI_AGENT_API_KEY` | **yes (prod)** | Shared secret koko sends as `X-Api-Key`; unset = auth disabled (dev only) |
-| `KOKO_BASE_URL` | **yes for live sessions** | Base URL of koko's backend; my server POSTs escalation + transcript callbacks here. Unset = callbacks are logged no-ops (standalone dev) |
-| `KOKO_API_KEY` | optional | Bearer/secret my server sends on those callbacks, if koko requires one |
+| `AI_AGENT_API_KEY` | **yes (cross-host)** | Shared secret koko sends as `X-Api-Key` on `/infer` + `/session/start`. Since koko is on a different droplet, this is **mandatory**, not optional — it's the only thing gating your public endpoints. Must match koko's `AI_AGENT_API_KEY`. |
+| `KOKO_BASE_URL` | **yes for live sessions** | koko's backend base URL — my server POSTs escalation + transcript callbacks here. Cross-host value: `http://134.122.115.15:4000`. Unset = callbacks are logged no-ops (standalone dev). |
+| `KOKO_API_KEY` | if koko requires it | Secret my server sends as `X-Api-Key` on the escalation/conclude callbacks. Set to whatever koko expects; unset = callbacks sent with no auth header. |
 
 `KOKO_BASE_URL` / `KOKO_API_KEY` are only used by the **session server** (§6a). The
 older `/infer`-only and bridge services ignore them.
@@ -84,6 +94,10 @@ env only if you change them.
 mkdir -p /etc/memaide
 cat > /etc/memaide/memaide.env <<'EOF'
 OPENAI_API_KEY=sk-...
+# Cross-host integration with koko (134.122.115.15:4000):
+AI_AGENT_API_KEY=<shared secret, must match koko's AI_AGENT_API_KEY>
+KOKO_BASE_URL=http://134.122.115.15:4000
+# KOKO_API_KEY=<secret koko expects on my callbacks, if any>
 # WHATSAPP_TOKEN=...
 # WHATSAPP_PHONE_NUMBER_ID=...
 # WHATSAPP_TO=...
@@ -116,10 +130,11 @@ systemctl enable --now memaide-infer
 curl -s http://127.0.0.1:8080/health      # -> {"status":"ok"}
 ```
 
-koko sets `AI_AGENT_URL=http://<droplet-ip>:8080` and `AI_AGENT_API_KEY` to the same
-secret you put in `/etc/memaide/memaide.env`. Since koko is co-located on the same droplet,
-`/infer` can stay bound to the private interface / firewalled to localhost rather than
-exposed publicly.
+koko sets `AI_AGENT_URL=http://67.205.153.42:8080` (your public IP) and `AI_AGENT_API_KEY`
+to the same secret you put in `/etc/memaide/memaide.env`. **koko is on a separate droplet
+(`134.122.115.15`), so `/infer` must be reachable at your public IP — not localhost.** Open
+port 8080 to koko's IP only (§7), and keep `AI_AGENT_API_KEY` set so the exposed endpoint is
+authenticated.
 
 ### 6a. Session server (Slice 2) — SUPERSEDES the infer + bridge services
 
@@ -146,23 +161,38 @@ curl -s http://127.0.0.1:8080/health     # -> {"status":"ok"}
 journalctl -u memaide-session -f         # live logs
 ```
 
-Requires `KOKO_BASE_URL` (+ `KOKO_API_KEY`) in `/etc/memaide/memaide.env` for the callbacks
-to koko; without them the server still runs but logs the callbacks as no-ops. nginx (§8)
-still fronts the media WS on `/`; koko→me `/session/start` can stay on `127.0.0.1:8080`.
+Requires `KOKO_BASE_URL=http://134.122.115.15:4000` (+ `KOKO_API_KEY` if koko checks it) in
+`/etc/memaide/memaide.env` for the callbacks to koko; without them the server still runs but
+logs the callbacks as no-ops. Because koko is a **separate droplet**, koko reaches
+`/session/start` + `/infer` at your **public** `67.205.153.42:8080` (not localhost) — open
+8080 to koko's IP in §7. nginx (§8) still fronts the media WS on `/`.
 
 > Only migrate once koko's `/session/start` caller + inbound callback endpoints and the
 > device client exist — until then the session server starts and idles with nothing to
 > drive the live loop. Running the older `memaide-infer` service is fine in the meantime.
 
-## 7. Firewall
+## 7. Firewall (cross-host: koko must reach you)
+
+Because koko is on a **different droplet**, it calls your `/infer` + `/session/start` at
+`67.205.153.42:8080`. That port must be open — but scope it to **koko's IP only**, not the
+whole internet, since `AI_AGENT_API_KEY` is your only other gate.
 
 ```bash
 ufw allow OpenSSH
-ufw allow 'Nginx Full'                   # 80 + 443, once you use Nginx/TLS
-# Testing WITHOUT a domain/TLS? open the raw WS port instead:
+ufw allow 'Nginx Full'                           # 80 + 443, once you use Nginx/TLS
+
+# koko -> me: HTTP API (/infer, /session/start), restricted to koko's droplet:
+ufw allow from 134.122.115.15 to any port 8080
+
+# devices -> me: media WebSocket. Behind nginx/TLS (§8) you don't open 8765 directly;
+# for a quick no-TLS test, open it (ideally to the device's IP, or briefly to all):
 # ufw allow 8765
 ufw enable
+ufw status                                        # confirm the rules are active
 ```
+
+> Once you move the media WS behind nginx (§8), traffic arrives on 443 and 8765 stays
+> firewalled. Only open 8765 directly for a pre-TLS smoke test.
 
 ## 8. TLS + `wss://` (production) — needs a domain
 

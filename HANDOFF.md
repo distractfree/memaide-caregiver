@@ -130,6 +130,45 @@ Schemas are the source of truth: `src/memaide/service/schemas.py` (`InferRequest
 
 ## 3. What you must provide
 
+> **⚠️ TODO — production secrets not yet set.** The droplet (`67.205.153.42`) is currently
+> running on dev/test credentials. Before any real (non-demo) use, replace with
+> **production-level keys and config**:
+> - `OPENAI_API_KEY` — a production OpenAI key with appropriate rate/spend limits (not a
+>   personal dev key).
+> - `AI_AGENT_API_KEY` / `KOKO_API_KEY` — real shared secrets, rotated, matching koko's
+>   side. These now cross the public internet (koko is a **separate droplet**,
+>   `134.122.115.15:4000`), so they are mandatory, not optional.
+> - **WhatsApp caregiver alerts** — `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`,
+>   `WHATSAPP_TO`, plus an **approved** `WHATSAPP_TEMPLATE=fall_alert` (currently the
+>   placeholder `hello_world`). Provisioned from Meta's WhatsApp Cloud API dashboard; left
+>   commented-out in `/etc/memaide/memaide.env` until real credentials exist.
+> - **TLS** — move the public media WS + `/infer` behind `wss://`/`https://` with a real
+>   domain + Let's Encrypt cert before handling patient data (see deploy README §8).
+
+### TLS + domain checklist (do before real patient data / before exposing the device WS)
+
+Today everything is plaintext `http://`/`ws://`. Patient audio+video and health
+conversations must not cross the public internet unencrypted, and browsers/mobile refuse
+insecure `ws://` to non-localhost anyway. To fix, in order:
+
+1. **Register a domain** (any registrar), e.g. `memaide.<something>`.
+2. **DNS A record** → point that name at `67.205.153.42`. Confirm with `dig +short <domain>`.
+3. **Install nginx config**: `cp deploy/nginx-memaide.conf /etc/nginx/sites-available/memaide`,
+   symlink into `sites-enabled`, replace `YOUR_DOMAIN`, then `nginx -t && systemctl reload nginx`.
+4. **Issue the cert**: `apt install -y certbot python3-certbot-nginx` then
+   `certbot --nginx -d <domain>` (auto-fills the `:443` + cert lines).
+5. **Firewall**: `ufw allow 'Nginx Full'` (80+443); then **close the raw device port** —
+   `ufw delete allow 8765` — since the media WS now arrives via `wss://<domain>/` on 443.
+6. **Point Arian's app** at `wss://<domain>/` (not `ws://IP:8765`) and drop the
+   `usesCleartextTraffic` flag.
+
+Interim (dev/test only): the raw `ws://67.205.153.42:8765` path is opened in `ufw` **scoped
+to Arian's current test IP** (`ufw allow from <arian_ip> to any port 8765`) so his Android app
+can connect before TLS exists (Android needs `android:usesCleartextTraffic="true"`). Note this
+pins access to one network — if Arian's IP changes (mobile data / ISP rotation) the rule must
+be re-run with the new IP. This is a **temporary** measure — replace with `wss://` per the
+checklist above (and `ufw delete` the 8765 rule) before real use.
+
 - **`OPENAI_API_KEY`** (brain + vision describer). Optional `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID`
   / `WHATSAPP_TO` / `WHATSAPP_TEMPLATE` for alerts (documented in the README — no `.env.example`).
 - **A real `VisionCheck`** (`src/memaide/vision/rule_check.py`) — the default `StubVisionCheck` returns
