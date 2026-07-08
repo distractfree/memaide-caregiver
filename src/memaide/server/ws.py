@@ -49,7 +49,7 @@ class ServerDeps:
     # (patient carried in hello, no koko callbacks) so the bridge tester app still works.
     registry: Any = None
     reporter: Any = None
-    # Slice 2: when set, an escalation also sends the caregiver a WhatsApp fall alert.
+    # Slice 2: when set, an escalation also sends the caregiver a WhatsApp caregiver alert.
     # Default None -> no WhatsApp (dev / no key). Built by run_session_server.
     notifier: Any = None
 

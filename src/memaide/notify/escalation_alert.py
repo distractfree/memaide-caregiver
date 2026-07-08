@@ -1,4 +1,4 @@
-"""Build and send the caregiver WhatsApp fall alert on a live-session escalation.
+"""Build and send the caregiver WhatsApp alert on a live-session escalation.
 
 Turns an EscalationDecision into the 4-variable `caregiver_alert` template message. The blocking
 WhatsApp send is offloaded to a thread so it never stalls the session's event loop, and all
@@ -95,4 +95,4 @@ class EscalationNotifier:
                 self._sender.send_template, to, self._template, self._lang, variables
             )
         except Exception as exc:  # noqa: BLE001 - a notify must never crash the session
-            _log.warning("[notify] WhatsApp fall alert failed: %s", exc)
+            _log.warning("[notify] WhatsApp caregiver alert failed: %s", exc)

@@ -106,7 +106,7 @@ WHATSAPP_TO = os.environ.get("WHATSAPP_TO")
 WHATSAPP_TEMPLATE = os.environ.get("WHATSAPP_TEMPLATE", "hello_world")
 WHATSAPP_LANG = os.environ.get("WHATSAPP_LANG", "en_US")
 
-# --- Caregiver portal (for the {{4}} live-session link in fall-alert WhatsApps) ---
+# --- Caregiver portal (for the {{4}} live-session link in caregiver-alert WhatsApps) ---
 # Base URL of koko's caregiver portal + the path template to one live session.
 # NOTE: CONFIRM the exact path with koko — a wrong path yields a 404 in the caregiver's
 # message. Default path mirrors the template example (/session/<id>).

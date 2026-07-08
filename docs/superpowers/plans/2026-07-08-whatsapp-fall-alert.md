@@ -1,10 +1,10 @@
-# WhatsApp Fall Alert (Slice 2) Implementation Plan
+# WhatsApp Caregiver Alert (Slice 2) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** On a live-session escalation, the AI server sends the caregiver an approved 4-variable `fall_alert` WhatsApp message.
+**Goal:** On a live-session escalation, the AI server sends the caregiver an approved 4-variable `caregiver_alert` WhatsApp message.
 
-**Architecture:** Preserve structured caregiver info (name+phone) on `SessionContext`, add a standalone `EscalationNotifier` that maps escalation trigger codes to a caregiver-facing situation phrase and sends the `fall_alert` template (offloaded to a thread), and hook it into the existing once-per-session `on_escalation` closure in `server/ws.py`. Wired only when `WHATSAPP_TOKEN` is set.
+**Architecture:** Preserve structured caregiver info (name+phone) on `SessionContext`, add a standalone `EscalationNotifier` that maps escalation trigger codes to a caregiver-facing situation phrase and sends the `caregiver_alert` template (offloaded to a thread), and hook it into the existing once-per-session `on_escalation` closure in `server/ws.py`. Wired only when `WHATSAPP_TOKEN` is set.
 
 **Tech Stack:** Python 3, pydantic, FastAPI/uvicorn, `websockets`, pytest + pytest-asyncio (`asyncio_mode=auto`). WhatsApp send via the existing stdlib-`urllib` `WhatsAppSender`.
 
@@ -38,7 +38,7 @@ Add after the `WHATSAPP_LANG` line in `src/memaide/config.py`:
 
 ```python
 
-# --- Caregiver portal (for the {{4}} live-session link in fall-alert WhatsApps) ---
+# --- Caregiver portal (for the {{4}} live-session link in caregiver-alert WhatsApps) ---
 # Base URL of koko's caregiver portal + the path template to one live session.
 # NOTE: CONFIRM the exact path with koko — a wrong path yields a 404 in the caregiver's
 # message. Default path mirrors the template example (/session/<id>).
@@ -55,7 +55,7 @@ Expected: prints `/session/{id}`
 
 ```bash
 git add src/memaide/config.py
-git commit -m "feat: add caregiver portal URL config for fall-alert link"
+git commit -m "feat: add caregiver portal URL config for caregiver-alert link"
 ```
 
 ---
@@ -179,9 +179,9 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'memaide.notify.escala
 Create `src/memaide/notify/escalation_alert.py`:
 
 ```python
-"""Build and send the caregiver WhatsApp fall alert on a live-session escalation.
+"""Build and send the caregiver WhatsApp caregiver alert on a live-session escalation.
 
-Turns an EscalationDecision into the 4-variable `fall_alert` template message. The blocking
+Turns an EscalationDecision into the 4-variable `caregiver_alert` template message. The blocking
 WhatsApp send is offloaded to a thread so it never stalls the session's event loop, and all
 failures are logged and swallowed — a notify must never crash the session.
 """
@@ -261,7 +261,7 @@ class _FakeSender:
         return self._ok
 
 
-def _notifier(sender, template="fall_alert", fallback_to="+1999"):
+def _notifier(sender, template="caregiver_alert", fallback_to="+1999"):
     return EscalationNotifier(
         sender,
         template=template,
@@ -278,7 +278,7 @@ async def test_notify_builds_four_variables_and_uses_caregiver_phone():
     await _notifier(sender).notify("123", "John", cg, _decision(["vision:person_on_floor"]))
     to, template, lang, variables = sender.calls[-1]
     assert to == "+15551234567"
-    assert template == "fall_alert"
+    assert template == "caregiver_alert"
     assert variables == [
         "Anthony",
         "John",
@@ -337,7 +337,7 @@ Append to `src/memaide/notify/escalation_alert.py`:
 
 
 class EscalationNotifier:
-    """Sends the caregiver `fall_alert` WhatsApp for a live-session escalation."""
+    """Sends the caregiver `caregiver_alert` WhatsApp for a live-session escalation."""
 
     def __init__(
         self,
@@ -386,7 +386,7 @@ class EscalationNotifier:
         if self._template == "hello_world":
             _log.warning(
                 "WHATSAPP_TEMPLATE is still 'hello_world' (takes no variables); the "
-                "fall_alert send will be rejected. Set WHATSAPP_TEMPLATE=fall_alert."
+                "caregiver_alert send will be rejected. Set WHATSAPP_TEMPLATE=caregiver_alert."
             )
         to, variables = self._build(session_id, patient_name, caregiver, decision)
         if not to:
@@ -397,7 +397,7 @@ class EscalationNotifier:
                 self._sender.send_template, to, self._template, self._lang, variables
             )
         except Exception as exc:  # noqa: BLE001 - a notify must never crash the session
-            _log.warning("[notify] WhatsApp fall alert failed: %s", exc)
+            _log.warning("[notify] WhatsApp caregiver alert failed: %s", exc)
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -409,7 +409,7 @@ Expected: PASS (all 9 tests)
 
 ```bash
 git add src/memaide/notify/escalation_alert.py tests/test_escalation_alert.py
-git commit -m "feat: EscalationNotifier builds+sends 4-var fall_alert WhatsApp"
+git commit -m "feat: EscalationNotifier builds+sends 4-var caregiver_alert WhatsApp"
 ```
 
 ---
@@ -474,7 +474,7 @@ In `src/memaide/server/ws.py`, add the field right after `reporter: Any = None` 
 ```python
     registry: Any = None
     reporter: Any = None
-    # Slice 2: when set, an escalation also sends the caregiver a WhatsApp fall alert.
+    # Slice 2: when set, an escalation also sends the caregiver a WhatsApp caregiver alert.
     # Default None -> no WhatsApp (dev / no key). Built by run_session_server.
     notifier: Any = None
 ```
@@ -519,7 +519,7 @@ Expected: PASS (all, including the new test)
 
 ```bash
 git add src/memaide/server/ws.py tests/test_ws.py
-git commit -m "feat: send WhatsApp fall alert on live-session escalation"
+git commit -m "feat: send WhatsApp caregiver alert on live-session escalation"
 ```
 
 ---
@@ -615,7 +615,7 @@ git commit -m "feat: inject WhatsApp notifier into session server when token set
 
 ---
 
-### Task 7: Document the new env vars and the fall_alert switch
+### Task 7: Document the new env vars and the caregiver_alert switch
 
 **Files:**
 - Modify: `deploy/README.md` (WhatsApp / env section)
@@ -627,12 +627,12 @@ Find the WhatsApp env documentation in `deploy/README.md` (search for `WHATSAPP_
 
 ```markdown
 
-**Fall-alert WhatsApp (live-session escalation).** The AI server sends the caregiver an
-approved `fall_alert` template with 4 variables: {{1}} caregiver name, {{2}} patient name,
+**Caregiver-alert WhatsApp (live-session escalation).** The AI server sends the caregiver an
+approved `caregiver_alert` template with 4 variables: {{1}} caregiver name, {{2}} patient name,
 {{3}} situation phrase (derived from the escalation), {{4}} a link to the live session in
 koko's caregiver portal. To enable it:
 
-- Set `WHATSAPP_TEMPLATE=fall_alert` (the template is approved; `hello_world` takes no
+- Set `WHATSAPP_TEMPLATE=caregiver_alert` (the template is approved; `hello_world` takes no
   variables and will be rejected).
 - Set `CAREGIVER_PORTAL_BASE_URL` (e.g. `https://caregiver.guardianova.com`).
 - Set `CAREGIVER_SESSION_PATH` if koko's route differs from the default `/session/{id}`.
@@ -649,7 +649,7 @@ In `HANDOFF.md`, replace the WhatsApp env bullet (lines 172-173):
 
 ```markdown
 - **`OPENAI_API_KEY`** (brain + vision describer). For live-session caregiver alerts, set
-  `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_TO`, `WHATSAPP_TEMPLATE=fall_alert`
+  `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_TO`, `WHATSAPP_TEMPLATE=caregiver_alert`
   (4-var template: caregiver, patient, situation, session link), and `CAREGIVER_PORTAL_BASE_URL`
   (+ `CAREGIVER_SESSION_PATH` if koko's route differs from `/session/{id}`). Documented in the
   README — no `.env.example`.
@@ -664,7 +664,7 @@ Expected: only `deploy/README.md` and `HANDOFF.md` changed.
 
 ```bash
 git add deploy/README.md HANDOFF.md
-git commit -m "docs: document fall_alert WhatsApp env vars + portal URL"
+git commit -m "docs: document caregiver_alert WhatsApp env vars + portal URL"
 ```
 
 ---
@@ -689,7 +689,7 @@ Expected: PASS — all prior tests plus the new `test_escalation_alert.py` and t
 - Config additions → Task 1. ✓
 - Wiring (ServerDeps.notifier + ws on_escalation, once-per-session via existing guard) → Task 5. ✓
 - run_session_server builds notifier only when token set → Task 6. ✓
-- {{4}} 404 caveat + fall_alert switch documented → Tasks 1, 7. ✓
+- {{4}} 404 caveat + caregiver_alert switch documented → Tasks 1, 7. ✓
 - Text (`/infer`) path deferred → not implemented by design (spec "Out of scope"). ✓
 
 **Placeholder scan:** No TBD/TODO; every code step shows complete code. ✓

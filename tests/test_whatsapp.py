@@ -54,7 +54,7 @@ def test_send_template_with_variables_includes_body_components():
     poster = _FakePoster()
     ok = _sender(poster).send_template(
         "+15551234567",
-        "fall_alert",
+        "caregiver_alert",
         "en_US",
         variables=["Anthony", "John", "https://memaide.example/s/abc"],
     )
@@ -66,7 +66,7 @@ def test_send_template_with_variables_includes_body_components():
         "to": "+15551234567",
         "type": "template",
         "template": {
-            "name": "fall_alert",
+            "name": "caregiver_alert",
             "language": {"code": "en_US"},
             "components": [
                 {

@@ -1,4 +1,4 @@
-# WhatsApp fall alert from the AI server (Slice 2 live session)
+# WhatsApp caregiver alert from the AI server (Slice 2 live session)
 
 **Date:** 2026-07-08
 **Status:** Design approved, ready for implementation plan

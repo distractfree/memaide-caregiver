@@ -80,7 +80,7 @@ server reads these:
 | `WHATSAPP_TO` | optional | Verified test recipient |
 | `WHATSAPP_TEMPLATE` | optional | Defaults to `hello_world`; set `caregiver_alert` for live-session alerts |
 | `WHATSAPP_LANG` | optional | Defaults to `en_US`; the `caregiver_alert` template is `en`, so set `WHATSAPP_LANG=en` |
-| `CAREGIVER_PORTAL_BASE_URL` | for fall alerts | Base URL of koko's caregiver portal (e.g. `https://caregiver.guardianova.com`) — used for the `{{4}}` live-session link |
+| `CAREGIVER_PORTAL_BASE_URL` | for caregiver alerts | Base URL of koko's caregiver portal (e.g. `https://caregiver.guardianova.com`) — used for the `{{4}}` live-session link |
 | `CAREGIVER_SESSION_PATH` | optional | Path template to one session; defaults to `/session/{id}` |
 | `AI_AGENT_API_KEY` | **yes (cross-host)** | Shared secret koko sends as `X-Api-Key` on `/infer` + `/session/start`. Since koko is on a different droplet, this is **mandatory**, not optional — it's the only thing gating your public endpoints. Must match koko's `AI_AGENT_API_KEY`. |
 | `KOKO_BASE_URL` | **yes for live sessions** | koko's backend base URL — my server POSTs escalation + transcript callbacks here. Cross-host value: `http://134.122.115.15:4000`. Unset = callbacks are logged no-ops (standalone dev). |
