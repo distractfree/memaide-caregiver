@@ -95,14 +95,18 @@ type AiAgentStartPayload = {
     };
     notes?: string;
   };
-  vitals: AiAgentVitalPayload;
+  vitals: AiAgentVitalPayload | null;
   beacons: AiAgentBeaconPayload[];
 };
 
 type JsonRecord = Record<string, unknown>;
 
 export class AiAgentSessionStartError extends Error {
-  constructor(public readonly statusCode: 502 | 504) {
+  constructor(
+    public readonly statusCode: 502 | 504,
+    public readonly upstreamStatus?: number,
+    public readonly upstreamBody?: string
+  ) {
     super("AI backend session start failed");
     this.name = "AiAgentSessionStartError";
   }
@@ -251,9 +255,11 @@ function buildAiAgentStartPayload(
       },
       ...(notes ? { notes } : {}),
     },
+    // Send a valid vitals object when we have one, otherwise send null.
+    // Never send an empty object ({}), which the AI agent rejects as invalid.
     vitals:
       normalizeRequestVitals(input.vitals) ??
-      (latestDbVitals ? normalizeDbVitals(latestDbVitals) : {}),
+      (latestDbVitals ? normalizeDbVitals(latestDbVitals) : null),
     beacons: [
       ...normalizeRequestBeacons(input.beacons),
       ...normalizeDbBeacons(patient.beaconEvents ?? []),
@@ -281,18 +287,27 @@ function isRegisteredResponse(value: unknown): value is { status: "registered" }
 
 async function callAiAgentSessionStart(payload: AiAgentStartPayload) {
   const baseUrl = process.env.AI_AGENT_URL?.trim();
-  const apiKey = process.env.AI_AGENT_API_KEY?.trim();
+  // Anthony's backend originally named the shared secret AI_AGENT_API; we
+  // standardize on AI_AGENT_API_KEY but keep a safe fallback so a stale env
+  // name does not silently break the integration.
+  const apiKey = (process.env.AI_AGENT_API_KEY || process.env.AI_AGENT_API)?.trim();
   const websocketUrl = process.env.AI_AGENT_WS_URL?.trim();
 
   if (!baseUrl || !apiKey || !websocketUrl) {
+    console.error("[ai-session] AI agent is not fully configured", {
+      hasBaseUrl: Boolean(baseUrl),
+      hasApiKey: Boolean(apiKey),
+      hasWebsocketUrl: Boolean(websocketUrl),
+    });
     throw new AiAgentSessionStartError(502);
   }
 
+  const requestUrl = `${baseUrl.replace(/\/+$/, "")}/session/start`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), getAiAgentTimeoutMs());
 
   try {
-    const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/session/start`, {
+    const response = await fetch(requestUrl, {
       method: "POST",
       headers: {
         "X-Api-Key": apiKey,
@@ -302,19 +317,33 @@ async function callAiAgentSessionStart(payload: AiAgentStartPayload) {
       signal: controller.signal,
     });
 
-    if (response.status !== 200) {
-      throw new AiAgentSessionStartError(502);
-    }
-
+    // Read the body once so it can be used for both parsing and diagnostics.
     let responseBody: unknown;
+    let upstreamBody = "";
     try {
       responseBody = await response.json();
+      upstreamBody = JSON.stringify(responseBody);
     } catch {
-      throw new AiAgentSessionStartError(502);
+      responseBody = undefined;
+      upstreamBody = "<non-JSON or empty response body>";
+    }
+
+    if (response.status !== 200) {
+      console.error("[ai-session] AI agent returned a non-200 response", {
+        url: requestUrl,
+        upstreamStatus: response.status,
+        upstreamBody,
+      });
+      throw new AiAgentSessionStartError(502, response.status, upstreamBody);
     }
 
     if (!isRegisteredResponse(responseBody)) {
-      throw new AiAgentSessionStartError(502);
+      console.error("[ai-session] AI agent did not confirm registration", {
+        url: requestUrl,
+        upstreamStatus: response.status,
+        upstreamBody,
+      });
+      throw new AiAgentSessionStartError(502, response.status, upstreamBody);
     }
   } catch (error) {
     if (error instanceof AiAgentSessionStartError) {
@@ -322,9 +351,17 @@ async function callAiAgentSessionStart(payload: AiAgentStartPayload) {
     }
 
     if (isAbortError(error) || controller.signal.aborted) {
+      console.error("[ai-session] AI agent session start timed out", {
+        url: requestUrl,
+        timeoutMs: getAiAgentTimeoutMs(),
+      });
       throw new AiAgentSessionStartError(504);
     }
 
+    console.error("[ai-session] AI agent session start network error", {
+      url: requestUrl,
+      error: error instanceof Error ? error.message : String(error),
+    });
     throw new AiAgentSessionStartError(502);
   } finally {
     clearTimeout(timeout);

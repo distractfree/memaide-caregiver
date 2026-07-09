@@ -87,10 +87,24 @@ export const startMobileSession = async (req: Request, res: Response, next: Next
     res.status(200).json(data);
   } catch (error) {
     if (error instanceof aiSessionService.AiAgentSessionStartError) {
-      return res.status(error.statusCode).json({
+      const responseBody: Record<string, unknown> = {
         success: false,
         message: "AI backend session start failed",
-      });
+      };
+
+      // Outside production, surface safe upstream diagnostics (never the API key)
+      // so integration issues can be debugged from the response itself.
+      if (
+        process.env.NODE_ENV !== "production" &&
+        error.upstreamStatus !== undefined
+      ) {
+        responseBody.details = {
+          upstreamStatus: error.upstreamStatus,
+          upstreamBody: error.upstreamBody,
+        };
+      }
+
+      return res.status(error.statusCode).json(responseBody);
     }
     next(error);
   }

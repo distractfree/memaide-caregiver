@@ -25,6 +25,7 @@ export const startAiSessionSchema = z.object({
   deviceId: z.string().min(1, "deviceId is required"),
   helpEventId: z.string().cuid("Invalid helpEventId format").optional(),
   sourceDevice: z.enum(["phone", "watch", "system"]).optional().default("phone"),
+  // Accept an omitted vitals field, an explicit null, or a valid vitals object.
   vitals: z
     .object({
       heart_rate: z.number().int().min(30).max(220).optional(),
@@ -32,7 +33,7 @@ export const startAiSessionSchema = z.object({
       step_count: z.number().int().nonnegative().optional(),
       timestamp: z.string().datetime(),
     })
-    .optional(),
+    .nullish(),
   beacons: z
     .array(
       z.object({

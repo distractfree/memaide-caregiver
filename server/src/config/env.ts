@@ -27,6 +27,16 @@ const envSchema = z.object({
   ADMIN_PASSWORD: z.string().optional(),
   ADMIN_JWT_SECRET: z.string().min(16, "ADMIN_JWT_SECRET must be at least 16 characters").default("admin-secret-replace-in-production"),
   ADMIN_JWT_EXPIRES_IN: z.string().default("8h"),
+
+  // AI Agent (Anthony) backend integration.
+  // AI_AGENT_API is a legacy alias for AI_AGENT_API_KEY; the service falls back
+  // to it, but new deployments should set AI_AGENT_API_KEY.
+  AI_AGENT_URL: z.string().url().optional(),
+  AI_AGENT_WS_URL: z.string().optional(),
+  AI_AGENT_API_KEY: z.string().optional(),
+  AI_AGENT_API: z.string().optional(),
+  AI_AGENT_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
+  AI_CALLBACK_API_KEY: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

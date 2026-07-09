@@ -287,9 +287,14 @@ describe("AI Sessions (Backend Implementation)", () => {
       });
 
       expect(res.status).toBe(502);
+      // Non-production responses include safe upstream diagnostics (no API key).
       expect(res.body).toEqual({
         success: false,
         message: "AI backend session start failed",
+        details: {
+          upstreamStatus: statusCode,
+          upstreamBody: expect.any(String),
+        },
       });
       expect(p.aiSession.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -430,6 +435,78 @@ describe("AI Sessions (Backend Implementation)", () => {
         estimated_distance_m: 2.4,
         exited_at: null,
       });
+    });
+
+    it("accepts an explicit null vitals field", async () => {
+      const fetchMock = setupSuccessfulAiStart();
+
+      const res = await request(app).post("/api/mobile/ai-sessions/start").send({
+        deviceId,
+        vitals: null,
+        beacons: [],
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("accepts an omitted vitals field", async () => {
+      const fetchMock = setupSuccessfulAiStart();
+
+      const res = await request(app).post("/api/mobile/ai-sessions/start").send({
+        deviceId,
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("accepts a valid vitals object", async () => {
+      setupSuccessfulAiStart();
+
+      const res = await request(app).post("/api/mobile/ai-sessions/start").send({
+        deviceId,
+        vitals: startVitals,
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+    });
+
+    it("rejects a malformed vitals object with 400", async () => {
+      p.patient.findUnique.mockResolvedValue(patientContext);
+
+      const res = await request(app).post("/api/mobile/ai-sessions/start").send({
+        deviceId,
+        // heart_rate out of range and required timestamp missing.
+        vitals: { heart_rate: 500 },
+      });
+
+      expect(res.status).toBe(400);
+      expect(p.aiSession.create).not.toHaveBeenCalled();
+    });
+
+    it("sends vitals: null to Anthony when no vitals are available", async () => {
+      // Patient with no stored vitals, and no vitals in the request.
+      p.patient.findUnique.mockResolvedValue({ ...patientContext, vitalEvents: [] });
+      p.aiSession.create.mockResolvedValue({ id: aiSessionId });
+      p.aiSession.update.mockResolvedValue({ id: aiSessionId, status: "active" });
+      const fetchMock = mockAiAgentResponse(200);
+
+      const res = await request(app).post("/api/mobile/ai-sessions/start").send({
+        deviceId,
+      });
+
+      expect(res.status).toBe(200);
+      const [, requestOptions] = fetchMock.mock.calls[0];
+      const anthonyBody = JSON.parse(String(requestOptions.body));
+      expect(anthonyBody.vitals).toBeNull();
+      expect(anthonyBody.session_id).toBe(aiSessionId);
+      expect(anthonyBody.patient.patient_id).toBe(patientId);
+      expect(anthonyBody.patient.name).toBe("Mary Johnson");
+      expect(Array.isArray(anthonyBody.beacons)).toBe(true);
     });
 
     it("should return initial scripted messages", async () => {
