@@ -420,11 +420,9 @@ describe("AI Sessions (Backend Implementation)", () => {
       );
       expect(anthonyBody.patient.medications).toEqual([
         {
-          id: "reminder-medication",
-          type: "medication",
-          description: "Take morning medication",
-          time_of_day: "08:00",
-          frequency: "daily",
+          name: "Take morning medication",
+          schedule: "08:00 daily",
+          active: true,
         },
       ]);
       expect(anthonyBody.beacons[0]).toEqual(startBeacon);
@@ -507,6 +505,82 @@ describe("AI Sessions (Backend Implementation)", () => {
       expect(anthonyBody.patient.patient_id).toBe(patientId);
       expect(anthonyBody.patient.name).toBe("Mary Johnson");
       expect(Array.isArray(anthonyBody.beacons)).toBe(true);
+    });
+
+    it("maps active reminders to Anthony medication objects with name, schedule, active", async () => {
+      p.patient.findUnique.mockResolvedValue({
+        ...patientContext,
+        reminders: [
+          {
+            id: "reminder-1",
+            type: "medication",
+            description: "take your medication",
+            timeOfDay: "10:18",
+            frequency: "daily",
+          },
+        ],
+      });
+      p.aiSession.create.mockResolvedValue({ id: aiSessionId });
+      p.aiSession.update.mockResolvedValue({ id: aiSessionId, status: "active" });
+      const fetchMock = mockAiAgentResponse(200);
+
+      const res = await request(app).post("/api/mobile/ai-sessions/start").send({
+        deviceId,
+      });
+
+      expect(res.status).toBe(200);
+      const [, requestOptions] = fetchMock.mock.calls[0];
+      const anthonyBody = JSON.parse(String(requestOptions.body));
+      expect(anthonyBody.patient.medications).toEqual([
+        {
+          name: "take your medication",
+          schedule: "10:18 daily",
+          active: true,
+        },
+      ]);
+    });
+
+    it("never sends a medication object without a name", async () => {
+      p.patient.findUnique.mockResolvedValue({
+        ...patientContext,
+        reminders: [
+          // No description and no type: must still produce a named fallback.
+          {
+            id: "reminder-blank",
+            type: "",
+            description: "",
+            timeOfDay: "09:00",
+            frequency: "weekly",
+          },
+        ],
+      });
+      p.aiSession.create.mockResolvedValue({ id: aiSessionId });
+      p.aiSession.update.mockResolvedValue({ id: aiSessionId, status: "active" });
+      const fetchMock = mockAiAgentResponse(200);
+
+      await request(app).post("/api/mobile/ai-sessions/start").send({ deviceId });
+
+      const [, requestOptions] = fetchMock.mock.calls[0];
+      const anthonyBody = JSON.parse(String(requestOptions.body));
+      expect(anthonyBody.patient.medications).toHaveLength(1);
+      for (const medication of anthonyBody.patient.medications) {
+        expect(typeof medication.name).toBe("string");
+        expect(medication.name.length).toBeGreaterThan(0);
+      }
+      expect(anthonyBody.patient.medications[0].name).toBe("Medication reminder");
+    });
+
+    it("sends medications: [] when there are no active reminders", async () => {
+      p.patient.findUnique.mockResolvedValue({ ...patientContext, reminders: [] });
+      p.aiSession.create.mockResolvedValue({ id: aiSessionId });
+      p.aiSession.update.mockResolvedValue({ id: aiSessionId, status: "active" });
+      const fetchMock = mockAiAgentResponse(200);
+
+      await request(app).post("/api/mobile/ai-sessions/start").send({ deviceId });
+
+      const [, requestOptions] = fetchMock.mock.calls[0];
+      const anthonyBody = JSON.parse(String(requestOptions.body));
+      expect(anthonyBody.patient.medications).toEqual([]);
     });
 
     it("should return initial scripted messages", async () => {

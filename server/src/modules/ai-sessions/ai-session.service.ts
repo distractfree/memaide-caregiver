@@ -66,6 +66,13 @@ type AiAgentVitalPayload = {
   timestamp?: string | null;
 };
 
+type AiAgentMedicationPayload = {
+  name: string;
+  dose?: string | null;
+  schedule: string;
+  active: boolean;
+};
+
 type AiAgentBeaconPayload = {
   room: string;
   detected_at: string;
@@ -81,13 +88,7 @@ type AiAgentStartPayload = {
     name: string;
     preferred_name: string;
     known_conditions: string[];
-    medications: Array<{
-      id: string;
-      type: string;
-      description: string;
-      time_of_day: string;
-      frequency: string;
-    }>;
+    medications: AiAgentMedicationPayload[];
     caregiver: {
       id: string;
       name: string;
@@ -202,6 +203,36 @@ function normalizeDbBeacons(
   }));
 }
 
+function normalizeReminderMedications(
+  reminders: PatientContext["reminders"]
+): AiAgentMedicationPayload[] {
+  return (reminders ?? [])
+    .map((reminder): AiAgentMedicationPayload | null => {
+      const name =
+        reminder.description?.trim() ||
+        reminder.type?.trim() ||
+        "Medication reminder";
+
+      // Anthony rejects medication items without a name; the fallback above
+      // guarantees one, but guard defensively so we never send a nameless item.
+      if (!name) return null;
+
+      const schedule = [reminder.timeOfDay, reminder.frequency]
+        .map((part) => part?.trim())
+        .filter((part): part is string => Boolean(part))
+        .join(" ");
+
+      return {
+        name,
+        schedule,
+        active: true,
+      };
+    })
+    .filter((medication): medication is AiAgentMedicationPayload =>
+      medication !== null
+    );
+}
+
 function buildPatientNotes(patient: PatientContext) {
   const helpHistory = (patient.helpEvents ?? [])
     .map(
@@ -241,13 +272,7 @@ function buildAiAgentStartPayload(
       name: patient.name,
       preferred_name: patient.name,
       known_conditions: [],
-      medications: (patient.reminders ?? []).map((reminder) => ({
-        id: reminder.id,
-        type: reminder.type,
-        description: reminder.description,
-        time_of_day: reminder.timeOfDay,
-        frequency: reminder.frequency,
-      })),
+      medications: normalizeReminderMedications(patient.reminders),
       caregiver: {
         id: patient.caregiver?.id ?? "",
         name: patient.caregiver?.name ?? "",
