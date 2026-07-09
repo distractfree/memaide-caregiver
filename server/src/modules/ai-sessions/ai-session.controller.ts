@@ -54,13 +54,44 @@ export const caregiverResolveSession = async (req: Request, res: Response, next:
   }
 };
 
+// AI BACKEND CALLBACK CONTROLLERS
+export const handleEscalationCallback = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { sessionId } = req.params;
+    const input = schemas.aiSessionEscalationCallbackSchema.parse(req.body);
+
+    await aiSessionService.recordEscalationCallback(sessionId, input);
+    res.status(200).json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const handleConcludeCallback = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { sessionId } = req.params;
+    const input = schemas.aiSessionConcludeCallbackSchema.parse(req.body);
+
+    await aiSessionService.recordConcludeCallback(sessionId, input);
+    res.status(200).json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // MOBILE CONTROLLERS
 export const startMobileSession = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const validatedData = schemas.startAiSessionSchema.parse(req.body);
     const data = await aiSessionService.startAiSession(validatedData);
-    res.status(201).json({ success: true, data });
+    res.status(200).json(data);
   } catch (error) {
+    if (error instanceof aiSessionService.AiAgentSessionStartError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: "AI backend session start failed",
+      });
+    }
     next(error);
   }
 };

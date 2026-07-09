@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const AI_SESSION_STATUSES = [
+  "starting",
   "active",
   "caregiver_joined",
   "backup_suggested",
@@ -9,6 +10,7 @@ export const AI_SESSION_STATUSES = [
   "resolved",
   "cancelled",
   "error",
+  "start_failed",
 ] as const;
 
 export const AI_MESSAGE_SENDER_TYPES = [
@@ -23,6 +25,26 @@ export const startAiSessionSchema = z.object({
   deviceId: z.string().min(1, "deviceId is required"),
   helpEventId: z.string().cuid("Invalid helpEventId format").optional(),
   sourceDevice: z.enum(["phone", "watch", "system"]).optional().default("phone"),
+  vitals: z
+    .object({
+      heart_rate: z.number().int().min(30).max(220).optional(),
+      motion_state: z.enum(["idle", "walking", "active", "unknown"]).optional(),
+      step_count: z.number().int().nonnegative().optional(),
+      timestamp: z.string().datetime(),
+    })
+    .optional(),
+  beacons: z
+    .array(
+      z.object({
+        room: z.string().trim().min(1, "room is required"),
+        detected_at: z.string().datetime(),
+        dwell_seconds: z.number().int().nonnegative().nullable().optional(),
+        estimated_distance_m: z.number().nonnegative().nullable().optional(),
+        exited_at: z.string().datetime().nullable().optional(),
+      })
+    )
+    .optional()
+    .default([]),
 });
 
 export const addAiSessionMessageSchema = z.object({
@@ -45,3 +67,40 @@ export const listCaregiverAiSessionsSchema = z.object({
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
 });
+
+const callbackDateTimeSchema = z.string().datetime({ offset: true });
+
+export const aiSessionEscalationCallbackSchema = z.object({
+  reason: z.string().trim().min(1, "reason is required"),
+  triggered_by: z.array(z.string().trim().min(1)).default([]),
+});
+
+export const aiSessionConcludeCallbackSchema = z.object({
+  id: z.string().trim().min(1),
+  patient_id: z.string().trim().min(1),
+  related_caretaker_id: z.string().trim().min(1).nullable().optional(),
+  started_at: callbackDateTimeSchema,
+  ended_at: callbackDateTimeSchema,
+  handoff_at: callbackDateTimeSchema.nullable().optional(),
+  handoff_type: z.string().trim().min(1).nullable().optional(),
+  transcript: z.array(
+    z.object({
+      role: z.string().trim().min(1),
+      text: z.string(),
+      ts: callbackDateTimeSchema,
+      scene_label: z.string().nullable().optional(),
+    })
+  ),
+  final_scene_label: z.string().nullable().optional(),
+  escalated: z.boolean(),
+  status: z.string().trim().min(1),
+  outcome: z.string().trim().min(1),
+});
+
+export type StartAiSessionInput = z.infer<typeof startAiSessionSchema>;
+export type AiSessionEscalationCallbackInput = z.infer<
+  typeof aiSessionEscalationCallbackSchema
+>;
+export type AiSessionConcludeCallbackInput = z.infer<
+  typeof aiSessionConcludeCallbackSchema
+>;

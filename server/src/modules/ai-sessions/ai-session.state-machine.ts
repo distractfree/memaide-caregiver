@@ -5,6 +5,7 @@ export type AiSessionStatus = typeof AI_SESSION_STATUSES[number];
 
 // Record of valid transitions: Record<currentStatus, validNextStatuses[]>
 const VALID_TRANSITIONS: Record<AiSessionStatus, AiSessionStatus[]> = {
+  starting: ["active", "start_failed", "error"],
   active: [
     "caregiver_joined",
     "backup_suggested",
@@ -20,6 +21,7 @@ const VALID_TRANSITIONS: Record<AiSessionStatus, AiSessionStatus[]> = {
   resolved: [],
   cancelled: [],
   error: [],
+  start_failed: [],
 };
 
 export function validateTransition(currentStatus: AiSessionStatus, nextStatus: AiSessionStatus): void {

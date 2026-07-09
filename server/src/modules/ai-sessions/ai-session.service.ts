@@ -2,53 +2,619 @@ import { prisma } from "../../lib/prisma";
 import { AppError } from "../../middleware/error.middleware";
 import { SCRIPTED_MESSAGES, determineNextAiMessage } from "./ai-session.messages";
 import { validateTransition, AiSessionStatus } from "./ai-session.state-machine";
-export async function startAiSession(data: { deviceId: string, helpEventId?: string, sourceDevice?: string }) {
-  // Find the patient by device id.
-  const patient = await prisma.patient.findUnique({
-    where: { deviceId: data.deviceId },
-  });
+import type {
+  AiSessionConcludeCallbackInput,
+  AiSessionEscalationCallbackInput,
+  StartAiSessionInput,
+} from "./ai-session.schemas";
 
-  if (!patient) {
-    throw new AppError(404, "Patient not found for this device");
+type PatientContext = {
+  id: string;
+  name: string;
+  phoneNumber?: string | null;
+  deviceId?: string | null;
+  caregiver?: {
+    id: string;
+    name: string;
+  } | null;
+  reminders?: Array<{
+    id: string;
+    type: string;
+    description: string;
+    timeOfDay: string;
+    frequency: string;
+  }>;
+  helpContacts?: Array<{
+    whatsappNumber: string;
+    label: string;
+  }>;
+  vitalEvents?: Array<{
+    timestamp: Date | string;
+    heartRate: number | null;
+    motionState: string | null;
+    stepCount: number | null;
+  }>;
+  beaconEvents?: Array<{
+    roomName: string;
+    detectedAt: Date | string;
+    exitedAt: Date | string | null;
+    dwellSeconds: number | null;
+    estimatedDistanceM: number | null;
+  }>;
+  helpEvents?: Array<{
+    id: string;
+    triggeredAt: Date | string;
+    sourceDevice: string;
+    status: string;
+  }>;
+  aiSessions?: Array<{
+    id: string;
+    status: string;
+    startedAt: Date | string;
+    endedAt: Date | string | null;
+    summary: string | null;
+  }>;
+};
+
+type PatientVitalEvent = NonNullable<PatientContext["vitalEvents"]>[number];
+type PatientBeaconEvent = NonNullable<PatientContext["beaconEvents"]>[number];
+
+type AiAgentVitalPayload = {
+  heart_rate?: number | null;
+  motion_state?: string | null;
+  step_count?: number | null;
+  timestamp?: string | null;
+};
+
+type AiAgentBeaconPayload = {
+  room: string;
+  detected_at: string;
+  dwell_seconds: number | null;
+  estimated_distance_m: number | null;
+  exited_at: string | null;
+};
+
+type AiAgentStartPayload = {
+  session_id: string;
+  patient: {
+    patient_id: string;
+    name: string;
+    preferred_name: string;
+    known_conditions: string[];
+    medications: Array<{
+      id: string;
+      type: string;
+      description: string;
+      time_of_day: string;
+      frequency: string;
+    }>;
+    caregiver: {
+      id: string;
+      name: string;
+      phone: string;
+    };
+    notes?: string;
+  };
+  vitals: AiAgentVitalPayload;
+  beacons: AiAgentBeaconPayload[];
+};
+
+type JsonRecord = Record<string, unknown>;
+
+export class AiAgentSessionStartError extends Error {
+  constructor(public readonly statusCode: 502 | 504) {
+    super("AI backend session start failed");
+    this.name = "AiAgentSessionStartError";
+  }
+}
+
+function toIsoString(value: Date | string | null | undefined) {
+  if (!value) return null;
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+function asJsonRecord(value: unknown): JsonRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
   }
 
-  // Check the help event if one was sent.
-  if (data.helpEventId) {
+  return value as JsonRecord;
+}
+
+function isTerminalStatus(status: string) {
+  return (
+    status === "resolved" ||
+    status === "cancelled" ||
+    status === "error" ||
+    status === "start_failed"
+  );
+}
+
+function mapTranscriptSenderType(role: string) {
+  const normalizedRole = role.trim().toLowerCase();
+
+  if (normalizedRole === "agent" || normalizedRole === "assistant" || normalizedRole === "ai") {
+    return "ai";
+  }
+
+  if (normalizedRole === "patient" || normalizedRole === "user") {
+    return "patient";
+  }
+
+  if (normalizedRole === "caregiver" || normalizedRole === "caretaker") {
+    return "caregiver";
+  }
+
+  if (normalizedRole === "system") {
+    return "system";
+  }
+
+  return "event";
+}
+
+function normalizeRequestVitals(
+  vitals: StartAiSessionInput["vitals"]
+): AiAgentVitalPayload | null {
+  if (!vitals) return null;
+
+  return {
+    heart_rate: vitals.heart_rate ?? null,
+    motion_state: vitals.motion_state ?? null,
+    step_count: vitals.step_count ?? null,
+    timestamp: vitals.timestamp,
+  };
+}
+
+function normalizeDbVitals(vitalEvent: PatientVitalEvent): AiAgentVitalPayload {
+  return {
+    heart_rate: vitalEvent.heartRate,
+    motion_state: vitalEvent.motionState,
+    step_count: vitalEvent.stepCount,
+    timestamp: toIsoString(vitalEvent.timestamp),
+  };
+}
+
+function normalizeRequestBeacons(
+  beacons: StartAiSessionInput["beacons"] | undefined
+): AiAgentBeaconPayload[] {
+  return (beacons ?? []).map((beacon) => ({
+    room: beacon.room,
+    detected_at: beacon.detected_at,
+    dwell_seconds: beacon.dwell_seconds ?? null,
+    estimated_distance_m: beacon.estimated_distance_m ?? null,
+    exited_at: beacon.exited_at ?? null,
+  }));
+}
+
+function normalizeDbBeacons(
+  beaconEvents: PatientBeaconEvent[]
+): AiAgentBeaconPayload[] {
+  return beaconEvents.map((event) => ({
+    room: event.roomName,
+    detected_at: toIsoString(event.detectedAt) ?? "",
+    dwell_seconds: event.dwellSeconds,
+    estimated_distance_m: event.estimatedDistanceM,
+    exited_at: toIsoString(event.exitedAt),
+  }));
+}
+
+function buildPatientNotes(patient: PatientContext) {
+  const helpHistory = (patient.helpEvents ?? [])
+    .map(
+      (event) =>
+        `${event.status} via ${event.sourceDevice} at ${toIsoString(event.triggeredAt)}`
+    )
+    .join("; ");
+
+  const sessionHistory = (patient.aiSessions ?? [])
+    .map(
+      (session) =>
+        `${session.status} session ${session.id} started ${toIsoString(session.startedAt)}`
+    )
+    .join("; ");
+
+  const notes = [
+    helpHistory ? `Recent help history: ${helpHistory}` : null,
+    sessionHistory ? `Recent AI session history: ${sessionHistory}` : null,
+  ].filter((note): note is string => Boolean(note));
+
+  return notes.length > 0 ? notes.join(" ") : undefined;
+}
+
+function buildAiAgentStartPayload(
+  sessionId: string,
+  patient: PatientContext,
+  input: StartAiSessionInput
+): AiAgentStartPayload {
+  const activeHelpContact = patient.helpContacts?.[0];
+  const latestDbVitals = patient.vitalEvents?.[0];
+  const notes = buildPatientNotes(patient);
+
+  return {
+    session_id: sessionId,
+    patient: {
+      patient_id: patient.id,
+      name: patient.name,
+      preferred_name: patient.name,
+      known_conditions: [],
+      medications: (patient.reminders ?? []).map((reminder) => ({
+        id: reminder.id,
+        type: reminder.type,
+        description: reminder.description,
+        time_of_day: reminder.timeOfDay,
+        frequency: reminder.frequency,
+      })),
+      caregiver: {
+        id: patient.caregiver?.id ?? "",
+        name: patient.caregiver?.name ?? "",
+        phone: activeHelpContact?.whatsappNumber ?? "",
+      },
+      ...(notes ? { notes } : {}),
+    },
+    vitals:
+      normalizeRequestVitals(input.vitals) ??
+      (latestDbVitals ? normalizeDbVitals(latestDbVitals) : {}),
+    beacons: [
+      ...normalizeRequestBeacons(input.beacons),
+      ...normalizeDbBeacons(patient.beaconEvents ?? []),
+    ],
+  };
+}
+
+function getAiAgentTimeoutMs() {
+  const parsed = Number(process.env.AI_AGENT_TIMEOUT_MS ?? "5000");
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 5000;
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function isRegisteredResponse(value: unknown): value is { status: "registered" } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "status" in value &&
+    (value as { status?: unknown }).status === "registered"
+  );
+}
+
+async function callAiAgentSessionStart(payload: AiAgentStartPayload) {
+  const baseUrl = process.env.AI_AGENT_URL?.trim();
+  const apiKey = process.env.AI_AGENT_API_KEY?.trim();
+  const websocketUrl = process.env.AI_AGENT_WS_URL?.trim();
+
+  if (!baseUrl || !apiKey || !websocketUrl) {
+    throw new AiAgentSessionStartError(502);
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), getAiAgentTimeoutMs());
+
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/session/start`, {
+      method: "POST",
+      headers: {
+        "X-Api-Key": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    if (response.status !== 200) {
+      throw new AiAgentSessionStartError(502);
+    }
+
+    let responseBody: unknown;
+    try {
+      responseBody = await response.json();
+    } catch {
+      throw new AiAgentSessionStartError(502);
+    }
+
+    if (!isRegisteredResponse(responseBody)) {
+      throw new AiAgentSessionStartError(502);
+    }
+  } catch (error) {
+    if (error instanceof AiAgentSessionStartError) {
+      throw error;
+    }
+
+    if (isAbortError(error) || controller.signal.aborted) {
+      throw new AiAgentSessionStartError(504);
+    }
+
+    throw new AiAgentSessionStartError(502);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function markAiSessionStartFailed(sessionId: string, statusCode: 502 | 504) {
+  try {
+    await prisma.aiSession.update({
+      where: { id: sessionId },
+      data: {
+        status: "start_failed",
+        endedAt: new Date(),
+        metadata: {
+          aiAgentStartFailedAt: new Date().toISOString(),
+          upstreamStatusCode: statusCode,
+        },
+      },
+    });
+  } catch {
+    // Best effort: the API response should still reflect the upstream start failure.
+  }
+}
+
+export async function startAiSession(input: StartAiSessionInput) {
+  const patient = (await prisma.patient.findUnique({
+    where: { deviceId: input.deviceId },
+    select: {
+      id: true,
+      name: true,
+      phoneNumber: true,
+      deviceId: true,
+      caregiver: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      reminders: {
+        where: { active: true },
+        select: {
+          id: true,
+          type: true,
+          description: true,
+          timeOfDay: true,
+          frequency: true,
+        },
+        orderBy: { timeOfDay: "asc" },
+      },
+      helpContacts: {
+        where: { active: true },
+        select: {
+          whatsappNumber: true,
+          label: true,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+      vitalEvents: {
+        select: {
+          timestamp: true,
+          heartRate: true,
+          motionState: true,
+          stepCount: true,
+        },
+        orderBy: { timestamp: "desc" },
+        take: 1,
+      },
+      beaconEvents: {
+        select: {
+          roomName: true,
+          detectedAt: true,
+          exitedAt: true,
+          dwellSeconds: true,
+          estimatedDistanceM: true,
+        },
+        orderBy: [{ detectedAt: "desc" }, { createdAt: "desc" }],
+        take: 5,
+      },
+      helpEvents: {
+        select: {
+          id: true,
+          triggeredAt: true,
+          sourceDevice: true,
+          status: true,
+        },
+        orderBy: { triggeredAt: "desc" },
+        take: 5,
+      },
+      aiSessions: {
+        select: {
+          id: true,
+          status: true,
+          startedAt: true,
+          endedAt: true,
+          summary: true,
+        },
+        orderBy: { startedAt: "desc" },
+        take: 5,
+      },
+    },
+  })) as PatientContext | null;
+
+  if (!patient) {
+    throw new AppError(404, "No patient found for this device", "NOT_FOUND");
+  }
+
+  if (input.helpEventId) {
     const helpEvent = await prisma.helpEvent.findUnique({
-      where: { id: data.helpEventId },
+      where: { id: input.helpEventId },
     });
     if (!helpEvent || helpEvent.patientId !== patient.id) {
       throw new AppError(404, "Help event not found or does not belong to this patient");
     }
   }
 
-  // Create the session with its first messages.
   const session = await prisma.aiSession.create({
     data: {
       patientId: patient.id,
-      helpEventId: data.helpEventId || null,
-      status: "active",
-      messages: {
-        create: [
-          { senderType: "system", message: SCRIPTED_MESSAGES.system.started },
-          { senderType: "ai", message: SCRIPTED_MESSAGES.ai.greeting },
-          { senderType: "ai", message: SCRIPTED_MESSAGES.ai.promptWhatHappened },
-        ]
-      }
+      helpEventId: input.helpEventId || null,
+      status: "starting",
+      metadata: {
+        sourceDevice: input.sourceDevice,
+        aiAgentStartRequestedAt: new Date().toISOString(),
+      },
     },
-    include: {
-      messages: { orderBy: { createdAt: 'asc' } }
-    }
+    select: {
+      id: true,
+    },
+  });
+
+  const payload = buildAiAgentStartPayload(session.id, patient, input);
+
+  try {
+    await callAiAgentSessionStart(payload);
+  } catch (error) {
+    const startError =
+      error instanceof AiAgentSessionStartError
+        ? error
+        : new AiAgentSessionStartError(502);
+    await markAiSessionStartFailed(session.id, startError.statusCode);
+    throw startError;
+  }
+
+  await prisma.aiSession.update({
+    where: { id: session.id },
+    data: {
+      status: "active",
+      metadata: {
+        sourceDevice: input.sourceDevice,
+        aiAgentStartRequestedAt: new Date().toISOString(),
+        aiAgentRegisteredAt: new Date().toISOString(),
+      },
+    },
   });
 
   return {
-    id: session.id,
-    patientId: session.patientId,
-    helpEventId: session.helpEventId,
-    status: session.status,
-    startedAt: session.startedAt,
-    initialMessages: session.messages
+    success: true,
+    sessionId: session.id,
+    websocketUrl: process.env.AI_AGENT_WS_URL,
+    helloMessage: {
+      type: "hello" as const,
+      session_id: session.id,
+    },
   };
+}
+
+export async function recordEscalationCallback(
+  sessionId: string,
+  input: AiSessionEscalationCallbackInput
+) {
+  const session = await prisma.aiSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      id: true,
+      status: true,
+      emergencySuggestedAt: true,
+      metadata: true,
+    },
+  });
+
+  if (!session) {
+    throw new AppError(404, "Session not found", "NOT_FOUND");
+  }
+
+  const receivedAt = new Date();
+  const escalationMetadata = {
+    reason: input.reason,
+    triggered_by: input.triggered_by,
+    received_at: receivedAt.toISOString(),
+  };
+
+  await prisma.aiSession.update({
+    where: { id: sessionId },
+    data: {
+      status: isTerminalStatus(session.status) ? session.status : "emergency_suggested",
+      emergencySuggestedAt: session.emergencySuggestedAt ?? receivedAt,
+      metadata: {
+        ...asJsonRecord(session.metadata),
+        aiEscalation: escalationMetadata,
+      },
+    },
+  });
+
+  await prisma.aiSessionMessage.create({
+    data: {
+      aiSessionId: sessionId,
+      senderType: "event",
+      message: `AI escalation requested: ${input.reason}`,
+      metadata: {
+        type: "ai_escalation",
+        ...escalationMetadata,
+      },
+    },
+  });
+
+  return { success: true };
+}
+
+export async function recordConcludeCallback(
+  sessionId: string,
+  input: AiSessionConcludeCallbackInput
+) {
+  const session = await prisma.aiSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      id: true,
+      status: true,
+      metadata: true,
+    },
+  });
+
+  if (!session) {
+    throw new AppError(404, "Session not found", "NOT_FOUND");
+  }
+
+  const concludedAt = new Date();
+  const endedAt = new Date(input.ended_at);
+  const nextStatus =
+    input.status.toLowerCase() === "error" || input.status.toLowerCase() === "failed"
+      ? "error"
+      : "resolved";
+  const conclusionMetadata = {
+    anthony_session_id: input.id,
+    patient_id: input.patient_id,
+    related_caretaker_id: input.related_caretaker_id ?? null,
+    started_at: input.started_at,
+    ended_at: input.ended_at,
+    handoff_at: input.handoff_at ?? null,
+    handoff_type: input.handoff_type ?? null,
+    final_scene_label: input.final_scene_label ?? null,
+    escalated: input.escalated,
+    status: input.status,
+    outcome: input.outcome,
+    transcript_message_count: input.transcript.length,
+    received_at: concludedAt.toISOString(),
+  };
+
+  await prisma.aiSession.update({
+    where: { id: sessionId },
+    data: {
+      status: nextStatus,
+      endedAt,
+      summary: `AI session concluded with outcome ${input.outcome}. Final scene: ${input.final_scene_label ?? "unknown"}.`,
+      metadata: {
+        ...asJsonRecord(session.metadata),
+        aiConclusion: conclusionMetadata,
+      },
+    },
+  });
+
+  for (const transcriptMessage of input.transcript) {
+    await prisma.aiSessionMessage.create({
+      data: {
+        aiSessionId: sessionId,
+        senderType: mapTranscriptSenderType(transcriptMessage.role),
+        message: transcriptMessage.text,
+        createdAt: new Date(transcriptMessage.ts),
+        metadata: {
+          type: "ai_transcript",
+          role: transcriptMessage.role,
+          ts: transcriptMessage.ts,
+          scene_label: transcriptMessage.scene_label ?? null,
+          source: "anthony_ai_backend",
+        },
+      },
+    });
+  }
+
+  return { success: true };
 }
 
 export async function getMobileSession(sessionId: string, deviceId: string) {
@@ -81,7 +647,13 @@ export async function handlePatientMessage(sessionId: string, deviceId: string, 
     throw new AppError(404, "Session not found");
   }
 
-  if (session.status === "resolved" || session.status === "cancelled" || session.status === "error") {
+  if (
+    session.status === "starting" ||
+    session.status === "resolved" ||
+    session.status === "cancelled" ||
+    session.status === "error" ||
+    session.status === "start_failed"
+  ) {
     throw new AppError(400, `Cannot send message to a ${session.status} session`);
   }
 
