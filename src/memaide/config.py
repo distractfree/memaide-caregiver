@@ -106,12 +106,15 @@ WHATSAPP_TO = os.environ.get("WHATSAPP_TO")
 WHATSAPP_TEMPLATE = os.environ.get("WHATSAPP_TEMPLATE", "hello_world")
 WHATSAPP_LANG = os.environ.get("WHATSAPP_LANG", "en_US")
 
-# --- Caregiver portal (for the {{4}} live-session link in caregiver-alert WhatsApps) ---
-# Base URL of koko's caregiver portal + the path template to one live session.
-# NOTE: CONFIRM the exact path with koko — a wrong path yields a 404 in the caregiver's
-# message. Default path mirrors the template example (/session/<id>).
-CAREGIVER_PORTAL_BASE_URL = os.environ.get("CAREGIVER_PORTAL_BASE_URL", "")
-CAREGIVER_SESSION_PATH = os.environ.get("CAREGIVER_SESSION_PATH", "/session/{id}")
+# --- Caregiver portal (for the {{4}} link in caregiver-alert WhatsApps) ---
+# Base URL of koko's caregiver portal. The {{4}} link defaults to koko's portal root
+# (his live portal) rather than a per-session deep link, because koko's session route is
+# not yet confirmed and a wrong path 404s. To deep-link a session once koko confirms the
+# route, set CAREGIVER_SESSION_PATH (e.g. "/session/{id}").
+CAREGIVER_PORTAL_BASE_URL = os.environ.get(
+    "CAREGIVER_PORTAL_BASE_URL", "https://caregiver.guardianova.com"
+)
+CAREGIVER_SESSION_PATH = os.environ.get("CAREGIVER_SESSION_PATH", "")
 
 # --- Secrets ---
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
