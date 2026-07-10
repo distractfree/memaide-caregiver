@@ -5,13 +5,26 @@ brain. ``SpeechToText`` wraps the OpenAI streaming-transcription API; ``StubSpee
 replays scripted events so the voice loop is testable without audio or network.
 """
 
+import io
 import logging
+import wave
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
 from memaide import config
 
 _log = logging.getLogger(__name__)
+
+
+def _pcm_to_wav(pcm: bytes, sample_rate: int) -> bytes:
+    """Wrap raw PCM16 mono bytes in a WAV container so the API can decode it."""
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)  # pcm16
+        w.setframerate(sample_rate)
+        w.writeframes(pcm)
+    return buf.getvalue()
 
 
 @dataclass
@@ -43,9 +56,10 @@ class SpeechToText:
         buffer = bytearray()
         async for chunk in audio:
             buffer.extend(chunk)
+        wav = _pcm_to_wav(bytes(buffer), config.AUDIO_SAMPLE_RATE)
         kwargs: dict[str, Any] = {
             "model": self._model,
-            "file": ("utterance.wav", bytes(buffer)),
+            "file": ("utterance.wav", wav),
             "stream": True,
         }
         if self._language:

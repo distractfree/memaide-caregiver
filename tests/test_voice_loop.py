@@ -31,8 +31,32 @@ def _session(brain):
 
 
 async def _audio(chunks=(b"x",)):
-    for c in chunks:
-        yield c
+    """One utterance's worth of chunks, wrapped as the single-utterance stream run() takes."""
+    async def _chunks():
+        for c in chunks:
+            yield c
+
+    yield _chunks()
+
+
+async def _utterances(*utts):
+    """A multi-utterance stream: each arg is one utterance's chunk tuple."""
+    for chunks in utts:
+        async def _chunks(chunks=chunks):
+            for c in chunks:
+                yield c
+
+        yield _chunks()
+
+
+class PerUtteranceSTT:
+    """Transcribes one utterance to one final whose text is the utterance's bytes."""
+
+    async def transcribe(self, audio):
+        buf = bytearray()
+        async for c in audio:
+            buf.extend(c)
+        yield STTEvent("final", buf.decode())
 
 
 def _collector():
@@ -70,6 +94,51 @@ async def test_one_full_turn_sends_subtitle_and_audio_with_latest_vision():
     assert "I'm right here." in subtitle["text"]
     audio_out = next(m for m in sent if m["type"] == "audio_out")
     assert base64.b64decode(audio_out["pcm"]) == b"WAV"
+
+
+async def test_run_produces_one_turn_per_utterance():
+    session = _session(StubBrain(reply="ok"))
+    sent, send = _collector()
+    loop = VoiceLoop(
+        session=session,
+        stt=PerUtteranceSTT(),
+        tts=StubTextToSpeech(audio=b"WAV"),
+        send=send,
+    )
+    await loop.run(_utterances((b"hi",), (b"bye",)))
+
+    audio_outs = [m for m in sent if m["type"] == "audio_out"]
+    assert len(audio_outs) == 2  # one reply per utterance, not one for the whole stream
+
+
+class FlakyFirstSTT:
+    """Raises on the first utterance, transcribes the second to one final."""
+
+    def __init__(self):
+        self._seen = 0
+
+    async def transcribe(self, audio):
+        async for _ in audio:
+            pass
+        self._seen += 1
+        if self._seen == 1:
+            raise RuntimeError("stt hiccup")
+        yield STTEvent("final", "second")
+
+
+async def test_run_skips_failed_utterance_and_continues():
+    session = _session(StubBrain(reply="ok"))
+    sent, send = _collector()
+    loop = VoiceLoop(
+        session=session,
+        stt=FlakyFirstSTT(),
+        tts=StubTextToSpeech(audio=b"WAV"),
+        send=send,
+    )
+    await loop.run(_utterances((b"one",), (b"two",)))
+
+    # First utterance's STT error is skipped; the second still yields a turn.
+    assert len([m for m in sent if m["type"] == "audio_out"]) == 1
 
 
 async def test_silence_tick_emits_escalation_and_suggestion():

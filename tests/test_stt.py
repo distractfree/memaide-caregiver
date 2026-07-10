@@ -1,3 +1,6 @@
+import io
+import wave
+
 from memaide import config
 from memaide.audio.stt import STTEvent, SpeechToText, StubSpeechToText
 
@@ -60,9 +63,25 @@ async def test_stt_yields_partial_then_final_and_targets_model():
 async def test_stt_assembles_all_audio_chunks_into_one_file():
     client = _FakeClient([_Event("transcript.text.done", text="ok")])
     stt = SpeechToText(client=client)
-    _ = [e async for e in stt.transcribe(_audio([b"12", b"34", b"5"]))]
+    _ = [e async for e in stt.transcribe(_audio([b"12", b"34", b"56"]))]
     _name, data = client.audio.transcriptions.kwargs["file"]
-    assert data == b"12345"
+    with wave.open(io.BytesIO(data), "rb") as w:
+        assert w.readframes(w.getnframes()) == b"123456"
+
+
+async def test_stt_wraps_pcm_as_wav_with_configured_format():
+    # The buffered PCM must be sent as a real WAV container (header + fmt), not
+    # headerless bytes, or OpenAI transcription rejects/misreads it.
+    client = _FakeClient([_Event("transcript.text.done", text="ok")])
+    stt = SpeechToText(client=client)
+    _ = [e async for e in stt.transcribe(_audio([b"\x01\x02", b"\x03\x04"]))]
+    name, data = client.audio.transcriptions.kwargs["file"]
+    assert name.endswith(".wav")
+    with wave.open(io.BytesIO(data), "rb") as w:
+        assert w.getnchannels() == 1
+        assert w.getsampwidth() == 2
+        assert w.getframerate() == config.AUDIO_SAMPLE_RATE
+        assert w.readframes(w.getnframes()) == b"\x01\x02\x03\x04"
 
 
 async def test_stub_stt_replays_scripted_events_and_drains_audio():

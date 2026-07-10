@@ -38,18 +38,21 @@ class VoiceLoop:
         self._on_escalation = on_escalation
         self._escalation_reported = False
 
-    async def run(self, audio: AsyncIterator[bytes]) -> None:
-        """Drive turns from the patient's audio until the stream ends.
+    async def run(self, utterances: AsyncIterator[AsyncIterator[bytes]]) -> None:
+        """Drive one turn per utterance until the connection's utterance stream ends.
 
-        A failing STT stream is logged and ends the loop; the rule-based silence-tick
-        escalation remains a backstop on the connection.
+        Each utterance is transcribed on its own (the client marks boundaries with
+        ``audio_end``), so the patient hears a reply per turn rather than only once the
+        whole connection closes. A single utterance's STT failure is logged and skipped so
+        one bad chunk does not end the session; the silence-tick escalation is a backstop.
         """
-        try:
-            async for event in self._stt.transcribe(audio):
-                if event.kind == "final":
-                    await self._handle_final(event.text)
-        except Exception as exc:  # noqa: BLE001 - a bad STT stream must not crash the server
-            _log.warning("STT failed; ending voice loop: %s", exc)
+        async for utterance in utterances:
+            try:
+                async for event in self._stt.transcribe(utterance):
+                    if event.kind == "final":
+                        await self._handle_final(event.text)
+            except Exception as exc:  # noqa: BLE001 - a bad utterance must not end the loop
+                _log.warning("STT failed on utterance; skipping: %s", exc)
 
     async def _handle_final(self, text: str) -> None:
         now = self._clock()

@@ -6,7 +6,7 @@ import pytest
 from memaide.audio.stt import STTEvent, StubSpeechToText
 from memaide.audio.tts import StubTextToSpeech
 from memaide.schemas import AgentDecision, PatientContext, VisionContext
-from memaide.server.ws import ServerDeps, _parse, handle
+from memaide.server.ws import ServerDeps, WebSocketAudioSource, _parse, handle
 from memaide.service.session_registry import SessionContext, SessionRegistry
 
 
@@ -69,6 +69,35 @@ def _audio():
     return json.dumps({"type": "audio", "pcm": base64.b64encode(b"xx").decode("ascii")})
 
 
+async def test_audio_source_segments_utterances_on_end():
+    src = WebSocketAudioSource()
+    await src.put(b"aa")
+    await src.put(b"bb")
+    await src.end_utterance()  # client sent audio_end -> close utterance 1
+    await src.put(b"cc")
+    await src.close()  # connection closed -> flush utterance 2 + end stream
+    collected = []
+    async for utt in src.utterances():
+        collected.append(b"".join([c async for c in utt]))
+    assert collected == [b"aabb", b"cc"]
+
+
+async def test_audio_source_no_audio_yields_no_utterances():
+    src = WebSocketAudioSource()
+    await src.close()
+    assert [u async for u in src.utterances()] == []
+
+
+async def test_audio_source_ignores_empty_utterance_markers():
+    # audio_end with no preceding audio must not create a phantom empty utterance.
+    src = WebSocketAudioSource()
+    await src.end_utterance()
+    await src.put(b"aa")
+    await src.close()
+    collected = [b"".join([c async for c in utt]) async for utt in src.utterances()]
+    assert collected == [b"aa"]
+
+
 def test_parse_ignores_malformed_and_non_dict():
     assert _parse("not json") is None
     assert _parse(json.dumps([1, 2])) is None
@@ -88,6 +117,23 @@ async def test_handle_demuxes_streams_and_emits_outputs():
     assert vc["advisory_flags"] == ["tv_on"]
     sub = next(m for m in ws.sent if m["type"] == "subtitle")
     assert "I'm here." in sub["text"]
+
+
+async def test_audio_end_yields_a_turn_per_utterance():
+    # Two utterances split by audio_end -> two replies, not one for the whole connection.
+    ws = FakeWS(
+        [
+            _hello(),
+            _audio(),
+            json.dumps({"type": "audio_end"}),
+            _audio(),
+            json.dumps({"type": "bye"}),
+        ]
+    )
+    await handle(ws, _deps())
+
+    audio_outs = [m for m in ws.sent if m["type"] == "audio_out"]
+    assert len(audio_outs) == 2
 
 
 class _RecordingObserver:

@@ -81,11 +81,48 @@ class WebSocketFrameSource(_QueueSource):
         return self._iter()
 
 
-class WebSocketAudioSource(_QueueSource):
-    """Yields demuxed inbound ``audio`` PCM chunks for STT."""
+class WebSocketAudioSource:
+    """Segments the inbound ``audio`` PCM stream into per-utterance byte streams.
 
-    def __aiter__(self) -> AsyncIterator[bytes]:
-        return self._iter()
+    ``put`` appends a chunk to the current utterance; ``end_utterance`` closes it (the
+    client sent ``audio_end`` on a speech pause); ``close`` flushes any open utterance and
+    ends the stream (the connection closed). ``utterances`` yields one async byte-iterator
+    per utterance, so the STT transcribes one utterance at a time and the voice loop can
+    reply per turn instead of only once the whole connection ends.
+    """
+
+    def __init__(self) -> None:
+        self._utterances: asyncio.Queue = asyncio.Queue()
+        self._current: asyncio.Queue | None = None
+
+    async def put(self, pcm: bytes) -> None:
+        if self._current is None:
+            self._current = asyncio.Queue()
+            await self._utterances.put(self._current)
+        await self._current.put(pcm)
+
+    async def end_utterance(self) -> None:
+        if self._current is not None:  # no-op when no audio buffered -> no empty utterance
+            await self._current.put(_QUEUE_END)
+            self._current = None
+
+    async def close(self) -> None:
+        await self.end_utterance()
+        await self._utterances.put(_QUEUE_END)
+
+    async def utterances(self) -> AsyncIterator[AsyncIterator[bytes]]:
+        while True:
+            queue = await self._utterances.get()
+            if queue is _QUEUE_END:
+                return
+            yield self._drain(queue)
+
+    async def _drain(self, queue: asyncio.Queue) -> AsyncIterator[bytes]:
+        while True:
+            item = await queue.get()
+            if item is _QUEUE_END:
+                return
+            yield item
 
 
 def _parse(raw: Any) -> dict | None:
@@ -199,7 +236,7 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
     )
 
     vision_task = asyncio.create_task(pipeline.run())
-    voice_task = asyncio.create_task(loop.run(audio_source))
+    voice_task = asyncio.create_task(loop.run(audio_source.utterances()))
     outcome = "disconnected"
     try:
         async for raw in websocket:
@@ -216,6 +253,10 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
                     await audio_source.put(base64.b64decode(msg["pcm"]))
                 except Exception:  # noqa: BLE001 - bad base64 -> drop the chunk
                     continue
+            elif mtype == "audio_end":
+                # Client marked a speech pause -> close this utterance so STT transcribes
+                # it now and the patient gets a reply, without ending the connection.
+                await audio_source.end_utterance()
             elif mtype == "bye":
                 outcome = "patient_ended"
                 break
