@@ -38,6 +38,14 @@ class VoiceLoop:
         self._on_escalation = on_escalation
         self._escalation_reported = False
 
+    async def greet(self) -> None:
+        """Speak the opening line so the agent talks first, before the patient does.
+
+        ``session.start()`` records it in the transcript, so when the patient does speak the
+        brain answers them instead of greeting again.
+        """
+        await self._emit_turn(self._session.start())
+
     async def run(self, utterances: AsyncIterator[AsyncIterator[bytes]]) -> None:
         """Drive one turn per utterance until the connection's utterance stream ends.
 

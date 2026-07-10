@@ -1,5 +1,6 @@
 import base64
 
+from memaide import config
 from memaide.agent.session import AgentSession
 from memaide.audio.stt import STTEvent, StubSpeechToText
 from memaide.audio.tts import StubTextToSpeech
@@ -94,6 +95,24 @@ async def test_one_full_turn_sends_subtitle_and_audio_with_latest_vision():
     assert "I'm right here." in subtitle["text"]
     audio_out = next(m for m in sent if m["type"] == "audio_out")
     assert base64.b64decode(audio_out["pcm"]) == b"WAV"
+
+
+async def test_greet_speaks_opening_line_first_and_records_it():
+    session = _session(StubBrain())
+    sent, send = _collector()
+    loop = VoiceLoop(
+        session=session,
+        stt=StubSpeechToText([]),
+        tts=StubTextToSpeech(audio=b"WAV"),
+        send=send,
+    )
+    await loop.greet()
+
+    subtitle = next(m for m in sent if m["type"] == "subtitle")
+    assert subtitle["text"] == config.OPENING_LINE
+    assert any(m["type"] == "audio_out" for m in sent)
+    # Opening is in the transcript so the brain answers the patient instead of re-greeting.
+    assert session.transcript[-1].text == config.OPENING_LINE
 
 
 async def test_run_produces_one_turn_per_utterance():

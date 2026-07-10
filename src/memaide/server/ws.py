@@ -237,6 +237,7 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
 
     vision_task = asyncio.create_task(pipeline.run())
     voice_task = asyncio.create_task(loop.run(audio_source.utterances()))
+    await loop.greet()  # agent speaks the opening line before the patient does
     outcome = "disconnected"
     try:
         async for raw in websocket:

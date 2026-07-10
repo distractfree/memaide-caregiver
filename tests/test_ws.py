@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+from memaide import config
 from memaide.audio.stt import STTEvent, StubSpeechToText
 from memaide.audio.tts import StubTextToSpeech
 from memaide.schemas import AgentDecision, PatientContext, VisionContext
@@ -115,8 +116,18 @@ async def test_handle_demuxes_streams_and_emits_outputs():
     vc = next(m for m in ws.sent if m["type"] == "vision_context")
     assert vc["label"] == "kitchen"
     assert vc["advisory_flags"] == ["tv_on"]
-    sub = next(m for m in ws.sent if m["type"] == "subtitle")
-    assert "I'm here." in sub["text"]
+    # Skip the opening-line subtitle; the brain's reply to the audio is also present.
+    assert any(m["type"] == "subtitle" and "I'm here." in m["text"] for m in ws.sent)
+
+
+async def test_handle_speaks_opening_line_on_connect():
+    # Agent greets first, before any audio arrives (hello then bye, no audio at all).
+    ws = FakeWS([_hello(), json.dumps({"type": "bye"})])
+    await handle(ws, _deps())
+
+    subs = [m for m in ws.sent if m["type"] == "subtitle"]
+    assert any(m["text"] == config.OPENING_LINE for m in subs)
+    assert any(m["type"] == "audio_out" for m in ws.sent)
 
 
 async def test_audio_end_yields_a_turn_per_utterance():
@@ -133,7 +144,7 @@ async def test_audio_end_yields_a_turn_per_utterance():
     await handle(ws, _deps())
 
     audio_outs = [m for m in ws.sent if m["type"] == "audio_out"]
-    assert len(audio_outs) == 2
+    assert len(audio_outs) == 3  # 1 opening greeting + 1 reply per utterance (2 utterances)
 
 
 class _RecordingObserver:
