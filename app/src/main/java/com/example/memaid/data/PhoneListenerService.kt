@@ -141,12 +141,17 @@ class PhoneListenerService : WearableListenerService() {
                     Wearable.getChannelClient(this@PhoneListenerService).getInputStream(channel)
                 )
                 val buf = ByteArray(4096)
+                val endpointer = SpeechEndpointer()
                 input.use { ins ->
                     while (true) {
                         val n = ins.read(buf)
                         if (n < 0) break
                         total += n
                         voiceBridge.sendAudio(buf, n)  // no-ops until WS is connected
+                        if (endpointer.accept(buf, n)) {
+                            // Patient paused -> close the utterance so the server replies now.
+                            voiceBridge.sendAudioEnd()
+                        }
                         if (total - lastLogged >= 48_000) {
                             Log.d("PhoneListener", "🎧 Audio stream: ${total / 1024} KB received (forwarding to WS)")
                             lastLogged = total

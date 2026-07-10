@@ -69,6 +69,14 @@ class VoiceBridge {
         webSocket?.send("""{"type":"audio","pcm":"$b64"}""")
     }
 
+    // Mark the end of the current utterance (patient paused). The server transcribes
+    // the buffered audio now and replies, without closing the connection.
+    fun sendAudioEnd() {
+        if (!isConnected) return
+        webSocket?.send("""{"type":"audio_end"}""")
+        Log.d("VoiceBridge", "🔚 Sent audio_end")
+    }
+
     fun close() {
         webSocket?.send("""{"type":"bye"}""")
         webSocket?.close(1000, "bye")
