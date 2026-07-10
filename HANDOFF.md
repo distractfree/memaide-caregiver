@@ -20,6 +20,49 @@ must gain (see §5 and the Slice 2 spec).
 
 ---
 
+## Current status — 2026-07-10 (live audio bring-up)
+
+Slice 2 is deployed (`memaide-session` on the droplet) and the **live audio loop now works
+end-to-end from the phone**. This session's changes:
+
+**Server (`anthony/student3-work`; redeploy = `git pull` + `systemctl restart memaide-session`):**
+- Live STT/TTS fix: `OpenAIClient` now exposes `.audio` — the live path was throwing
+  `'OpenAIClient' object has no attribute 'audio'` (unit tests used SDK-shaped fakes, so it
+  never showed). Commit `f761e09`.
+- Per-utterance endpointing: inbound `{"type":"audio_end"}` segments utterances; STT WAV-wraps
+  the PCM (was headerless → OpenAI rejected it). Commit `ba450d6`.
+- Agent greets on connect (`VoiceLoop.greet()` → `OPENING_LINE`). Commit `4cb71b5`.
+- Removed the system-prompt `OPENING` instruction so the LLM doesn't double-greet (the
+  hardcoded greeting is the opener). Commit `5401758`.
+- 205 pytest pass.
+
+**Client (Android):**
+- `arian/student1-work` — audio pipeline (watch→phone→WS) + `audio_end` VAD markers (`1dd4840`).
+- `anthony/phone-mic` — **phone-mic test path (no watch needed):** Help screen
+  "🎤 Talk to AI (phone mic)" → `PhoneVoiceSession` streams the phone mic and plays `audio_out`.
+  Builds.
+- `anthony/glasses-video` — Meta Wearables DAT glasses camera → `{type:frame,data_url}` video
+  leg as an isolated **minSdk-29 `:glasses` module** (app stays 26 via `tools:overrideLibrary`).
+  **Builds into an APK** (verified via CLI `./gradlew :app:assembleDebug`); runtime/pairing
+  untested. Needs `github_token` + `mwdat_application_id` + `mwdat_client_token` in
+  `local.properties`. Consistent with §5: DAT camera is I420 (the port's `FrameEncoder` already
+  assumes I420), and there is **no glasses mic** in mwdat 0.8.0 (audio stays phone/watch-sourced).
+
+**Next up (starting in a new chat):**
+1. **Debounced turn-taking** — the crude energy VAD splits one sentence into 2–3 replies.
+   Design approved: `docs/superpowers/specs/2026-07-10-debounced-turn-taking-design.md`. Next
+   step is `writing-plans` → implement (server `VoiceLoop` pending-buffer + `commit` message;
+   client two-threshold `SpeechEndpointer`).
+2. **Vision designs** — the glasses video leg builds; design + enable the live-session vision
+   path end-to-end (frames → `VisionDescriber`/real `VisionCheck` → vision-driven escalation).
+   Prior context: `docs/superpowers/specs/2026-07-01-glasses-vision-trace-and-whatsapp-design.md`.
+
+Worktrees in play: `memaide-fix` (student3-work), `memaide-phonemic`, `memaide-glasses`,
+`memaide-arian`. The main repo folder is parked on `arian/student1-work` and needs cleanup back
+to `anthony/student3-work` (careful: untracked `.env` + Python files there).
+
+---
+
 ## 0. Integration plan (current)
 
 Full design in `docs/superpowers/specs/`:
