@@ -15,7 +15,8 @@ object ApiClient {
     // CHANGE THIS when the real server is ready.
     // Use the IP from your manager. Note the trailing slash — it's required.
     // If HTTP (not HTTPS), see the note in Step 6 about network security config.
-    private const val BASE_URL = "http://134.122.115.15:4000/"
+    private const val BASE_URL = "https://caregiver.guardianova.com/"
+    const val VOICE_WS_URL = "wss://ai.guardianova.com/" // Anthony's server — port/path TBD
     // ^ 10.0.2.2 is a special address: from the Android emulator it means
     //   "the host machine's localhost". Handy for local testing.
 

@@ -67,7 +67,7 @@ class SessionManager(context: Context) {
     // For the demo we use the seeded device id from the backend.
     fun getDeviceId(): String {
         // Matches the backend's seed data
-        return prefs.getString("device_id", "") ?: ""
+        return prefs.getString("device_id", "wewe") ?: "wewe"
     }
 
     fun saveDeviceId(deviceId: String) {

@@ -161,5 +161,32 @@ data class PatientsData(
 data class ServerPatientItem(
     val id: String,
     val name: String,
-    val deviceId: String
+    val deviceId: String?
+)
+
+data class ServerVitalEvent(
+    val deviceId: String,
+    val heartRate: Int,
+    val motionState: String,
+    val sourceDevice: String,
+    val timestamp: String
+)
+
+data class AiSessionStartRequest(
+    val deviceId: String,
+    val vitals: String? = null,
+    val beacons: List<String> = emptyList()
+)
+
+
+data class HelloMessage(
+    val type: String,
+    val session_id: String
+)
+
+data class AiSessionData(
+    val success: Boolean,
+    val sessionId: String,
+    val websocketUrl: String,
+    val helloMessage: HelloMessage
 )

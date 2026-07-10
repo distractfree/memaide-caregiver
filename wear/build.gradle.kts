@@ -10,7 +10,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.memaid.wear"
+        applicationId = "com.example.memaid"
         minSdk = 30
         targetSdk = 35
         versionCode = 1
@@ -53,4 +53,5 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
     implementation("com.google.android.gms:play-services-wearable:18.2.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 }

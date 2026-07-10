@@ -33,7 +33,7 @@ fun HomeScreen(
     val patientName by viewModel.patientName.collectAsState()
 
     val todayReminders = reminders.filter {
-        it.active && it.status == ReminderStatus.PENDING
+        it.active && (it.status == ReminderStatus.PENDING || it.status == ReminderStatus.MISSED)
     }
 
     Scaffold(
@@ -112,7 +112,7 @@ fun HomeScreen(
 
             item {
                 Text(
-                    text = "Today's Pending Reminders (${todayReminders.size})",
+                    text = "Today's Reminders (${todayReminders.size})",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(top = 8.dp)

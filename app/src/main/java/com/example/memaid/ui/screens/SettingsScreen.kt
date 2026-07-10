@@ -5,24 +5,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import com.example.memaid.data.FakeDataRepository
-import com.example.memaid.ui.MainViewModel
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import com.example.memaid.data.ReminderRepository
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.layout.Row
-
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.example.memaid.data.FakeDataRepository
+import com.example.memaid.data.ReminderRepository
+import com.example.memaid.ui.MainViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,6 +29,8 @@ fun SettingsScreen(
     val patientName by viewModel.patientName.collectAsState()
     val deviceId = viewModel.sessionManager.getDeviceId()
     var demoMode by remember { mutableStateOf(ReminderRepository.demoMode) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -99,6 +94,20 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        com.example.memaid.data.PhoneMessenger.sendMessage(
+                            context,
+                            "/test",
+                            "Hello from phone"
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("📤 Send Test to Watch")
+            }
 
             OutlinedButton(
                 onClick = onBeaconDebug,
@@ -119,7 +128,6 @@ fun SettingsScreen(
         }
     }
 }
-
 
 @Composable
 fun SettingsRow(label: String, value: String) {

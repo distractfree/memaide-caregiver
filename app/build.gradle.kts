@@ -51,7 +51,10 @@ dependencies {
         implementation("androidx.compose.material:material-icons-extended:1.7.8")
         implementation("androidx.navigation:navigation-compose:2.9.0")
         implementation("org.altbeacon:android-beacon-library:2.19.6")
-    implementation("com.google.android.gms:play-services-wearable:18.2.0")
+        implementation("com.google.android.gms:play-services-wearable:18.2.0")
+        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
 
         testImplementation(libs.junit)
         androidTestImplementation(platform(libs.androidx.compose.bom))

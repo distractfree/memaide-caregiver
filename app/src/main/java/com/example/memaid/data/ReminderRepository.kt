@@ -135,7 +135,36 @@ object ReminderRepository {
         return try {
             val response = ApiClient.api.postHelpEvent(event)
             if (response.isSuccessful) Result.success(Unit)
-            else Result.failure(Exception("Server error: ${response.code()}"))
+            else {
+                val errorBody = response.errorBody()?.string()
+                println("⚠️ Help 500 body: $errorBody")
+                Result.failure(Exception("Server error: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun sendVitals(deviceId: String, heartRate: Int, motionState: String): Result<Unit> {
+        val event = ServerVitalEvent(
+            deviceId = deviceId,
+            heartRate = heartRate,
+            motionState = motionState,
+            sourceDevice = "watch",
+            timestamp = TimeUtils.nowIsoUtc()
+        )
+        if (demoMode) {
+            println("📤 [DEMO] Would send vitals: $event")
+            return Result.success(Unit)
+        }
+        return try {
+            val response = ApiClient.api.postVitalEvent(event)
+            if (response.isSuccessful) Result.success(Unit)
+            else {
+                val errorBody = response.errorBody()?.string()
+                println("⚠️ VITALS error ${response.code()} body=$errorBody")
+                Result.failure(Exception("Server error: ${response.code()}"))
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -153,11 +182,29 @@ object ReminderRepository {
                     Patient(
                         patientId = p.id,
                         name = p.name,
-                        deviceId = p.deviceId   // the key field!
+                        deviceId = p.deviceId
                     )
                 }
+                list.forEach { println("👤 Patient: name=${it.name} deviceId=${it.deviceId}") }
                 Result.success(list)
             } else {
+                Result.failure(Exception("Server error: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun startAiSession(deviceId: String): Result<AiSessionData> {
+        return try {
+            val response = ApiClient.api.startAiSession(
+                AiSessionStartRequest(deviceId = deviceId, vitals = null, beacons = emptyList())
+            )
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val errorBody = response.errorBody()?.string()
+                println("⚠️ AI session start error ${response.code()} body=$errorBody")
                 Result.failure(Exception("Server error: ${response.code()}"))
             }
         } catch (e: Exception) {

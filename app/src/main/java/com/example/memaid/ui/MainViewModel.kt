@@ -134,6 +134,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectPatient(patient: Patient, onSuccess: () -> Unit) {
         sessionManager.saveSelectedPatient(patient.patientId, patient.name)
+        println("💾 Selecting patient: ${patient.name}, deviceId=${patient.deviceId}")
         // Save the real device ID so reminders load for THIS patient
         patient.deviceId?.let { sessionManager.saveDeviceId(it) }
         _patientName.value = patient.name
@@ -233,6 +234,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun loadRemindersFromBackend() {
         viewModelScope.launch {
             val deviceId = sessionManager.getDeviceId()
+            println("📋 Loading reminders for deviceId=$deviceId")
             val result = ReminderRepository.getRemindersWithPatient(deviceId)
             result.fold(
                 onSuccess = { (patientName, serverReminders) ->

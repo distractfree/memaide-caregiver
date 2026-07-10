@@ -33,8 +33,18 @@ interface MemAideApi {
         @Body event: ServerHelpEvent
     ): Response<Unit>
 
+    @POST("api/mobile/vital-events")
+    suspend fun postVitalEvent(
+        @Body event: ServerVitalEvent
+    ): Response<Unit>
+
     @GET("api/mobile/patients")
     suspend fun getPatients(
         @Header("Authorization") token: String
     ): Response<ApiEnvelope<List<ServerPatientItem>>>
+
+    @POST("api/mobile/ai-sessions/start")
+    suspend fun startAiSession(
+        @Body request: AiSessionStartRequest
+    ): Response<AiSessionData>
 }
