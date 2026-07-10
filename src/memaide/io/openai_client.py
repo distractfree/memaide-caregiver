@@ -37,6 +37,11 @@ class OpenAIClient:
 
             self._client = AsyncOpenAI(api_key=api_key or config.OPENAI_API_KEY)
 
+    @property
+    def audio(self) -> Any:
+        """SDK audio namespace (transcriptions/speech) for SpeechToText/TextToSpeech."""
+        return self._client.audio
+
     async def complete_json(
         self,
         messages: list[dict],

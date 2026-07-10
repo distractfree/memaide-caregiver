@@ -36,6 +36,16 @@ class _FakeSDK:
         self.chat = _FakeChat()
 
 
+def test_client_exposes_audio_namespace_for_stt_tts():
+    # SpeechToText/TextToSpeech call client.audio.transcriptions/.speech, so the wrapper must
+    # delegate the SDK's audio namespace. Regression: the prod wrapper lacked .audio, so the
+    # live STT failed with "'OpenAIClient' object has no attribute 'audio'".
+    sdk = _FakeSDK()
+    sdk.audio = object()
+    client = OpenAIClient(client=sdk)
+    assert client.audio is sdk.audio
+
+
 async def test_complete_json_parses_and_requests_json_mode():
     sdk = _FakeSDK()
     client = OpenAIClient(client=sdk)
