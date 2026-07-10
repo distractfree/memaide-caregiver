@@ -1,7 +1,12 @@
 package com.example.memaid.ui.screens
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -16,6 +21,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.memaid.data.FakeDataRepository
+import com.example.memaid.data.PhoneVoiceSession
 import com.example.memaid.ui.MainViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -26,6 +32,17 @@ fun HelpScreen(
 ) {
     val context = LocalContext.current
     var helpSent by remember { mutableStateOf(false) }
+
+    // Phone-mic AI voice test: exercises the full audio round-trip without a Wear device.
+    var voiceActive by remember { mutableStateOf(PhoneVoiceSession.isActive) }
+    val micPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            PhoneVoiceSession.start(context)
+            voiceActive = true
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -117,6 +134,29 @@ fun HelpScreen(
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Phone-mic AI voice test (no watch needed): starts a session, streams the phone
+            // mic to the AI server, and plays the reply back. Use headphones to avoid echo.
+            Button(
+                onClick = {
+                    if (voiceActive) {
+                        PhoneVoiceSession.stop()
+                        voiceActive = false
+                    } else if (
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+                        == PackageManager.PERMISSION_GRANTED
+                    ) {
+                        PhoneVoiceSession.start(context)
+                        voiceActive = true
+                    } else {
+                        micPermLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                }
+            ) {
+                Text(if (voiceActive) "⏹ Stop AI voice test" else "🎤 Talk to AI (phone mic)")
+            }
         }
     }
 }
