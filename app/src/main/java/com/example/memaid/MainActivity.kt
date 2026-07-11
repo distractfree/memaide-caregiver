@@ -137,6 +137,12 @@ fun MemAideNavigation(viewModel: MainViewModel, openReminderId: String? = null) 
             )
         }
 
+        composable(Screen.GlassesRegister.route) {
+            GlassesRegisterScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+
         composable(Screen.Home.route) {
             val context = androidx.compose.ui.platform.LocalContext.current
             LaunchedEffect(Unit) {
@@ -207,6 +213,9 @@ fun MemAideNavigation(viewModel: MainViewModel, openReminderId: String? = null) 
                 },
                 onBeaconDebug = {
                     navController.navigate(Screen.BeaconDebug.route)
+                },
+                onRegisterGlasses = {
+                    navController.navigate(Screen.GlassesRegister.route)
                 }
             )
         }

@@ -77,6 +77,13 @@ class VoiceBridge {
         Log.d("VoiceBridge", "🔚 Sent audio_end")
     }
 
+    // Send a captured glasses frame as a JPEG data-URL (server demuxes on "type":"frame").
+    // dataUrl is "data:image/jpeg;base64,<...>" — only URL-safe base64 chars, safe to inline.
+    fun sendFrame(dataUrl: String) {
+        if (!isConnected) return
+        webSocket?.send("""{"type":"frame","data_url":"$dataUrl"}""")
+    }
+
     fun close() {
         webSocket?.send("""{"type":"bye"}""")
         webSocket?.close(1000, "bye")

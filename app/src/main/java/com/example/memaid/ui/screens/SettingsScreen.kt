@@ -23,7 +23,8 @@ fun SettingsScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit,
     onLogout: () -> Unit,
-    onBeaconDebug: () -> Unit
+    onBeaconDebug: () -> Unit,
+    onRegisterGlasses: () -> Unit
 ) {
     // Read the REAL current values
     val patientName by viewModel.patientName.collectAsState()
@@ -114,6 +115,13 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("📡 Beacon Debug")
+            }
+
+            OutlinedButton(
+                onClick = onRegisterGlasses,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("🥽 Register Glasses")
             }
 
             Button(

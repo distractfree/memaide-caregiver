@@ -1,19 +1,38 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
 
+// Secrets live in local.properties (gitignored). The GitHub PAT gates the Meta Wearables
+// DAT SDK download; the Meta app id / client token feed manifest placeholders used for the
+// SDK's runtime attestation.
+val localProps = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+// Treat a blank value the same as absent. The glasses source files import the SDK directly, so
+// the app only fully compiles once a real token is present; this guard just avoids a confusing
+// GitHub Packages 401 while the local.properties placeholder is still empty.
+val githubToken: String? = (System.getenv("GITHUB_TOKEN") ?: localProps.getProperty("github_token"))
+    ?.takeIf { it.isNotBlank() }
+
 android {
     namespace = "com.example.memaid"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.memaid"
-        minSdk = 26
+        // Meta Wearables DAT requires Android 10+ (API 29).
+        minSdk = 29
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Meta Wearables DAT attestation, injected into AndroidManifest meta-data.
+        manifestPlaceholders["mwdat_application_id"] = localProps.getProperty("mwdat_application_id") ?: ""
+        manifestPlaceholders["mwdat_client_token"] = localProps.getProperty("mwdat_client_token") ?: ""
     }
 
     buildTypes {
@@ -72,4 +91,19 @@ dependencies {
 
     // Coroutines (for async network calls)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    // Meta Wearables Device Access Toolkit (GitHub Packages). Gated on the PAT so a checkout
+    // without a token still configures; drop `github_token` into local.properties to activate.
+    // The glasses capture/registration code references these, so the app only builds once a
+    // token is present. Coordinates/version confirmed against facebook/meta-wearables-dat-android v0.8.0.
+    if (githubToken != null) {
+        implementation("com.meta.wearable:mwdat-core:0.8.0")
+        implementation("com.meta.wearable:mwdat-camera:0.8.0")
+        implementation("com.meta.wearable:mwdat-mockdevice:0.8.0")
+    }
+
+    // Local unit tests for the pure frame-conversion helpers (Robolectric stubs android.* APIs).
+    testImplementation("org.robolectric:robolectric:4.15.1")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
     }
