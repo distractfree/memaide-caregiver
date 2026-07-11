@@ -19,7 +19,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.memaid.data.FakeDataRepository
-import com.example.memaid.data.PhoneAudioSession
+import com.example.memaid.data.PhoneVoiceSession
 import com.example.memaid.ui.MainViewModel
 import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.types.Permission
@@ -33,9 +33,9 @@ fun HelpScreen(
     val context = LocalContext.current
     var helpSent by remember { mutableStateOf(false) }
 
-    // AI voice session (phone mic + speaker; optionally Meta glasses camera frames)
-    val phoneSession = remember { PhoneAudioSession(context) }
-    var sessionActive by remember { mutableStateOf(false) }
+    // Phone-mic AI voice session (endpointer sends audio_end + commit for one coherent reply
+    // per turn); optionally also streams Meta glasses camera frames into the same session.
+    var sessionActive by remember { mutableStateOf(PhoneVoiceSession.isActive) }
     var useGlasses by remember { mutableStateOf(false) }
 
     // Glasses camera access is a *Wearables* permission (granted via the Meta AI app), separate
@@ -45,7 +45,7 @@ fun HelpScreen(
     ) { _ ->
         // Start regardless of the exact result: GlassesFrameSource fails gracefully (logged,
         // audio keeps running) if access was actually denied.
-        phoneSession.start(withGlasses = true)
+        PhoneVoiceSession.start(context, withGlasses = true)
         sessionActive = true
     }
 
@@ -57,7 +57,7 @@ fun HelpScreen(
         if (useGlasses) {
             glassesCamPermission.launch(Permission.CAMERA)
         } else {
-            phoneSession.start(withGlasses = false)
+            PhoneVoiceSession.start(context, withGlasses = false)
             sessionActive = true
         }
     }
@@ -71,7 +71,7 @@ fun HelpScreen(
     // Stop the session if the screen is left
     DisposableEffect(Unit) {
         onDispose {
-            if (sessionActive) phoneSession.stop()
+            if (sessionActive) PhoneVoiceSession.stop()
         }
     }
 
@@ -139,7 +139,7 @@ fun HelpScreen(
                     if (!sessionActive) {
                         startSession()
                     } else {
-                        phoneSession.stop()
+                        PhoneVoiceSession.stop()
                         sessionActive = false
                     }
                 },

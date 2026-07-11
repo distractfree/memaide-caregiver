@@ -148,9 +148,10 @@ class PhoneListenerService : WearableListenerService() {
                         if (n < 0) break
                         total += n
                         voiceBridge.sendAudio(buf, n)  // no-ops until WS is connected
-                        if (endpointer.accept(buf, n)) {
-                            // Patient paused -> close the utterance so the server replies now.
-                            voiceBridge.sendAudioEnd()
+                        when (endpointer.accept(buf, n)) {
+                            Endpoint.AUDIO_END -> voiceBridge.sendAudioEnd()
+                            Endpoint.COMMIT -> voiceBridge.sendCommit()
+                            Endpoint.NONE -> {}
                         }
                         if (total - lastLogged >= 48_000) {
                             Log.d("PhoneListener", "🎧 Audio stream: ${total / 1024} KB received (forwarding to WS)")
