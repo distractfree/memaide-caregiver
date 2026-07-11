@@ -76,7 +76,11 @@ object PhoneVoiceSession {
                     val endpointer = SpeechEndpointer()
                     mic = PhoneMicStreamer { buf, n ->
                         voiceBridge.sendAudio(buf, n)                 // no-ops until WS connects
-                        if (endpointer.accept(buf, n)) voiceBridge.sendAudioEnd()
+                        when (endpointer.accept(buf, n)) {
+                            Endpoint.AUDIO_END -> voiceBridge.sendAudioEnd()
+                            Endpoint.COMMIT -> voiceBridge.sendCommit()
+                            Endpoint.NONE -> {}
+                        }
                     }.also { it.start() }
                 },
                 onFailure = { e ->

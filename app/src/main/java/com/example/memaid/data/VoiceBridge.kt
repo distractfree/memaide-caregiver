@@ -77,6 +77,14 @@ class VoiceBridge {
         Log.d("VoiceBridge", "🔚 Sent audio_end")
     }
 
+    // Mark the end of the whole turn (patient held out the full silence). The server speaks
+    // the buffered reply as one utterance now.
+    fun sendCommit() {
+        if (!isConnected) return
+        webSocket?.send("""{"type":"commit"}""")
+        Log.d("VoiceBridge", "✅ Sent commit")
+    }
+
     fun close() {
         webSocket?.send("""{"type":"bye"}""")
         webSocket?.close(1000, "bye")
