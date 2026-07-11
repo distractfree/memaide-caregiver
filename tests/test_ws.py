@@ -99,6 +99,25 @@ async def test_audio_source_ignores_empty_utterance_markers():
     assert collected == [b"aa"]
 
 
+async def test_audio_source_commit_marker_is_ordered_after_utterance():
+    from memaide.server.voice_loop import COMMIT
+
+    src = WebSocketAudioSource()
+    await src.put(b"aa")
+    await src.end_utterance()   # client sent audio_end -> close utterance 1
+    await src.commit()          # client sent commit -> ordered turn-over marker
+    await src.put(b"bb")
+    await src.close()
+
+    items = []
+    async for item in src.utterances():
+        if item is COMMIT:
+            items.append("COMMIT")
+        else:
+            items.append(b"".join([c async for c in item]))
+    assert items == [b"aa", "COMMIT", b"bb"]  # marker sits between the two utterances
+
+
 def test_parse_ignores_malformed_and_non_dict():
     assert _parse("not json") is None
     assert _parse(json.dumps([1, 2])) is None
@@ -130,21 +149,36 @@ async def test_handle_speaks_opening_line_on_connect():
     assert any(m["type"] == "audio_out" for m in ws.sent)
 
 
-async def test_audio_end_yields_a_turn_per_utterance():
-    # Two utterances split by audio_end -> two replies, not one for the whole connection.
+async def test_commit_yields_one_reply_per_turn():
     ws = FakeWS(
         [
             _hello(),
-            _audio(),
-            json.dumps({"type": "audio_end"}),
-            _audio(),
+            _audio(), json.dumps({"type": "audio_end"}), json.dumps({"type": "commit"}),
+            _audio(), json.dumps({"type": "audio_end"}), json.dumps({"type": "commit"}),
             json.dumps({"type": "bye"}),
         ]
     )
     await handle(ws, _deps())
 
     audio_outs = [m for m in ws.sent if m["type"] == "audio_out"]
-    assert len(audio_outs) == 3  # 1 opening greeting + 1 reply per utterance (2 utterances)
+    assert len(audio_outs) == 3  # 1 opening greeting + 1 reply per committed turn
+
+
+async def test_utterances_without_commit_are_spoken_as_one_reply():
+    # Two audio_end utterances then a single commit -> one concatenated spoken reply.
+    ws = FakeWS(
+        [
+            _hello(),
+            _audio(), json.dumps({"type": "audio_end"}),
+            _audio(), json.dumps({"type": "audio_end"}),
+            json.dumps({"type": "commit"}),
+            json.dumps({"type": "bye"}),
+        ]
+    )
+    await handle(ws, _deps())
+
+    audio_outs = [m for m in ws.sent if m["type"] == "audio_out"]
+    assert len(audio_outs) == 2  # greeting + one concatenated reply for the whole turn
 
 
 class _RecordingObserver:

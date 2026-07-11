@@ -91,7 +91,7 @@ async def test_one_full_turn_sends_subtitle_and_audio_with_latest_vision():
     assert brain.seen_vision is scene  # brain saw the latest scene
     types = [m["type"] for m in sent]
     assert "subtitle" in types and "audio_out" in types
-    subtitle = next(m for m in sent if m["type"] == "subtitle")
+    subtitle = next(m for m in sent if m["type"] == "subtitle" and m["role"] == "agent")
     assert "I'm right here." in subtitle["text"]
     audio_out = next(m for m in sent if m["type"] == "audio_out")
     assert base64.b64decode(audio_out["pcm"]) == b"WAV"
@@ -115,19 +115,72 @@ async def test_greet_speaks_opening_line_first_and_records_it():
     assert session.transcript[-1].text == config.OPENING_LINE
 
 
-async def test_run_produces_one_turn_per_utterance():
+async def _stream(*items):
+    """Yield each item as-is: a bytes tuple becomes one utterance async-iterator, and the
+    COMMIT sentinel is yielded straight through (mirrors WebSocketAudioSource.utterances())."""
+    from memaide.server.voice_loop import COMMIT
+
+    for item in items:
+        if item is COMMIT:
+            yield COMMIT
+        else:
+            async def _chunks(chunks=item):
+                for c in chunks:
+                    yield c
+
+            yield _chunks()
+
+
+async def test_utterances_buffer_until_commit_then_one_reply():
+    from memaide.server.voice_loop import COMMIT
+
     session = _session(StubBrain(reply="ok"))
     sent, send = _collector()
-    loop = VoiceLoop(
-        session=session,
-        stt=PerUtteranceSTT(),
-        tts=StubTextToSpeech(audio=b"WAV"),
-        send=send,
-    )
-    await loop.run(_utterances((b"hi",), (b"bye",)))
+    tts = StubTextToSpeech(audio=b"WAV")
+    loop = VoiceLoop(session=session, stt=PerUtteranceSTT(), tts=tts, send=send)
 
+    await loop.run(_stream((b"hi",), (b"there",), COMMIT))
+
+    subtitles = [m for m in sent if m["type"] == "subtitle" and m["role"] == "agent"]
     audio_outs = [m for m in sent if m["type"] == "audio_out"]
-    assert len(audio_outs) == 2  # one reply per utterance, not one for the whole stream
+    assert len(subtitles) == 1       # one coherent reply for the whole turn
+    assert len(audio_outs) == 1
+    assert tts.last_text == "ok"      # brain ran once over the joined turn, not concatenated
+
+
+async def test_run_produces_one_turn_per_committed_utterance():
+    from memaide.server.voice_loop import COMMIT
+
+    session = _session(StubBrain(reply="ok"))
+    sent, send = _collector()
+    loop = VoiceLoop(session=session, stt=PerUtteranceSTT(), tts=StubTextToSpeech(audio=b"WAV"), send=send)
+
+    await loop.run(_stream((b"hi",), COMMIT, (b"bye",), COMMIT))
+
+    assert len([m for m in sent if m["type"] == "audio_out"]) == 2  # one reply per committed turn
+
+
+async def test_audio_end_sends_subtitle_but_no_audio_out_before_commit():
+    # A transcribed utterance is shown immediately but not spoken until a commit/flush.
+    session = _session(StubBrain(reply="ok"))
+    sent, send = _collector()
+    loop = VoiceLoop(session=session, stt=PerUtteranceSTT(), tts=StubTextToSpeech(audio=b"WAV"), send=send)
+
+    await loop._handle_final("hello")  # drive one utterance's final; no commit, no stream end
+
+    assert any(m["type"] == "subtitle" for m in sent)
+    assert not any(m["type"] == "audio_out" for m in sent)
+
+
+async def test_pending_turn_is_flushed_when_stream_ends_without_commit():
+    # bye/disconnect ends the stream; an in-progress turn must still be spoken, not lost.
+    session = _session(StubBrain(reply="ok"))
+    sent, send = _collector()
+    loop = VoiceLoop(session=session, stt=PerUtteranceSTT(), tts=StubTextToSpeech(audio=b"WAV"), send=send)
+
+    await loop.run(_stream((b"hi",)))  # utterance but no COMMIT before the stream ends
+
+    assert len([m for m in sent if m["type"] == "audio_out"]) == 1
 
 
 class FlakyFirstSTT:
@@ -218,6 +271,24 @@ async def test_on_escalation_fires_once_across_multiple_escalating_turns():
     # "I fell" trips the rule-based monitor on the first turn; callback fires exactly once.
     assert len(reported) == 1
     assert reported[0].escalate is True
+
+
+async def test_escalating_utterance_flushes_immediately_without_commit():
+    # A red-flag utterance must be spoken at once, not held for a commit.
+    session = _session(StubBrain())
+    sent, send = _collector()
+    loop = VoiceLoop(
+        session=session,
+        stt=StubSpeechToText([]),  # unused; we drive _handle_final directly
+        tts=StubTextToSpeech(audio=b"WAV"),
+        send=send,
+    )
+
+    await loop._handle_final("I fell")  # trips the rule monitor -> escalation bypass
+
+    types = [m["type"] for m in sent]
+    assert "escalation" in types
+    assert "audio_out" in types  # spoken now, before any commit or stream end
 
 
 async def test_no_on_escalation_callback_is_fine():

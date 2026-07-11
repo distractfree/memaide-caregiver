@@ -19,7 +19,7 @@ from memaide import config
 from memaide.agent.session import AgentSession
 from memaide.schemas import HandoffType, PatientContext, VisionContext
 from memaide.server.recorder import NullSessionRecorder, SessionRecorder
-from memaide.server.voice_loop import VoiceLoop
+from memaide.server.voice_loop import VoiceLoop, COMMIT
 from memaide.vision.pipeline import VisionPipeline
 from memaide.vision.rule_check import StubVisionCheck
 
@@ -110,11 +110,21 @@ class WebSocketAudioSource:
         await self.end_utterance()
         await self._utterances.put(_QUEUE_END)
 
-    async def utterances(self) -> AsyncIterator[AsyncIterator[bytes]]:
+    async def commit(self) -> None:
+        """Client sent ``commit``: close any open utterance, then enqueue the turn-over
+        marker. The marker rides the same FIFO as utterances, so the voice loop reaches it
+        only after the preceding utterance is fully transcribed and answered."""
+        await self.end_utterance()  # no-op if audio_end already closed it
+        await self._utterances.put(COMMIT)
+
+    async def utterances(self) -> AsyncIterator[Any]:
         while True:
             queue = await self._utterances.get()
             if queue is _QUEUE_END:
                 return
+            if queue is COMMIT:
+                yield COMMIT
+                continue
             yield self._drain(queue)
 
     async def _drain(self, queue: asyncio.Queue) -> AsyncIterator[bytes]:
@@ -250,6 +260,8 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
                 await recorder.write(msg["data_url"])
                 await frame_source.put(msg["data_url"])
             elif mtype == "audio" and isinstance(msg.get("pcm"), str):
+                if loop.is_speaking:
+                    continue  # half-duplex: ignore the mic while the agent is speaking
                 try:
                     await audio_source.put(base64.b64decode(msg["pcm"]))
                 except Exception:  # noqa: BLE001 - bad base64 -> drop the chunk
@@ -258,6 +270,9 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
                 # Client marked a speech pause -> close this utterance so STT transcribes
                 # it now and the patient gets a reply, without ending the connection.
                 await audio_source.end_utterance()
+            elif mtype == "commit":
+                # Client saw the full hold-out silence -> speak the buffered turn as one reply.
+                await audio_source.commit()
             elif mtype == "bye":
                 outcome = "patient_ended"
                 break
