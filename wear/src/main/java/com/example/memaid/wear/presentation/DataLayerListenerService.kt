@@ -1,6 +1,10 @@
 package com.example.memaid.wear.presentation
 
 import android.util.Log
+import com.example.memaid.wear.data.ReminderStore
+import com.google.android.gms.wearable.DataEvent
+import com.google.android.gms.wearable.DataEventBuffer
+import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
 
@@ -15,6 +19,16 @@ class DataLayerListenerService : WearableListenerService() {
         val path = messageEvent.path
         val data = String(messageEvent.data)
         Log.d("WatchDataLayer", "📩 Message received: path=$path data=$data")
+    }
+
+    override fun onDataChanged(events: DataEventBuffer) {
+        events.forEach { event ->
+            if (event.type != DataEvent.TYPE_CHANGED) return@forEach
+            if (event.dataItem.uri.path != ReminderStore.PATH) return@forEach
+
+            Log.d("WatchDataLayer", "📥 Reminders updated from phone")
+            ReminderStore.update(DataMapItem.fromDataItem(event.dataItem).dataMap)
+        }
     }
 
     override fun onChannelOpened(channel: com.google.android.gms.wearable.ChannelClient.Channel) {

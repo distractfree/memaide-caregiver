@@ -63,12 +63,13 @@ class SessionManager(context: Context) {
         prefs.edit().remove("acked_reminders").apply()
     }
 
-    // The backend identifies the patient by deviceId.
-    // For the demo we use the seeded device id from the backend.
-    fun getDeviceId(): String {
-        // Matches the backend's seed data
-        return prefs.getString("device_id", "wewe") ?: "wewe"
-    }
+    // The backend identifies the patient by deviceId. Null means no patient is selected.
+    //
+    // This used to fall back to the "wewe" seed device, which meant that after a logout —
+    // or before a patient was picked — the app kept posting the patient's vitals under a
+    // device that isn't theirs. The backend answers 404 "No patient found for this device",
+    // but had that seed row existed, the data would have silently landed on someone else.
+    fun getDeviceId(): String? = prefs.getString("device_id", null)
 
     fun saveDeviceId(deviceId: String) {
         prefs.edit().putString("device_id", deviceId).apply()

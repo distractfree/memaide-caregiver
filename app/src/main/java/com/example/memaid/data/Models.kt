@@ -142,6 +142,7 @@ data class ServerReminderEvent(
     val reminderId: String,
     val status: String,            // scheduled | delivered | acknowledged | missed
     val sourceDevice: String,      // phone | watch | system
+    val scheduledAt: String,       // when the reminder was due — required by the backend
     val acknowledgedAt: String? = null
 )
 
@@ -166,7 +167,7 @@ data class ServerPatientItem(
 
 data class ServerVitalEvent(
     val deviceId: String,
-    val heartRate: Int,
+    val heartRate: Int?,           // omitted when the watch has no reading
     val motionState: String,
     val sourceDevice: String,
     val timestamp: String

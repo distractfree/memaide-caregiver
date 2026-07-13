@@ -16,6 +16,8 @@ import com.example.memaid.data.ReminderAckEvent
 import androidx.lifecycle.viewModelScope
 import com.example.memaid.data.HelpEvent
 import com.example.memaid.data.ReminderRepository
+import com.example.memaid.data.ReminderSync
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import com.example.memaid.data.ReminderScheduler
 import com.example.memaid.data.BeaconScanner
@@ -26,8 +28,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val sessionManager = SessionManager(application)
 
-    private val _reminders = MutableStateFlow(loadRemindersWithStatus())
+    // Starts empty, not with fake data: this list gets mirrored to the watch, and pushing
+    // FakeDataRepository's reminders would show the patient medications that aren't theirs.
+    private val _reminders = MutableStateFlow<List<Reminder>>(emptyList())
     val reminders: StateFlow<List<Reminder>> = _reminders.asStateFlow()
+
+    // Nothing is pushed to the watch until the real list has been loaded at least once.
+    private var remindersLoaded = false
 
     private val _currentRoom = MutableStateFlow("Unknown")
     val currentRoom: StateFlow<String> = _currentRoom.asStateFlow()
@@ -55,6 +62,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Track dwell: when we first saw the current room
     private var roomFirstSeenAt: Long = 0L
     private var lastEventRoom: String? = null
+
+    init {
+        // The watch mirrors whatever the phone is showing, so push from one place rather
+        // than from each call site that can change the list.
+        viewModelScope.launch {
+            combine(_reminders, _patientName) { reminders, name -> name to reminders }
+                .collect { (name, reminders) ->
+                    if (!remindersLoaded) return@collect
+                    ReminderSync.push(getApplication(), name, reminders)
+                }
+        }
+    }
 
     fun startBeaconScanning(): Boolean {
         val started = beaconScanner.startScanning()
@@ -147,26 +166,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun acknowledgeReminder(reminderId: String, sourceDevice: String = "phone") {
-        _reminders.update { list ->
-            list.map { reminder ->
-                if (reminder.reminderId == reminderId)
-                    reminder.copy(status = ReminderStatus.ACKNOWLEDGED)
-                else reminder
-            }
-        }
+        val reminder = getReminderById(reminderId) ?: return
+        val previousStatus = reminder.status
 
-        sessionManager.markReminderAcknowledged(reminderId)
-
-        // Cancel the scheduled alarm since it's done
-        ReminderScheduler.cancel(getApplication(), reminderId)
+        // Show it as done straight away so the tap feels instant, but don't commit it
+        // anywhere until the backend confirms — a rejected ack must not leave the phone
+        // believing a medication was taken.
+        setStatus(reminderId, ReminderStatus.ACKNOWLEDGED)
 
         viewModelScope.launch {
             val deviceId = sessionManager.getDeviceId()
-            val result = ReminderRepository.sendAck(deviceId, reminderId, sourceDevice)
-            result.fold(
-                onSuccess = { println("✅ Ack sent successfully") },
-                onFailure = { error -> println("⚠️ Ack failed: ${error.message}") }
+            if (deviceId == null) {
+                setStatus(reminderId, previousStatus)
+                println("⚠️ No patient selected — ack not sent")
+                return@launch
+            }
+            val result = ReminderRepository.sendAck(
+                deviceId, reminderId, sourceDevice, reminder.timeOfDay
             )
+            result.fold(
+                onSuccess = {
+                    sessionManager.markReminderAcknowledged(reminderId)
+                    ReminderScheduler.cancel(getApplication(), reminderId)
+                    println("✅ Ack sent successfully")
+                },
+                onFailure = { error ->
+                    // Put it back so the caregiver can retry.
+                    setStatus(reminderId, previousStatus)
+                    println("⚠️ Ack failed, reverted: ${error.message}")
+                }
+            )
+        }
+    }
+
+    private fun setStatus(reminderId: String, status: ReminderStatus) {
+        _reminders.update { list ->
+            list.map { reminder ->
+                if (reminder.reminderId == reminderId) reminder.copy(status = status)
+                else reminder
+            }
         }
     }
 
@@ -177,6 +215,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun sendHelpEvent(sourceDevice: String = "phone") {
         viewModelScope.launch {
             val deviceId = sessionManager.getDeviceId()
+            if (deviceId == null) {
+                println("⚠️ No patient selected — help event not sent")
+                return@launch
+            }
             val whatsapp = FakeDataRepository.CAREGIVER_WHATSAPP_NUMBER.let { "+$it" }
             val result = ReminderRepository.sendHelp(deviceId, sourceDevice, whatsapp)
             result.fold(
@@ -228,12 +270,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Call this to recompute missed status (e.g. when returning to the app)
     fun refreshReminderStatuses() {
+        remindersLoaded = true
         _reminders.value = loadRemindersWithStatus()
     }
 
     fun loadRemindersFromBackend() {
         viewModelScope.launch {
             val deviceId = sessionManager.getDeviceId()
+            if (deviceId == null) {
+                println("⚠️ No patient selected — not loading reminders")
+                return@launch
+            }
             println("📋 Loading reminders for deviceId=$deviceId")
             val result = ReminderRepository.getRemindersWithPatient(deviceId)
             result.fold(
@@ -244,6 +291,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         _patientName.value = patientName
                     }
                     val acknowledgedIds = sessionManager.getAcknowledgedIds()
+                    remindersLoaded = true
                     _reminders.value = serverReminders.map { reminder ->
                         when {
                             acknowledgedIds.contains(reminder.reminderId) ->

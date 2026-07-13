@@ -8,8 +8,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -27,6 +29,7 @@ import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
+import com.example.memaid.wear.data.ReminderStore
 import com.example.memaid.wear.presentation.theme.MemAidTheme
 import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.Wearable
@@ -42,7 +45,9 @@ class MainActivity : ComponentActivity() {
     ) { results ->
         Log.d("Vitals", "Permissions: $results")
         if (results[android.Manifest.permission.BODY_SENSORS] == true) {
-            vitalsSensorManager.start()
+            vitalsSensorManager.startHeartRate()
+        } else {
+            Log.w("Vitals", "⚠️ BODY_SENSORS denied — motion only, no heart rate")
         }
     }
 
@@ -56,6 +61,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         vitalsSensorManager = VitalsSensorManager(this)
+        vitalsSensorManager.startMotion()
         permissionsLauncher.launch(
             arrayOf(
                 android.Manifest.permission.BODY_SENSORS,
@@ -64,16 +70,20 @@ class MainActivity : ComponentActivity() {
             )
         )
 
-        // Every 30 seconds, send the latest vitals to the phone
+        // Every 30 seconds, send the latest vitals to the phone. Send as soon as we have
+        // either signal — a watch off the wrist still reports motion, and on an emulator
+        // heart rate never arrives at all.
         lifecycleScope.launch {
             while (true) {
                 delay(30_000)
                 val hr = vitalsSensorManager.heartRate.value
                 val motion = vitalsSensorManager.motionState.value
-                if (hr > 0) {
+                if (hr > 0 || motion != "unknown") {
                     val payload = "$hr|$motion"
                     Log.d("Vitals", "📤 Sending vitals: $payload")
                     WatchMessenger.sendMessage(this@MainActivity, "/vitals", payload)
+                } else {
+                    Log.d("Vitals", "⏸ No HR and no motion yet — nothing to send")
                 }
             }
         }
@@ -108,12 +118,13 @@ fun WearApp(vitals: VitalsSensorManager) {
         val heartRate by vitals.heartRate.collectAsState()
         val motionState by vitals.motionState.collectAsState()
 
-        var reminderTitle by remember { mutableStateOf("Afternoon Medication") }
-        var reminderDescription by remember {
-            mutableStateOf("Take blood pressure pill with water.")
-        }
-        var acknowledged by remember { mutableStateOf(false) }
+        val reminders by ReminderStore.reminders.collectAsState()
+        val patientName by ReminderStore.patientName.collectAsState()
+        val ackedLocally = remember { mutableStateListOf<String>() }
         var helpStatus by remember { mutableStateOf<String?>(null) }
+
+        // A DataItem only fires on change, so pick up whatever already synced.
+        LaunchedEffect(Unit) { ReminderStore.loadCached(context) }
         val audioStreamer = remember { AudioStreamer(context) }
         var streaming by remember { mutableStateOf(false) }
 
@@ -126,7 +137,9 @@ fun WearApp(vitals: VitalsSensorManager) {
                     state = listState
                 ) {
                     item {
-                        ListHeader { Text(text = "MemAide") }
+                        ListHeader {
+                            Text(text = if (patientName.isBlank()) "MemAide" else patientName)
+                        }
                     }
 
                     // Vitals card
@@ -144,33 +157,62 @@ fun WearApp(vitals: VitalsSensorManager) {
                         }
                     }
 
-                    // Reminder card
-                    item {
-                        Card(onClick = { }, modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = reminderTitle,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                text = reminderDescription,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
+                    if (reminders.isEmpty()) {
+                        item {
+                            Card(onClick = { }, modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = "No reminders yet",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
                         }
                     }
 
-                    // Acknowledge button
-                    item {
-                        Button(
-                            onClick = { acknowledged = true },
-                            enabled = !acknowledged,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = if (acknowledged) "Done" else "I Did This",
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center
-                            )
+                    reminders.forEach { reminder ->
+                        item {
+                            val done = reminder.status == "ACKNOWLEDGED" ||
+                                    ackedLocally.contains(reminder.reminderId)
+
+                            Card(onClick = { }, modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = reminder.title,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    text = reminder.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                                Text(
+                                    text = reminder.timeOfDay,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                                Button(
+                                    onClick = {
+                                        ackedLocally.add(reminder.reminderId)
+                                        scope.launch {
+                                            // The phone's listener has no reminder list of
+                                            // its own, so send the time it was due too.
+                                            WatchMessenger.sendMessage(
+                                                context,
+                                                "/reminder_ack",
+                                                "${reminder.reminderId}|${reminder.timeOfDay}"
+                                            )
+                                        }
+                                    },
+                                    enabled = !done,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 8.dp)
+                                ) {
+                                    Text(
+                                        text = if (done) "Done" else "I Did This",
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
                         }
                     }
 

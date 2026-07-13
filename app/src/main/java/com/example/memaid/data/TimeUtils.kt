@@ -1,7 +1,9 @@
 package com.example.memaid.data
 
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -35,6 +37,21 @@ object TimeUtils {
     // Produces a backend-ready UTC timestamp like "2026-06-10T08:03:00Z"
     fun nowIsoUtc(): String {
         return DateTimeFormatter.ISO_INSTANT.format(Instant.now())
+    }
+
+    // The backend wants the moment the reminder was due, but a reminder only carries a
+    // time of day ("08:00"). Anchor it to today in the local zone, then send as UTC.
+    // Falls back to now if the time can't be parsed, so an ack is never lost to a bad string.
+    fun scheduledAtIsoUtc(timeOfDay: String): String {
+        return try {
+            val instant = LocalTime.parse(timeOfDay)
+                .atDate(LocalDate.now())
+                .atZone(ZoneId.systemDefault())
+                .toInstant()
+            DateTimeFormatter.ISO_INSTANT.format(instant)
+        } catch (e: Exception) {
+            nowIsoUtc()
+        }
     }
 
     // Returns true if the reminder's time has passed by more than `graceMinutes`.

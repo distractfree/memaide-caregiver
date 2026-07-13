@@ -67,12 +67,18 @@ object ReminderRepository {
     }
 
     // --- Send acknowledgment ---
-    suspend fun sendAck(deviceId: String, reminderId: String, sourceDevice: String): Result<Unit> {
+    suspend fun sendAck(
+        deviceId: String,
+        reminderId: String,
+        sourceDevice: String,
+        timeOfDay: String
+    ): Result<Unit> {
         val event = ServerReminderEvent(
             deviceId = deviceId,
             reminderId = reminderId,
             status = "acknowledged",
             sourceDevice = sourceDevice,
+            scheduledAt = TimeUtils.scheduledAtIsoUtc(timeOfDay),
             acknowledgedAt = TimeUtils.nowIsoUtc()
         )
         if (demoMode) {
@@ -80,9 +86,14 @@ object ReminderRepository {
             return Result.success(Unit)
         }
         return try {
+            println("📤 Sending ack: $event")
             val response = ApiClient.api.postReminderEvent(event)
             if (response.isSuccessful) Result.success(Unit)
-            else Result.failure(Exception("Server error: ${response.code()}"))
+            else {
+                val errorBody = response.errorBody()?.string()
+                println("⚠️ ACK error ${response.code()} body=$errorBody")
+                Result.failure(Exception("Server error: ${response.code()} — $errorBody"))
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -148,7 +159,7 @@ object ReminderRepository {
     suspend fun sendVitals(deviceId: String, heartRate: Int, motionState: String): Result<Unit> {
         val event = ServerVitalEvent(
             deviceId = deviceId,
-            heartRate = heartRate,
+            heartRate = heartRate.takeIf { it > 0 },
             motionState = motionState,
             sourceDevice = "watch",
             timestamp = TimeUtils.nowIsoUtc()

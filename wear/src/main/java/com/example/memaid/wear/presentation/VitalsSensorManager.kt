@@ -30,7 +30,9 @@ class VitalsSensorManager(context: Context) : SensorEventListener {
 
     private val recentAccel = ArrayDeque<Double>()
 
-    fun start() {
+    // Heart rate needs the BODY_SENSORS grant; the accelerometer does not. Keep them
+    // separate so a denied grant doesn't also cost us motion state.
+    fun startHeartRate() {
         if (heartRateSensor != null) {
             sensorManager.registerListener(
                 this, heartRateSensor, SensorManager.SENSOR_DELAY_NORMAL
@@ -39,7 +41,9 @@ class VitalsSensorManager(context: Context) : SensorEventListener {
         } else {
             Log.d("Vitals", "⚠️ No heart rate sensor on this device")
         }
+    }
 
+    fun startMotion() {
         if (accelerometer != null) {
             sensorManager.registerListener(
                 this, accelerometer, SensorManager.SENSOR_DELAY_NORMAL
