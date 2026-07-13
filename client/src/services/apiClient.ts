@@ -66,6 +66,10 @@ interface RequestOptions {
   auth?: boolean
   raw?: boolean
   query?: Record<string, string | number | boolean | undefined>
+  // Opt out of the browser HTTP cache for endpoints that must always be fresh.
+  cache?: RequestCache
+  // Allow a caller to cancel an in-flight request (e.g. when the patient changes).
+  signal?: AbortSignal
 }
 
 interface EnvelopeResult<T> {
@@ -78,7 +82,7 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
 }
 
 async function rawRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, auth = true, query } = options
+  const { method = 'GET', body, auth = true, query, cache, signal } = options
 
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
@@ -97,8 +101,12 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}): Promis
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      ...(cache ? { cache } : {}),
+      ...(signal ? { signal } : {}),
     })
-  } catch {
+  } catch (err) {
+    // Re-throw aborts unchanged so callers can distinguish a cancel from a real failure.
+    if (err instanceof DOMException && err.name === 'AbortError') throw err
     throw new ApiClientError(0, 'NETWORK', 'Unable to connect to MemAide. Please check your connection and try again.')
   }
 
@@ -343,9 +351,12 @@ export const api = {
       },
     ),
 
+  // Wellness Trends polls this often, so bypass the HTTP cache to always get
+  // fresh rows, and accept a signal so a superseded patient request is aborted.
   getVitalsReport: (
     patientId: string,
     query?: VitalReportQuery,
+    signal?: AbortSignal,
   ): Promise<VitalReport> =>
     request<VitalReport>(
       `/api/patients/${encodeURIComponent(patientId)}/reports/vitals`,
@@ -356,6 +367,8 @@ export const api = {
           from: toIsoDate(query?.from),
           to: toIsoDate(query?.to),
         },
+        cache: 'no-store',
+        signal,
       },
     ),
 

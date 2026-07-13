@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { UserPlus } from 'lucide-react'
+import { AlertTriangle, Clock3, RefreshCw, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -16,10 +16,9 @@ import {
   type DateRange,
 } from '@/features/reports/vitals/components/WellnessFilters'
 import { WellnessKpis } from '@/features/reports/vitals/components/WellnessKpis'
-import { api, ApiClientError } from '@/services/apiClient'
-import type { VitalReport } from '@/types/domain'
-
-type PageStatus = 'idle' | 'loading' | 'ready' | 'error'
+import { useVitalsReport } from '@/features/reports/vitals/useVitalsReport'
+import { formatDateTime } from '@/utils/formatting'
+import type { VitalReportQuery } from '@/types/domain'
 
 const INITIAL_FILTERS: DateRange = { from: null, to: null }
 
@@ -27,12 +26,6 @@ export function WellnessTrendsPage() {
   const { selectedPatientId } = usePatients()
 
   const [filters, setFilters] = useState<DateRange>(INITIAL_FILTERS)
-  const [report, setReport] = useState<VitalReport | null>(null)
-  const [status, setStatus] = useState<PageStatus>('idle')
-  const [error, setError] = useState<string | null>(null)
-
-  const prevPatientIdRef = useRef<string | null>(null)
-  const requestIdRef = useRef(0)
 
   const validationError = useMemo<string | null>(() => {
     if (filters.from && filters.to && filters.from > filters.to) {
@@ -41,63 +34,21 @@ export function WellnessTrendsPage() {
     return null
   }, [filters.from, filters.to])
 
-  const loadReport = useCallback(async (patientId: string, range: DateRange) => {
-    const requestId = ++requestIdRef.current
-    setStatus('loading')
-    setError(null)
-    try {
-      // Send the full UTC day so the selected end date is included.
-      const from = range.from
-        ? new Date(`${range.from}T00:00:00.000Z`).toISOString()
-        : undefined
-      const to = range.to
-        ? new Date(`${range.to}T23:59:59.999Z`).toISOString()
-        : undefined
-
-      const data = await api.getVitalsReport(patientId, { from, to })
-
-      if (requestId !== requestIdRef.current) return
-      setReport(data)
-      setStatus('ready')
-    } catch (err) {
-      if (requestId !== requestIdRef.current) return
-      if (err instanceof ApiClientError) {
-        setError(err.message)
-      } else {
-        setError('Unable to load wellness report.')
-      }
-      setStatus('error')
+  // Send the full UTC day so the selected end date is included. The date inputs
+  // are plain YYYY-MM-DD, so we anchor them to UTC rather than shifting hours.
+  const query = useMemo<VitalReportQuery>(() => {
+    return {
+      from: filters.from ? `${filters.from}T00:00:00.000Z` : undefined,
+      to: filters.to ? `${filters.to}T23:59:59.999Z` : undefined,
     }
-  }, [])
+  }, [filters.from, filters.to])
 
-  useEffect(() => {
-    const prev = prevPatientIdRef.current
-    prevPatientIdRef.current = selectedPatientId
-
-    if (!selectedPatientId) {
-      requestIdRef.current++
-      setReport(null)
-      setStatus('idle')
-      setError(null)
-      setFilters(INITIAL_FILTERS)
-      return
-    }
-
-    if (prev && prev !== selectedPatientId) {
-      // Patient changed, so clear old data and reload with empty filters.
-      requestIdRef.current++
-      setReport(null)
-      setFilters({ from: null, to: null })
-      return
-    }
-
-    if (validationError) {
-      // Do not call the backend with an invalid date range.
-      return
-    }
-
-    void loadReport(selectedPatientId, filters)
-  }, [selectedPatientId, filters, validationError, loadReport])
+  const { report, status, error, isRefreshing, lastUpdatedAt, refresh } = useVitalsReport({
+    patientId: selectedPatientId,
+    query,
+    // Don't hit the backend with an invalid range; keep whatever we last had.
+    enabled: !validationError,
+  })
 
   function handleClearFilters() {
     setFilters(INITIAL_FILTERS)
@@ -129,6 +80,7 @@ export function WellnessTrendsPage() {
   const showInitialLoader = status === 'loading' && report === null
   const showFatalError = status === 'error' && report === null
   const hasActiveFilter = filters.from !== null || filters.to !== null
+  const backgroundError = error && report !== null
 
   return (
     <motion.div
@@ -137,7 +89,12 @@ export function WellnessTrendsPage() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
     >
-      <PageHeader />
+      <PageHeader
+        lastUpdatedAt={lastUpdatedAt}
+        isRefreshing={isRefreshing}
+        onRefresh={refresh}
+        refreshDisabled={Boolean(validationError)}
+      />
 
       <WellnessFilters
         filters={filters}
@@ -151,16 +108,17 @@ export function WellnessTrendsPage() {
         <ErrorState
           title="Unable to load wellness report"
           message={error ?? 'Something went wrong. Please try again.'}
-          onRetry={() => void loadReport(selectedPatientId, filters)}
+          onRetry={refresh}
         />
       ) : report ? (
         <>
-          {status === 'error' && error && (
+          {backgroundError && (
             <div
               role="alert"
-              className="rounded-xl border border-error/30 bg-error-container/60 px-3 py-2.5 text-sm text-error font-medium"
+              className="flex items-center gap-2 rounded-xl border border-error/30 bg-error-container/60 px-3 py-2.5 text-sm font-medium text-error"
             >
-              {error}
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>{error} Showing the last update — retrying automatically.</span>
             </div>
           )}
 
@@ -184,12 +142,45 @@ export function WellnessTrendsPage() {
   )
 }
 
-function PageHeader() {
+interface PageHeaderProps {
+  lastUpdatedAt?: Date | null
+  isRefreshing?: boolean
+  onRefresh?: () => void
+  refreshDisabled?: boolean
+}
+
+function PageHeader({
+  lastUpdatedAt,
+  isRefreshing = false,
+  onRefresh,
+  refreshDisabled = false,
+}: PageHeaderProps) {
   return (
-    <div className="flex flex-col gap-2">
-      <h1 className="text-3xl font-semibold tracking-tight text-on-surface">Wellness Trends</h1>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-2">
+        <h1 className="text-3xl font-semibold tracking-tight text-on-surface">Wellness Trends</h1>
+      </div>
+
+      {onRefresh && (
+        <div className="flex flex-col gap-2 sm:items-end">
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<RefreshCw className={isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />}
+            loading={false}
+            disabled={isRefreshing || refreshDisabled}
+            onClick={onRefresh}
+          >
+            Refresh
+          </Button>
+          <p className="inline-flex items-center gap-1.5 text-xs text-text-muted" aria-live="polite">
+            <Clock3 className="h-3.5 w-3.5" />
+            {lastUpdatedAt
+              ? `Last updated ${formatDateTime(lastUpdatedAt.toISOString())}`
+              : 'Not updated yet'}
+          </p>
+        </div>
+      )}
     </div>
   )
 }
-
-

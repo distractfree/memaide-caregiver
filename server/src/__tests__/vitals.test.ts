@@ -875,3 +875,99 @@ describe("GET /api/patients/:patientId/reports/vitals", () => {
     );
   });
 });
+
+describe("GET /api/patients/:patientId/reports/vitals — data fidelity", () => {
+  // Mirrors the real production values Arian's watch now sends.
+  const liveHeartRates = [82, 82, 82, 76, 76, 80, 82, 79, 75, 72];
+
+  function buildLiveEvents() {
+    // Newest-first, as Prisma returns them (orderBy timestamp desc).
+    return liveHeartRates.map((heartRate, index) => ({
+      ...sampleVitalEvent,
+      id: `live-event-${index}`,
+      // Descending timestamps: index 0 is the most recent.
+      timestamp: new Date(`2026-07-13T04:${String(30 - index).padStart(2, "0")}:00.000Z`),
+      heartRate,
+      motionState: index < 3 ? "active" : "idle",
+      stepCount: 1000 + index,
+      sourceDevice: "watch",
+    }));
+  }
+
+  it("returns the exact stored heart-rate values without rounding or fallback", async () => {
+    pat.findFirst.mockResolvedValue(samplePatientA);
+    vitalEvent.findMany.mockResolvedValue(buildLiveEvents());
+
+    const res = await request(app)
+      .get(`/api/patients/${PATIENT_A_ID}/reports/vitals`)
+      .set("Authorization", `Bearer ${tokenA}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.events.map((e: { heartRate: number }) => e.heartRate)).toEqual(
+      liveHeartRates
+    );
+    // The specific values called out in the task all pass through untouched.
+    for (const hr of [72, 75, 76, 79, 80, 82]) {
+      expect(res.body.data.events.some((e: { heartRate: number }) => e.heartRate === hr)).toBe(
+        true
+      );
+    }
+  });
+
+  it("never substitutes 82 (or any value) for a null heart rate", async () => {
+    pat.findFirst.mockResolvedValue(samplePatientA);
+    vitalEvent.findMany.mockResolvedValue([
+      {
+        ...sampleVitalEvent,
+        id: "null-hr-event",
+        heartRate: null,
+        motionState: "active",
+      },
+    ]);
+
+    const res = await request(app)
+      .get(`/api/patients/${PATIENT_A_ID}/reports/vitals`)
+      .set("Authorization", `Bearer ${tokenA}`);
+
+    expect(res.body.data.events[0].heartRate).toBeNull();
+    expect(res.body.data.summary.latestHeartRate).toBeNull();
+    // A null-only sample must not appear in the heart-rate trend as a fake point.
+    expect(res.body.data.heartRateTrend).toEqual([]);
+  });
+
+  it("returns raw events newest timestamp first and preserves motion states", async () => {
+    pat.findFirst.mockResolvedValue(samplePatientA);
+    vitalEvent.findMany.mockResolvedValue(buildLiveEvents());
+
+    const res = await request(app)
+      .get(`/api/patients/${PATIENT_A_ID}/reports/vitals`)
+      .set("Authorization", `Bearer ${tokenA}`);
+
+    const timestamps: string[] = res.body.data.events.map(
+      (e: { timestamp: string }) => e.timestamp
+    );
+    const sortedDesc = [...timestamps].sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+    expect(timestamps).toEqual(sortedDesc);
+    expect(res.body.data.events[0].motionState).toBe("active");
+    expect(res.body.data.events[res.body.data.events.length - 1].motionState).toBe("idle");
+
+    // Query hits the database fresh (no in-memory cache) with a desc sort.
+    expect(vitalEvent.findMany).toHaveBeenCalledWith({
+      where: { patientId: PATIENT_A_ID },
+      orderBy: { timestamp: "desc" },
+    });
+  });
+
+  it("returns ISO-8601 UTC timestamps for the frontend to localize", async () => {
+    pat.findFirst.mockResolvedValue(samplePatientA);
+    vitalEvent.findMany.mockResolvedValue(buildLiveEvents());
+
+    const res = await request(app)
+      .get(`/api/patients/${PATIENT_A_ID}/reports/vitals`)
+      .set("Authorization", `Bearer ${tokenA}`);
+
+    for (const event of res.body.data.events) {
+      expect(event.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    }
+  });
+});
