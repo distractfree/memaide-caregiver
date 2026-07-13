@@ -496,10 +496,15 @@ export type AiSessionStatus =
 // re-derive Active/Ended/etc. from raw status or timestamps.
 export type AiSessionDisplayStatus =
   | 'Active'
+  | 'Caregiver joined'
   | 'Resolved'
   | 'Ended'
   | 'Failed'
   | 'Stale'
+
+// Registration evidence only (did Anthony ack the start). NOT a live-connection
+// signal — true presence would require a heartbeat from Anthony/Arian.
+export type AiSessionRegistrationStatus = 'registered' | 'failed' | 'unknown'
 
 export type AiSessionJoinabilityReason =
   | 'live'
@@ -510,11 +515,14 @@ export type AiSessionJoinabilityReason =
   | 'registration_failed'
   | 'not_live'
 
+// Matches the canonical API message DTO (server maps senderType->role and
+// message->content). `caregiver` is a distinct role from `assistant`.
 export interface AiSessionMessage {
   id: string
   aiSessionId: string
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'user' | 'assistant' | 'caregiver'
   content: string
+  metadata?: unknown
   createdAt: string
 }
 
@@ -539,10 +547,13 @@ export interface AiSession {
   joinabilityReason?: AiSessionJoinabilityReason
   displayStatus?: AiSessionDisplayStatus
   lastActivityAt?: string | null
+  // Registration evidence (detail responses only); not a live-connection state.
+  registrationStatus?: AiSessionRegistrationStatus
 }
 
 export interface AiSessionsQuery {
   status?: AiSessionStatus
   from?: Date | string
   to?: Date | string
+  limit?: number
 }

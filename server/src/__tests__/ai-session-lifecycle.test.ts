@@ -112,7 +112,7 @@ describe("AI session joinability", () => {
     expect(result.displayStatus).toBe("Active");
   });
 
-  it("a caregiver_joined session is live but not joinable (already joined)", () => {
+  it("a recent caregiver_joined session is not joinable and shows 'Caregiver joined'", () => {
     const result = computeJoinability({
       status: "caregiver_joined",
       startedAt: RECENT,
@@ -124,10 +124,25 @@ describe("AI session joinability", () => {
     });
     expect(result.isJoinable).toBe(false);
     expect(result.joinabilityReason).toBe("not_live");
-    expect(result.displayStatus).toBe("Active");
+    expect(result.displayStatus).toBe("Caregiver joined");
   });
 
-  it("a zero-message freshly-started session (starting) is not yet joinable", () => {
+  it("an OLD caregiver_joined session is Stale, not Active or 'Caregiver joined'", () => {
+    const result = computeJoinability({
+      status: "caregiver_joined",
+      startedAt: OLD,
+      updatedAt: OLD,
+      caregiverJoinedAt: OLD,
+      endedAt: null,
+      metadata: null,
+      lastMessageAt: OLD,
+    });
+    expect(result.isJoinable).toBe(false);
+    expect(result.joinabilityReason).toBe("stale");
+    expect(result.displayStatus).toBe("Stale");
+  });
+
+  it("a recent zero-message starting session is not yet joinable", () => {
     const result = computeJoinability({
       status: "starting",
       startedAt: RECENT,
@@ -138,6 +153,20 @@ describe("AI session joinability", () => {
     });
     expect(result.isJoinable).toBe(false);
     expect(result.joinabilityReason).toBe("not_live");
+  });
+
+  it("an OLD starting session is Stale (staleness applies before not_live)", () => {
+    const result = computeJoinability({
+      status: "starting",
+      startedAt: OLD,
+      updatedAt: OLD,
+      endedAt: null,
+      metadata: null,
+      lastMessageAt: null,
+    });
+    expect(result.isJoinable).toBe(false);
+    expect(result.joinabilityReason).toBe("stale");
+    expect(result.displayStatus).toBe("Stale");
   });
 
   it("respects a configurable stale window", () => {

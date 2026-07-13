@@ -67,6 +67,9 @@ export const listCaregiverAiSessionsSchema = z.object({
   status: z.enum(AI_SESSION_STATUSES).optional(),
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
+  // Bounded history: callers request a recent window instead of the full log.
+  // Coerced because query params arrive as strings. Capped to keep responses small.
+  limit: z.coerce.number().int().positive().max(200).optional(),
 });
 
 const callbackDateTimeSchema = z.string().datetime({ offset: true });

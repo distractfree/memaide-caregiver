@@ -67,7 +67,10 @@ async function main() {
       metadata: s.metadata,
       lastMessageAt: s.messages?.[0]?.createdAt ?? null,
     });
-    // Only touch sessions that are demonstrably stale by the shared rule.
+    // Only touch sessions that are demonstrably stale by the shared rule. This
+    // now covers ANY non-terminal status past the threshold, including old
+    // `caregiver_joined` and `starting` sessions, because staleness is evaluated
+    // before "not_live" in computeJoinability.
     return joinability.joinabilityReason === "stale";
   });
 

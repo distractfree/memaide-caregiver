@@ -1024,6 +1024,51 @@ describe("AI Sessions (Backend Implementation)", () => {
       );
     });
 
+    it("list endpoint forwards a safe limit to a bounded query", async () => {
+      p.patient.findUnique.mockResolvedValue({ id: patientId, caregiverId });
+      p.aiSession.findMany.mockResolvedValue([]);
+
+      const res = await request(app)
+        .get(`/api/patients/${patientId}/ai-sessions?limit=20`)
+        .set("Authorization", `Bearer ${caregiverToken}`);
+      expect(res.status).toBe(200);
+      expect(p.aiSession.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 20 })
+      );
+    });
+
+    it("caregiver session detail returns canonical message DTOs and registrationStatus", async () => {
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        status: "resolved",
+        startedAt: new Date("2026-07-08T02:10:00.000Z"),
+        endedAt: new Date("2026-07-08T02:14:00.000Z"),
+        updatedAt: new Date("2026-07-08T02:14:00.000Z"),
+        caregiverJoinedAt: null,
+        emergencySuggestedAt: null,
+        metadata: { aiAgentRegisteredAt: "2026-07-08T02:10:00.000Z" },
+        patient: { caregiverId },
+        messages: [
+          { id: "m1", aiSessionId, senderType: "ai", message: "Hi, I'm here to help.", createdAt: new Date("2026-07-08T02:10:01.000Z"), metadata: null },
+          { id: "m2", aiSessionId, senderType: "patient", message: "I can't find my pills", createdAt: new Date("2026-07-08T02:10:20.000Z"), metadata: null },
+          { id: "m3", aiSessionId, senderType: "event", message: "Caregiver joined the support session.", createdAt: new Date("2026-07-08T02:11:00.000Z"), metadata: null },
+        ],
+      });
+
+      const res = await request(app)
+        .get(`/api/ai-sessions/${aiSessionId}`)
+        .set("Authorization", `Bearer ${caregiverToken}`);
+
+      expect(res.status).toBe(200);
+      const messages = res.body.data.messages;
+      expect(messages).toHaveLength(3);
+      // senderType -> role, message -> content, no blank bubbles.
+      expect(messages[0]).toEqual(expect.objectContaining({ role: "assistant", content: "Hi, I'm here to help." }));
+      expect(messages[1]).toEqual(expect.objectContaining({ role: "user", content: "I can't find my pills" }));
+      expect(messages[2]).toEqual(expect.objectContaining({ role: "system", content: "Caregiver joined the support session." }));
+      expect(res.body.data.registrationStatus).toBe("registered");
+    });
+
     it("existing Help event flow still works", async () => {
       p.aiSession.create.mockClear();
       p.patient.findUnique.mockResolvedValue({ id: patientId, deviceId });

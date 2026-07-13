@@ -18,6 +18,8 @@ function getTimelineClass(role: string): string {
       return 'patient'
     case 'system':
       return 'system'
+    case 'caregiver':
+      return 'caregiver'
     default:
       return 'assistant'
   }
@@ -29,6 +31,8 @@ function getTimelineLabel(role: string): string {
       return 'Patient'
     case 'system':
       return 'System'
+    case 'caregiver':
+      return 'Caregiver'
     default:
       return 'Assistant'
   }

@@ -103,4 +103,57 @@ describe('AiSessionsSection', () => {
       expect(caregiverJoinAiSession).toHaveBeenCalledWith('s-live')
     })
   })
+
+  it('a stale caregiver_joined session shows Stale, not Active, and has no Join', async () => {
+    listAiSessions.mockResolvedValue([
+      makeSession({
+        id: 's-stale-cj',
+        status: 'caregiver_joined',
+        caregiverJoinedAt: '2026-07-11T04:00:00.000Z',
+        isJoinable: false,
+        displayStatus: 'Stale',
+      }),
+    ])
+
+    render(<AiSessionsSection patientId="patient-1" />)
+
+    expect(await screen.findByText('Stale')).toBeInTheDocument()
+    expect(screen.queryByText('Active')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Join session' })).not.toBeInTheDocument()
+  })
+
+  it('a recent caregiver_joined session shows the "Caregiver joined" badge and no Join', async () => {
+    listAiSessions.mockResolvedValue([
+      makeSession({
+        id: 's-cj',
+        status: 'caregiver_joined',
+        caregiverJoinedAt: '2026-07-13T03:59:00.000Z',
+        isJoinable: false,
+        displayStatus: 'Caregiver joined',
+      }),
+    ])
+
+    render(<AiSessionsSection patientId="patient-1" />)
+
+    expect(await screen.findByText('Caregiver joined')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Join session' })).not.toBeInTheDocument()
+  })
+
+  it('switching the history range refetches with a wider query', async () => {
+    listAiSessions.mockResolvedValue([
+      makeSession({ id: 's-resolved', status: 'resolved', isJoinable: false, displayStatus: 'Resolved' }),
+    ])
+
+    render(<AiSessionsSection patientId="patient-1" />)
+
+    await screen.findByText('Resolved')
+    // Default load uses the bounded "recent" window.
+    expect(listAiSessions).toHaveBeenCalledWith('patient-1', { limit: 20 })
+
+    await userEvent.click(screen.getByRole('button', { name: 'All sessions' }))
+
+    await waitFor(() => {
+      expect(listAiSessions).toHaveBeenCalledWith('patient-1', {})
+    })
+  })
 })

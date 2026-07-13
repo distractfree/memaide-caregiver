@@ -7,6 +7,7 @@ import {
   computeJoinability,
   isTerminalStatus,
 } from "./ai-session.lifecycle";
+import { deriveRegistrationStatus, toApiMessages } from "./ai-session.dto";
 import type {
   AiSessionConcludeCallbackInput,
   AiSessionEscalationCallbackInput,
@@ -744,7 +745,7 @@ export async function getMobileSession(sessionId: string, deviceId: string) {
     status: session.status,
     startedAt: session.startedAt,
     endedAt: session.endedAt,
-    messages: session.messages
+    messages: toApiMessages(session.messages),
   };
 }
 
@@ -872,7 +873,7 @@ export async function acknowledgeEmergency(sessionId: string, deviceId: string, 
 
 // Caregiver endpoints
 
-export async function listCaregiverSessions(patientId: string, caregiverId: string, query: { status?: string, from?: string, to?: string }) {
+export async function listCaregiverSessions(patientId: string, caregiverId: string, query: { status?: string, from?: string, to?: string, limit?: number }) {
   const patient = await prisma.patient.findUnique({
     where: { id: patientId }
   });
@@ -892,6 +893,9 @@ export async function listCaregiverSessions(patientId: string, caregiverId: stri
   const sessions = await prisma.aiSession.findMany({
     where,
     orderBy: { createdAt: 'desc' },
+    // Bounded history: newest-first, capped by the caller's limit when provided.
+    // No records are deleted; older sessions remain reachable via a wider filter.
+    ...(query.limit ? { take: query.limit } : {}),
     include: {
       _count: { select: { messages: true } },
       messages: {
@@ -957,10 +961,13 @@ export async function getCaregiverSession(sessionId: string, caregiverId: string
 
   return {
     ...session,
+    // Canonical message DTO (role/content), never raw Prisma rows.
+    messages: toApiMessages(session.messages),
     isJoinable: joinability.isJoinable,
     joinabilityReason: joinability.joinabilityReason,
     displayStatus: joinability.displayStatus,
     lastActivityAt: joinability.lastActivityAt,
+    registrationStatus: deriveRegistrationStatus(session.status, session.metadata),
   };
 }
 

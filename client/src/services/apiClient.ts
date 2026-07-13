@@ -406,6 +406,7 @@ export const api = {
           status: query?.status,
           from: toIsoDate(query?.from),
           to: toIsoDate(query?.to),
+          limit: query?.limit,
         },
       },
     ),

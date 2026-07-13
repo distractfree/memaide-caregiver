@@ -48,7 +48,13 @@ export type JoinabilityReason =
   | "registration_failed"
   | "not_live";
 
-export type DisplayStatus = "Active" | "Resolved" | "Ended" | "Failed" | "Stale";
+export type DisplayStatus =
+  | "Active"
+  | "Caregiver joined"
+  | "Resolved"
+  | "Ended"
+  | "Failed"
+  | "Stale";
 
 export interface JoinabilityInput {
   status: string;
@@ -128,13 +134,20 @@ export function computeJoinability(input: JoinabilityInput): JoinabilityResult {
     joinabilityReason = "superseded";
   } else if (endedAt) {
     joinabilityReason = "ended";
-  } else if (!JOINABLE_STATUSES.includes(status as AiSessionStatus)) {
-    // Live but not joinable (starting, caregiver_joined).
-    joinabilityReason = "not_live";
   } else {
+    // Any remaining status is non-terminal (starting, active, caregiver_joined,
+    // backup_*, emergency_suggested). Staleness applies to ALL of them and is
+    // evaluated before "not_live", so an old caregiver_joined/starting session
+    // is reported as stale rather than lingering as Active/In progress forever.
     const staleMs = getStaleMinutes() * 60_000;
-    if (lastActivity && Date.now() - lastActivity.getTime() > staleMs) {
+    const isStale =
+      lastActivity !== null && Date.now() - lastActivity.getTime() > staleMs;
+
+    if (isStale) {
       joinabilityReason = "stale";
+    } else if (!JOINABLE_STATUSES.includes(status as AiSessionStatus)) {
+      // Recent but not joinable (starting, caregiver_joined).
+      joinabilityReason = "not_live";
     } else {
       joinabilityReason = "live";
       isJoinable = true;
@@ -150,6 +163,9 @@ export function computeJoinability(input: JoinabilityInput): JoinabilityResult {
     displayStatus = "Ended";
   } else if (joinabilityReason === "stale") {
     displayStatus = "Stale";
+  } else if (status === "caregiver_joined") {
+    // Recent, caregiver is engaged: a clear in-progress state, not "Active".
+    displayStatus = "Caregiver joined";
   } else {
     displayStatus = "Active";
   }

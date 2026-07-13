@@ -14,6 +14,8 @@ export function resolveDisplayStatus(session: AiSession): AiSessionDisplayStatus
       return 'Failed'
     case 'cancelled':
       return 'Ended'
+    case 'caregiver_joined':
+      return session.endedAt ? 'Ended' : 'Caregiver joined'
     default:
       return session.endedAt ? 'Ended' : 'Active'
   }
@@ -23,4 +25,12 @@ export function resolveDisplayStatus(session: AiSession): AiSessionDisplayStatus
 // absent (older payloads) we default to non-joinable rather than guessing.
 export function canJoinSession(session: AiSession): boolean {
   return session.isJoinable === true
+}
+
+// "Current" = a genuinely live session (joinable, or an in-progress caregiver
+// hand-off). Everything else — resolved, failed, ended, superseded, stale — is
+// history. Used to keep the live session visually separate from the log.
+export function isCurrentSession(session: AiSession): boolean {
+  const display = resolveDisplayStatus(session)
+  return session.isJoinable === true || display === 'Caregiver joined'
 }

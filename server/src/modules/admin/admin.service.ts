@@ -3,6 +3,7 @@ import { prisma } from "../../lib/prisma";
 import { env } from "../../config/env";
 import { AppError } from "../../middleware/error.middleware";
 import { computeJoinability } from "../ai-sessions/ai-session.lifecycle";
+import { deriveRegistrationStatus, toApiMessages } from "../ai-sessions/ai-session.dto";
 import type { AdminLoginInput } from "./admin.schemas";
 
 function signAdminToken(): string {
@@ -175,10 +176,11 @@ export async function getAiSessionById(id: string) {
     caregiverJoinedAt: session.caregiverJoinedAt,
     emergencySuggestedAt: session.emergencySuggestedAt,
     summary: session.summary,
-    messages: session.messages,
+    messages: toApiMessages(session.messages),
     isJoinable: joinability.isJoinable,
     joinabilityReason: joinability.joinabilityReason,
     displayStatus: joinability.displayStatus,
     lastActivityAt: joinability.lastActivityAt,
+    registrationStatus: deriveRegistrationStatus(session.status, session.metadata),
   };
 }

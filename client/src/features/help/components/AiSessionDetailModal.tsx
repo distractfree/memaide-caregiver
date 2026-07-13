@@ -6,7 +6,7 @@ import { LoadingState } from '@/components/ui/LoadingState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { formatDateTime } from '@/utils/formatting'
 import { api, ApiClientError } from '@/services/apiClient'
-import type { AiSession } from '@/types/domain'
+import type { AiSession, AiSessionMessage } from '@/types/domain'
 import { resolveDisplayStatus } from './aiSessionDisplay'
 
 interface AiSessionDetailModalProps {
@@ -124,19 +124,8 @@ export function AiSessionDetailModal({ sessionId, onClose, onSessionUpdated }: A
           <div className="max-h-[50vh] flex-1 overflow-y-auto pr-2">
             {session.messages && session.messages.length > 0 ? (
               <div className="flex flex-col gap-4">
-                {session.messages.map(msg => (
-                  <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                    <div className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${
-                      msg.role === 'user'
-                        ? 'rounded-br-none bg-primary text-white'
-                        : msg.role === 'system'
-                        ? 'rounded-bl-none border border-outline-variant/30 bg-surface-dim text-xs italic text-text-muted'
-                        : 'rounded-bl-none bg-surface-container text-on-surface'
-                    }`}>
-                      {msg.content}
-                    </div>
-                    <span className="mt-1 px-1 text-[10px] text-text-muted">{formatDateTime(msg.createdAt)}</span>
-                  </div>
+                {session.messages.map((msg) => (
+                  <MessageBubble key={msg.id} message={msg} />
                 ))}
               </div>
             ) : (
@@ -198,5 +187,46 @@ export function AiSessionDetailModal({ sessionId, onClose, onSessionUpdated }: A
         </div>
       )}
     </Modal>
+  )
+}
+
+// Renders one transcript entry. Roles come from the canonical API DTO:
+//   user      -> patient (right, primary)
+//   caregiver -> caregiver reply (right, accent — distinct from the patient)
+//   assistant -> AI (left, neutral bubble)
+//   system    -> lifecycle/event notice (centered, quiet) — visibly distinct
+//                from conversation so events like "Caregiver joined" are clear.
+function MessageBubble({ message }: { message: AiSessionMessage }) {
+  const { role, content, createdAt } = message
+
+  if (role === 'system') {
+    return (
+      <div className="flex flex-col items-center">
+        <div className="max-w-[90%] rounded-full border border-outline-variant/30 bg-surface-dim px-3 py-1 text-center text-xs italic text-text-muted">
+          {content}
+        </div>
+        <span className="mt-1 px-1 text-[10px] text-text-muted">{formatDateTime(createdAt)}</span>
+      </div>
+    )
+  }
+
+  const alignEnd = role === 'user' || role === 'caregiver'
+  const bubbleTone =
+    role === 'user'
+      ? 'rounded-br-none bg-primary text-white'
+      : role === 'caregiver'
+        ? 'rounded-br-none bg-accent/15 text-accent-dark'
+        : 'rounded-bl-none bg-surface-container text-on-surface'
+
+  return (
+    <div className={`flex flex-col ${alignEnd ? 'items-end' : 'items-start'}`}>
+      {role === 'caregiver' && (
+        <span className="mb-0.5 px-1 text-[10px] font-semibold uppercase tracking-wider text-accent-dark">
+          Caregiver
+        </span>
+      )}
+      <div className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${bubbleTone}`}>{content}</div>
+      <span className="mt-1 px-1 text-[10px] text-text-muted">{formatDateTime(createdAt)}</span>
+    </div>
   )
 }
