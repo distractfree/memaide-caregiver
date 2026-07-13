@@ -7,6 +7,7 @@ import { ErrorState } from '@/components/ui/ErrorState'
 import { formatDateTime } from '@/utils/formatting'
 import { api, ApiClientError } from '@/services/apiClient'
 import type { AiSession } from '@/types/domain'
+import { resolveDisplayStatus } from './aiSessionDisplay'
 
 interface AiSessionDetailModalProps {
   sessionId: string | null
@@ -104,7 +105,7 @@ export function AiSessionDetailModal({ sessionId, onClose, onSessionUpdated }: A
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-outline-variant/30 pb-4">
             <div>
               <p className="text-xs font-semibold uppercase text-text-muted">Status</p>
-              <p className="text-sm font-medium capitalize text-on-surface">{session.status.replace('_', ' ')}</p>
+              <p className="text-sm font-medium text-on-surface">{resolveDisplayStatus(session)}</p>
             </div>
             {session.caregiverJoinedAt && (
               <div>
@@ -181,7 +182,7 @@ export function AiSessionDetailModal({ sessionId, onClose, onSessionUpdated }: A
             ) : (
               <>
                 <Button variant="outline" onClick={onClose}>Close</Button>
-                {session.status === 'active' && (
+                {session.isJoinable === true && (
                   <Button onClick={handleJoin} loading={joining} leftIcon={<MessageCircle className="h-4 w-4" />}>
                     Join session
                   </Button>

@@ -36,9 +36,11 @@ export function HelpStatusStrip({
   const configured = Boolean(contact)
 
   const lastEvent = eventsStatus === 'ready' ? mostRecentEvent(events) : null
+  // Count only genuinely joinable (current, live) sessions, using the
+  // backend-authoritative flag rather than guessing from the raw status.
   const activeSessions =
     sessionsStatus === 'ready'
-      ? sessions.filter((s) => s.status === 'active').length
+      ? sessions.filter((s) => s.isJoinable === true).length
       : null
 
   return (

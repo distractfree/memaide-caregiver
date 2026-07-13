@@ -2,6 +2,11 @@ import { prisma } from "../../lib/prisma";
 import { AppError } from "../../middleware/error.middleware";
 import { SCRIPTED_MESSAGES, determineNextAiMessage } from "./ai-session.messages";
 import { validateTransition, AiSessionStatus } from "./ai-session.state-machine";
+import {
+  NON_TERMINAL_STATUSES,
+  computeJoinability,
+  isTerminalStatus,
+} from "./ai-session.lifecycle";
 import type {
   AiSessionConcludeCallbackInput,
   AiSessionEscalationCallbackInput,
@@ -124,15 +129,6 @@ function asJsonRecord(value: unknown): JsonRecord {
   }
 
   return value as JsonRecord;
-}
-
-function isTerminalStatus(status: string) {
-  return (
-    status === "resolved" ||
-    status === "cancelled" ||
-    status === "error" ||
-    status === "start_failed"
-  );
 }
 
 function mapTranscriptSenderType(role: string) {
@@ -395,12 +391,19 @@ async function callAiAgentSessionStart(payload: AiAgentStartPayload) {
 
 async function markAiSessionStartFailed(sessionId: string, statusCode: 502 | 504) {
   try {
+    const existing = await prisma.aiSession.findUnique({
+      where: { id: sessionId },
+      select: { metadata: true },
+    });
     await prisma.aiSession.update({
       where: { id: sessionId },
       data: {
+        // start_failed is terminal, carries endedAt, and is never joinable.
         status: "start_failed",
         endedAt: new Date(),
         metadata: {
+          ...asJsonRecord(existing?.metadata),
+          registrationFailed: true,
           aiAgentStartFailedAt: new Date().toISOString(),
           upstreamStatusCode: statusCode,
         },
@@ -409,6 +412,40 @@ async function markAiSessionStartFailed(sessionId: string, statusCode: 502 | 504
   } catch {
     // Best effort: the API response should still reflect the upstream start failure.
   }
+}
+
+// Enforce one active session per patient: any previous non-terminal session is
+// safely closed (endedAt set, history preserved) and tagged as superseded so it
+// can never remain Active or joinable after a new session starts.
+async function supersedePreviousSessions(patientId: string, newSessionId: string) {
+  const previous =
+    (await prisma.aiSession.findMany({
+      where: {
+        patientId,
+        id: { not: newSessionId },
+        status: { in: NON_TERMINAL_STATUSES },
+      },
+      select: { id: true, metadata: true },
+    })) ?? [];
+
+  const supersededAt = new Date();
+  for (const session of previous) {
+    await prisma.aiSession.update({
+      where: { id: session.id },
+      data: {
+        status: "cancelled",
+        endedAt: supersededAt,
+        metadata: {
+          ...asJsonRecord(session.metadata),
+          supersededBy: newSessionId,
+          supersededAt: supersededAt.toISOString(),
+          supersededReason: "superseded_by_new_session",
+        },
+      },
+    });
+  }
+
+  return previous.length;
 }
 
 export async function startAiSession(input: StartAiSessionInput) {
@@ -543,6 +580,10 @@ export async function startAiSession(input: StartAiSessionInput) {
     },
   });
 
+  // Only after the new session is genuinely registered do we close previous
+  // sessions, so a failed start never orphans the patient's existing session.
+  await supersedePreviousSessions(patient.id, session.id);
+
   return {
     success: true,
     sessionId: session.id,
@@ -621,6 +662,14 @@ export async function recordConcludeCallback(
 
   if (!session) {
     throw new AppError(404, "Session not found", "NOT_FOUND");
+  }
+
+  // Idempotency: Anthony may retry the conclude callback. If we have already
+  // recorded a conclusion, acknowledge it without re-writing the terminal state
+  // or duplicating transcript messages.
+  const existingMetadata = asJsonRecord(session.metadata);
+  if (existingMetadata.aiConclusion) {
+    return { success: true, alreadyConcluded: true };
   }
 
   const concludedAt = new Date();
@@ -843,19 +892,45 @@ export async function listCaregiverSessions(patientId: string, caregiverId: stri
   const sessions = await prisma.aiSession.findMany({
     where,
     orderBy: { createdAt: 'desc' },
-    include: { _count: { select: { messages: true } } }
+    include: {
+      _count: { select: { messages: true } },
+      messages: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { createdAt: true },
+      },
+    },
   });
 
-  return sessions.map(s => ({
-    id: s.id,
-    patientId: s.patientId,
-    helpEventId: s.helpEventId,
-    status: s.status,
-    startedAt: s.startedAt,
-    endedAt: s.endedAt,
-    summary: s.summary,
-    messageCount: s._count.messages
-  }));
+  return sessions.map(s => {
+    const joinability = computeJoinability({
+      status: s.status,
+      startedAt: s.startedAt,
+      endedAt: s.endedAt,
+      updatedAt: s.updatedAt,
+      caregiverJoinedAt: s.caregiverJoinedAt,
+      emergencySuggestedAt: s.emergencySuggestedAt,
+      metadata: s.metadata,
+      lastMessageAt: s.messages?.[0]?.createdAt ?? null,
+    });
+
+    return {
+      id: s.id,
+      patientId: s.patientId,
+      helpEventId: s.helpEventId,
+      status: s.status,
+      startedAt: s.startedAt,
+      endedAt: s.endedAt,
+      caregiverJoinedAt: s.caregiverJoinedAt,
+      emergencySuggestedAt: s.emergencySuggestedAt,
+      summary: s.summary,
+      messageCount: s._count.messages,
+      isJoinable: joinability.isJoinable,
+      joinabilityReason: joinability.joinabilityReason,
+      displayStatus: joinability.displayStatus,
+      lastActivityAt: joinability.lastActivityAt,
+    };
+  });
 }
 
 export async function getCaregiverSession(sessionId: string, caregiverId: string) {
@@ -868,13 +943,38 @@ export async function getCaregiverSession(sessionId: string, caregiverId: string
     throw new AppError(404, "Session not found");
   }
 
-  return session;
+  const lastMessage = session.messages?.[session.messages.length - 1];
+  const joinability = computeJoinability({
+    status: session.status,
+    startedAt: session.startedAt,
+    endedAt: session.endedAt,
+    updatedAt: session.updatedAt,
+    caregiverJoinedAt: session.caregiverJoinedAt,
+    emergencySuggestedAt: session.emergencySuggestedAt,
+    metadata: session.metadata,
+    lastMessageAt: lastMessage?.createdAt ?? null,
+  });
+
+  return {
+    ...session,
+    isJoinable: joinability.isJoinable,
+    joinabilityReason: joinability.joinabilityReason,
+    displayStatus: joinability.displayStatus,
+    lastActivityAt: joinability.lastActivityAt,
+  };
 }
 
 export async function caregiverJoinSession(sessionId: string, caregiverId: string) {
   const session = await prisma.aiSession.findUnique({
     where: { id: sessionId },
-    include: { patient: true }
+    include: {
+      patient: true,
+      messages: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { createdAt: true },
+      },
+    },
   });
 
   if (!session || session.patient.caregiverId !== caregiverId) {
@@ -882,6 +982,27 @@ export async function caregiverJoinSession(sessionId: string, caregiverId: strin
   }
 
   validateTransition(session.status as AiSessionStatus, "caregiver_joined");
+
+  // Backend-authoritative guard: even a direct API call must not join a session
+  // that is ended, terminal, stale, superseded, or otherwise non-joinable.
+  const joinability = computeJoinability({
+    status: session.status,
+    startedAt: session.startedAt,
+    endedAt: session.endedAt,
+    updatedAt: session.updatedAt,
+    caregiverJoinedAt: session.caregiverJoinedAt,
+    emergencySuggestedAt: session.emergencySuggestedAt,
+    metadata: session.metadata,
+    lastMessageAt: session.messages?.[0]?.createdAt ?? null,
+  });
+
+  if (!joinability.isJoinable) {
+    throw new AppError(
+      409,
+      `This session is no longer joinable (${joinability.joinabilityReason}).`,
+      "SESSION_NOT_JOINABLE"
+    );
+  }
 
   const updatedSession = await prisma.$transaction(async (tx) => {
     const updated = await tx.aiSession.update({

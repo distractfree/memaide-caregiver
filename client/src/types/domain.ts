@@ -478,7 +478,37 @@ export interface StreamSessionsQuery {
   to?: Date | string
 }
 
-export type AiSessionStatus = 'active' | 'caregiver_joined' | 'resolved'
+// Raw backend lifecycle status. Kept as a broad union so the UI never crashes on
+// a status it did not anticipate; presentation is driven by `displayStatus`.
+export type AiSessionStatus =
+  | 'starting'
+  | 'active'
+  | 'caregiver_joined'
+  | 'backup_suggested'
+  | 'backup_notified'
+  | 'emergency_suggested'
+  | 'resolved'
+  | 'cancelled'
+  | 'error'
+  | 'start_failed'
+
+// Backend-authoritative normalized status for display. The frontend must not
+// re-derive Active/Ended/etc. from raw status or timestamps.
+export type AiSessionDisplayStatus =
+  | 'Active'
+  | 'Resolved'
+  | 'Ended'
+  | 'Failed'
+  | 'Stale'
+
+export type AiSessionJoinabilityReason =
+  | 'live'
+  | 'ended'
+  | 'terminal_status'
+  | 'stale'
+  | 'superseded'
+  | 'registration_failed'
+  | 'not_live'
 
 export interface AiSessionMessage {
   id: string
@@ -504,6 +534,11 @@ export interface AiSession {
   messageCount?: number
   patientName?: string
   caregiverName?: string
+  // Backend-authoritative joinability. Source of truth for the Join button.
+  isJoinable?: boolean
+  joinabilityReason?: AiSessionJoinabilityReason
+  displayStatus?: AiSessionDisplayStatus
+  lastActivityAt?: string | null
 }
 
 export interface AiSessionsQuery {

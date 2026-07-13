@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { type MouseEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { Inbox, MessageCircle, RefreshCw, Sparkles } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -8,7 +8,8 @@ import { ErrorState } from '@/components/ui/ErrorState'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { formatDateTime } from '@/utils/formatting'
 import { api, ApiClientError } from '@/services/apiClient'
-import type { AiSession, AiSessionStatus } from '@/types/domain'
+import type { AiSession, AiSessionDisplayStatus } from '@/types/domain'
+import { resolveDisplayStatus } from './aiSessionDisplay'
 import { AiSessionDetailModal } from './AiSessionDetailModal'
 
 type SectionStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -20,10 +21,12 @@ interface AiSessionsSectionProps {
   onSessionsChange?: (sessions: AiSession[], status: SectionStatus) => void
 }
 
-const statusTone: Record<AiSessionStatus, 'danger' | 'accent' | 'muted'> = {
-  active: 'danger',
-  caregiver_joined: 'accent',
-  resolved: 'muted',
+const statusTone: Record<AiSessionDisplayStatus, 'danger' | 'accent' | 'muted'> = {
+  Active: 'accent',
+  Resolved: 'muted',
+  Ended: 'muted',
+  Failed: 'danger',
+  Stale: 'muted',
 }
 
 // Secondary context: AI support sessions the patient app started. Presented in
@@ -147,6 +150,26 @@ function SessionRow({
   onOpen: () => void
   onReload: () => void
 }) {
+  const [joining, setJoining] = useState(false)
+  const [joinError, setJoinError] = useState<string | null>(null)
+  const displayStatus = resolveDisplayStatus(session)
+
+  const handleJoin = async (e: MouseEvent) => {
+    e.stopPropagation()
+    // Backend is the source of truth: never attempt to join a non-joinable session.
+    if (session.isJoinable !== true || joining) return
+    setJoinError(null)
+    setJoining(true)
+    try {
+      await api.caregiverJoinAiSession(session.id)
+      onReload()
+    } catch (err) {
+      setJoinError(err instanceof ApiClientError ? err.message : 'Failed to join session.')
+    } finally {
+      setJoining(false)
+    }
+  }
+
   return (
     <div
       role="button"
@@ -161,8 +184,8 @@ function SessionRow({
       className="cursor-pointer rounded-xl border border-outline-variant/30 bg-surface-bright p-4 transition-colors hover:bg-surface-container-low focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <Badge tone={statusTone[session.status]} dot>
-          {session.status.replace('_', ' ')}
+        <Badge tone={statusTone[displayStatus]} dot>
+          {displayStatus}
         </Badge>
         <span className="ml-auto text-xs text-text-muted">
           {formatDateTime(session.startedAt)}
@@ -176,19 +199,22 @@ function SessionRow({
       {session.messageCount !== undefined && (
         <p className="mt-2 text-xs text-text-muted">{session.messageCount} messages</p>
       )}
-      {session.status === 'active' && (
+      {session.isJoinable === true && (
         <div className="mt-3">
           <Button
             size="sm"
+            loading={joining}
             leftIcon={<MessageCircle className="h-3.5 w-3.5" />}
-            onClick={(e) => {
-              e.stopPropagation()
-              void api.caregiverJoinAiSession(session.id).then(onReload)
-            }}
+            onClick={handleJoin}
           >
             Join session
           </Button>
         </div>
+      )}
+      {joinError && (
+        <p role="alert" className="mt-2 text-xs font-medium text-error">
+          {joinError}
+        </p>
       )}
     </div>
   )

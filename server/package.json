@@ -14,6 +14,7 @@
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node --transpile-only prisma/seed.ts",
     "smoke:test": "ts-node --transpile-only scripts/smoke-test.ts",
+    "ai-sessions:cleanup-stale": "ts-node --transpile-only scripts/cleanup-stale-ai-sessions.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {

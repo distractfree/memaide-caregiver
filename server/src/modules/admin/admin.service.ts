@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import { prisma } from "../../lib/prisma";
 import { env } from "../../config/env";
 import { AppError } from "../../middleware/error.middleware";
+import { computeJoinability } from "../ai-sessions/ai-session.lifecycle";
 import type { AdminLoginInput } from "./admin.schemas";
 
 function signAdminToken(): string {
@@ -97,20 +98,42 @@ export async function getAiSessions(query: any) {
       patient: {
         include: { caregiver: true }
       },
-      _count: { select: { messages: true } }
+      _count: { select: { messages: true } },
+      messages: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { createdAt: true },
+      },
     }
   });
 
-  return sessions.map(s => ({
-    id: s.id,
-    patientId: s.patientId,
-    patientName: s.patient.name,
-    caregiverName: s.patient.caregiver.name,
-    status: s.status,
-    startedAt: s.startedAt,
-    endedAt: s.endedAt,
-    messageCount: s._count.messages
-  }));
+  return sessions.map(s => {
+    const joinability = computeJoinability({
+      status: s.status,
+      startedAt: s.startedAt,
+      endedAt: s.endedAt,
+      updatedAt: s.updatedAt,
+      caregiverJoinedAt: s.caregiverJoinedAt,
+      emergencySuggestedAt: s.emergencySuggestedAt,
+      metadata: s.metadata,
+      lastMessageAt: s.messages?.[0]?.createdAt ?? null,
+    });
+
+    return {
+      id: s.id,
+      patientId: s.patientId,
+      patientName: s.patient.name,
+      caregiverName: s.patient.caregiver.name,
+      status: s.status,
+      startedAt: s.startedAt,
+      endedAt: s.endedAt,
+      messageCount: s._count.messages,
+      isJoinable: joinability.isJoinable,
+      joinabilityReason: joinability.joinabilityReason,
+      displayStatus: joinability.displayStatus,
+      lastActivityAt: joinability.lastActivityAt,
+    };
+  });
 }
 
 export async function getAiSessionById(id: string) {
@@ -128,6 +151,18 @@ export async function getAiSessionById(id: string) {
     throw new AppError(404, "Session not found", "NOT_FOUND");
   }
 
+  const lastMessage = session.messages?.[session.messages.length - 1];
+  const joinability = computeJoinability({
+    status: session.status,
+    startedAt: session.startedAt,
+    endedAt: session.endedAt,
+    updatedAt: session.updatedAt,
+    caregiverJoinedAt: session.caregiverJoinedAt,
+    emergencySuggestedAt: session.emergencySuggestedAt,
+    metadata: session.metadata,
+    lastMessageAt: lastMessage?.createdAt ?? null,
+  });
+
   return {
     id: session.id,
     patientId: session.patientId,
@@ -140,6 +175,10 @@ export async function getAiSessionById(id: string) {
     caregiverJoinedAt: session.caregiverJoinedAt,
     emergencySuggestedAt: session.emergencySuggestedAt,
     summary: session.summary,
-    messages: session.messages
+    messages: session.messages,
+    isJoinable: joinability.isJoinable,
+    joinabilityReason: joinability.joinabilityReason,
+    displayStatus: joinability.displayStatus,
+    lastActivityAt: joinability.lastActivityAt,
   };
 }

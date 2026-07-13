@@ -643,6 +643,58 @@ describe("AI Sessions (Backend Implementation)", () => {
       });
       expect(res.status).toBe(200);
     });
+
+    it("starting a new session supersedes previous non-terminal sessions", async () => {
+      p.patient.findUnique.mockResolvedValue(patientContext);
+      p.aiSession.create.mockResolvedValue({ id: aiSessionId });
+      p.aiSession.update.mockResolvedValue({ id: aiSessionId, status: "active" });
+      p.aiSession.findMany.mockResolvedValue([
+        { id: "old-session-1", metadata: { sourceDevice: "phone" } },
+      ]);
+      mockAiAgentResponse(200);
+
+      const res = await request(app).post("/api/mobile/ai-sessions/start").send({ deviceId });
+
+      expect(res.status).toBe(200);
+      // Only previous, non-terminal sessions for this patient are considered.
+      expect(p.aiSession.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            patientId,
+            id: { not: aiSessionId },
+            status: expect.objectContaining({ in: expect.arrayContaining(["active"]) }),
+          }),
+        })
+      );
+      // The previous session is closed and tagged as superseded, preserving history.
+      expect(p.aiSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "old-session-1" },
+          data: expect.objectContaining({
+            status: "cancelled",
+            endedAt: expect.any(Date),
+            metadata: expect.objectContaining({
+              supersededBy: aiSessionId,
+              supersededReason: "superseded_by_new_session",
+            }),
+          }),
+        })
+      );
+    });
+
+    it("a failed start does not supersede the patient's existing sessions", async () => {
+      p.patient.findUnique.mockResolvedValue(patientContext);
+      p.aiSession.create.mockResolvedValue({ id: aiSessionId });
+      p.aiSession.update.mockResolvedValue({ id: aiSessionId, status: "start_failed" });
+      p.aiSession.findUnique.mockResolvedValue({ id: aiSessionId, metadata: null });
+      mockAiAgentResponse(503);
+
+      const res = await request(app).post("/api/mobile/ai-sessions/start").send({ deviceId });
+
+      expect(res.status).toBe(502);
+      // Supersede only runs after a successful registration.
+      expect(p.aiSession.findMany).not.toHaveBeenCalled();
+    });
   });
 
   describe("AI Backend Callback Endpoints", () => {
@@ -850,6 +902,26 @@ describe("AI Sessions (Backend Implementation)", () => {
       expect(p.aiSession.update).not.toHaveBeenCalled();
       expect(p.aiSessionMessage.create).not.toHaveBeenCalled();
     });
+
+    it("duplicate conclude callback is idempotent and does not duplicate transcripts", async () => {
+      // Session already carries an aiConclusion (a prior conclude was recorded).
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        status: "resolved",
+        metadata: { aiConclusion: { anthony_session_id: "abc-123" } },
+      });
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/conclude`)
+        .set("X-Api-Key", aiCallbackApiKey)
+        .send(concludeBody);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ success: true });
+      // Idempotent: no terminal-state rewrite and no duplicated transcript rows.
+      expect(p.aiSession.update).not.toHaveBeenCalled();
+      expect(p.aiSessionMessage.create).not.toHaveBeenCalled();
+    });
   });
 
   describe("Caregiver Endpoints", () => {
@@ -899,6 +971,57 @@ describe("AI Sessions (Backend Implementation)", () => {
         .post(`/api/ai-sessions/${aiSessionId}/caregiver-joined`)
         .set("Authorization", `Bearer ${caregiverToken}`);
       expect(res.status).toBe(400); // Because it's resolved, can't join
+    });
+
+    it("rejects a manual join for a stale (non-joinable) active session with 409", async () => {
+      const old = new Date(Date.now() - 60 * 60 * 1000); // 1 hour ago
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        status: "active",
+        startedAt: old,
+        updatedAt: old,
+        endedAt: null,
+        caregiverJoinedAt: null,
+        emergencySuggestedAt: null,
+        metadata: null,
+        messages: [],
+        patient: { caregiverId },
+      });
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/caregiver-joined`)
+        .set("Authorization", `Bearer ${caregiverToken}`);
+      expect(res.status).toBe(409);
+      expect(p.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("list response includes backend-authoritative joinability fields", async () => {
+      p.patient.findUnique.mockResolvedValue({ id: patientId, caregiverId });
+      p.aiSession.findMany.mockResolvedValue([
+        {
+          id: aiSessionId,
+          patientId,
+          status: "resolved",
+          startedAt: new Date(),
+          endedAt: new Date(),
+          summary: null,
+          metadata: null,
+          messages: [],
+          _count: { messages: 0 },
+        },
+      ]);
+
+      const res = await request(app)
+        .get(`/api/patients/${patientId}/ai-sessions`)
+        .set("Authorization", `Bearer ${caregiverToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data[0]).toEqual(
+        expect.objectContaining({
+          isJoinable: false,
+          joinabilityReason: "terminal_status",
+          displayStatus: "Resolved",
+        })
+      );
     });
 
     it("existing Help event flow still works", async () => {
