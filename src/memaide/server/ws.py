@@ -206,8 +206,10 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
     )
     recorder = deps.make_recorder(session_id or "unknown")
     latest: dict[str, Any] = {"scene": None, "frame_url": None}
+    frame_seq = 0
 
     async def sink(ctx: VisionContext) -> None:
+        nonlocal frame_seq
         ctx = ctx.model_copy(update={"flags": deps.vision_check.check()})
         latest["scene"] = ctx
         await send(
@@ -222,6 +224,9 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
         if deps.observer is not None:
             # on_scene swallows its own errors, but guard the connection regardless.
             await deps.observer.on_scene(ctx, session, frame_url=latest["frame_url"])
+        if deps.reporter is not None and session_id is not None:
+            await deps.reporter.frame(session_id, ctx, latest["frame_url"], frame_seq)
+            frame_seq += 1
 
     on_escalation = None
     if (deps.reporter is not None or deps.notifier is not None) and session_id is not None:
