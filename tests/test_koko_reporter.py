@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from memaide.schemas import EscalationDecision, HandoffType, Role, SessionRecord, Turn
+from memaide.schemas import EscalationDecision, HandoffType, Role, SessionRecord, Turn, VisionContext
 from memaide.service.koko_reporter import KokoReporter
 
 
@@ -67,3 +67,62 @@ async def test_post_failure_is_swallowed():
     fc = FakeClient(raises=True)
     rep = KokoReporter(base_url="http://koko:4000", client=fc)
     await rep.escalation("s1", EscalationDecision(escalate=True))  # must not raise
+
+
+def _ctx():
+    return VisionContext(
+        description="An older adult seated at a kitchen table.",
+        label="kitchen",
+        ts=datetime(2026, 7, 14, 18, 22, 5, tzinfo=timezone.utc),
+        flags=["person_seated"],
+        advisory_flags=[],
+    )
+
+
+async def test_frame_posts_image_and_vision():
+    fc = FakeClient()
+    rep = KokoReporter(base_url="http://koko:4000", api_key="k", client=fc)
+    await rep.frame("s1", _ctx(), "data:image/jpeg;base64,QUJD", 42)
+    call = fc.calls[0]
+    assert call["url"] == "http://koko:4000/ai-sessions/s1/frames"
+    assert call["headers"] == {"X-Api-Key": "k"}
+    body = call["json"]
+    assert body["seq"] == 42
+    assert body["ts"] == "2026-07-14T18:22:05+00:00"
+    assert body["image"] == {"mime": "image/jpeg", "b64": "QUJD"}
+    assert body["vision"] == {
+        "description": "An older adult seated at a kitchen table.",
+        "label": "kitchen",
+        "flags": ["person_seated"],
+        "advisory_flags": [],
+    }
+
+
+async def test_frame_strips_data_url_prefix():
+    fc = FakeClient()
+    rep = KokoReporter(base_url="http://koko:4000", client=fc)
+    await rep.frame("s1", _ctx(), "data:image/jpeg;base64,SGVsbG8=", 0)
+    assert fc.calls[0]["json"]["image"]["b64"] == "SGVsbG8="
+
+
+async def test_frame_omits_image_when_frame_url_none():
+    fc = FakeClient()
+    rep = KokoReporter(base_url="http://koko:4000", client=fc)
+    await rep.frame("s1", _ctx(), None, 7)
+    body = fc.calls[0]["json"]
+    assert "image" not in body
+    assert body["seq"] == 7
+    assert body["vision"]["label"] == "kitchen"
+
+
+async def test_frame_no_op_when_disabled():
+    fc = FakeClient()
+    rep = KokoReporter(base_url=None, client=fc)
+    await rep.frame("s1", _ctx(), "data:image/jpeg;base64,QUJD", 1)
+    assert fc.calls == []
+
+
+async def test_frame_failure_is_swallowed():
+    fc = FakeClient(raises=True)
+    rep = KokoReporter(base_url="http://koko:4000", client=fc)
+    await rep.frame("s1", _ctx(), None, 0)  # must not raise
