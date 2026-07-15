@@ -91,6 +91,46 @@ session end it POSTs the transcript. Env vars (documented here, **not** in a com
 
 Needs `OPENAI_API_KEY` (brain + vision + STT/TTS) and the `websockets` + `uvicorn` packages.
 
+#### Frame stream callback (`/ai-sessions/:id/frames`)
+
+Alongside escalation/conclude, my server streams **each described glasses frame** to koko so
+the caregiver UI can show a live frame-by-frame view. One `POST` per described frame (~1 every
+2s, matching `VISION_INTERVAL_SECONDS`), best-effort: a non-2xx, timeout, or unreachable host
+is logged on my side and dropped — it never blocks or backpressures the live session. Same
+`X-Api-Key` auth as the other callbacks; a no-op when `KOKO_BASE_URL` is unset.
+
+```
+POST {KOKO_BASE_URL}/ai-sessions/{session_id}/frames
+Header: X-Api-Key: {KOKO_API_KEY}
+Content-Type: application/json
+```
+
+```json
+{
+  "seq": 42,
+  "ts": "2026-07-14T18:22:05.123456+00:00",
+  "image": {
+    "mime": "image/jpeg",
+    "b64": "<raw base64, no data-URL prefix>"
+  },
+  "vision": {
+    "description": "An older adult seated at a kitchen table.",
+    "label": "kitchen",
+    "flags": ["person_seated"],
+    "advisory_flags": []
+  }
+}
+```
+
+- `seq` — monotonic per-session counter from 0, one per described frame; lets koko order/dedup
+  independent of clock skew.
+- `ts` — the described-frame timestamp (UTC, ISO-8601).
+- `image` — **optional**; omitted entirely when no frame bytes are available for the scene, so
+  a metadata-only frame still reports. Reconstruct a data URL as `data:{mime};base64,{b64}` to
+  render directly in an `<img>`.
+- `vision.flags` — resolved rule-based flags for the scene; `vision.advisory_flags` — the
+  describer's raw advisory flags.
+
 ### Glasses vision trace + live preview (Part A)
 
 `scripts/run_bridge_server.py` runs the bridge server wired for a **frames-only** trace: the
