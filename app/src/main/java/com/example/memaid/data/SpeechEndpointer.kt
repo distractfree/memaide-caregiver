@@ -24,9 +24,25 @@ class SpeechEndpointer(
     private var audioEndSent = false
     private var committed = false
 
+    // Diagnostics — the level/state of the most recent accept() call, for logging.
+    var lastLevel = 0
+        private set
+    val heardSpeech get() = sawSpeech
+
+    // Drop all accumulated state so the next chunk starts a fresh utterance. Used to gate the
+    // detector while the AI reply plays (half-duplex): we don't want silence accrued during
+    // playback — or the tail of the previous turn — to fire a spurious AUDIO_END/COMMIT.
+    fun reset() {
+        sawSpeech = false
+        silentMs = 0
+        audioEndSent = false
+        committed = false
+    }
+
     // Feed one PCM chunk; returns the boundary event (if any) this chunk triggers.
     fun accept(pcm: ByteArray, length: Int): Endpoint {
         val level = meanAbsAmplitude(pcm, length)
+        lastLevel = level
         val chunkMs = (length / 2) * 1000L / sampleRate // 2 bytes per sample
 
         if (level >= silenceThreshold) {

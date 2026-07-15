@@ -101,8 +101,24 @@ class PhoneListenerService : WearableListenerService() {
             }
         }
 
+        // Half-duplex gate: the watch's speaker and mic are centimeters apart and its echo
+        // canceller can't reliably remove the AI reply — left open, the reply leaks into the mic,
+        // gets transcribed as the patient, and spawns reply after reply. So while the AI is
+        // speaking we stop forwarding the watch mic upstream (turn-taking; no barge-in).
+        // aiSpeakingUntil holds the elapsedRealtime (ms) the current reply finishes playing.
+        val aiSpeakingUntil = java.util.concurrent.atomic.AtomicLong(0L)
+        val speakingTailMs = 800L // extra guard for channel lag + speaker/room echo decay
+
         // When audio comes back from the server, push it down the return channel
         voiceBridge.onAudioOut = { pcm ->
+            // Extend the mute window BEFORE writing: returnOut.write() blocks for the whole
+            // playback (the watch drains the channel at real-time speed), so setting it after
+            // would engage the gate ~a full reply too late and the echo would leak in the gap.
+            // 24kHz mono PCM16 -> 48000 bytes/sec. Extend from whichever is later: now (reply
+            // starting) or the end of audio already queued.
+            val playMs = pcm.size * 1000L / 48000L
+            val base = maxOf(android.os.SystemClock.elapsedRealtime(), aiSpeakingUntil.get())
+            aiSpeakingUntil.set(base + playMs + speakingTailMs)
             try {
                 returnOut?.write(pcm)
                 returnOut?.flush()
@@ -142,11 +158,31 @@ class PhoneListenerService : WearableListenerService() {
                 )
                 val buf = ByteArray(4096)
                 val endpointer = SpeechEndpointer()
+                var wasGated = false
                 input.use { ins ->
                     while (true) {
                         val n = ins.read(buf)
                         if (n < 0) break
                         total += n
+
+                        // While the AI reply is playing on the watch, drop the mic instead of
+                        // forwarding it — otherwise the reply echoes back as "patient" speech and
+                        // spawns duplicate replies. Reset the endpointer across the gap so silence
+                        // during playback (or a stale mid-utterance) can't fire a bogus commit.
+                        if (android.os.SystemClock.elapsedRealtime() < aiSpeakingUntil.get()) {
+                            if (!wasGated) {
+                                endpointer.reset()
+                                wasGated = true
+                                Log.d("PhoneListener", "🔇 Mic gated while AI speaks")
+                            }
+                            continue
+                        }
+                        if (wasGated) {
+                            endpointer.reset()
+                            wasGated = false
+                            Log.d("PhoneListener", "🎙 Mic ungated — listening")
+                        }
+
                         voiceBridge.sendAudio(buf, n)  // no-ops until WS is connected
                         when (endpointer.accept(buf, n)) {
                             Endpoint.AUDIO_END -> voiceBridge.sendAudioEnd()
@@ -154,7 +190,7 @@ class PhoneListenerService : WearableListenerService() {
                             Endpoint.NONE -> {}
                         }
                         if (total - lastLogged >= 48_000) {
-                            Log.d("PhoneListener", "🎧 Audio stream: ${total / 1024} KB received (forwarding to WS)")
+                            Log.d("PhoneListener", "🎧 Audio ${total / 1024} KB | level=${endpointer.lastLevel} (thr=500) speech=${endpointer.heardSpeech}")
                             lastLogged = total
                         }
                     }

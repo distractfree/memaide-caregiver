@@ -29,10 +29,15 @@ class DataLayerListenerService : WearableListenerService() {
                 android.media.AudioFormat.CHANNEL_OUT_MONO,
                 android.media.AudioFormat.ENCODING_PCM_16BIT
             )
+            // Play the AI reply through the VOICE_COMMUNICATION stream (not MEDIA) so the
+            // watch's hardware AEC — which references the voice-comm downlink — can cancel it
+            // out of the VOICE_COMMUNICATION mic capture. With USAGE_MEDIA the reply leaks into
+            // the mic (echo), the endpointer reads it as speech->silence and fires extra
+            // commits, and the patient gets 2-3 piled-up replies. Matches PhoneVoiceSession.
             val track = android.media.AudioTrack.Builder()
                 .setAudioAttributes(
                     android.media.AudioAttributes.Builder()
-                        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                        .setUsage(android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION)
                         .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
                         .build()
                 )
