@@ -211,9 +211,6 @@ fun MemAideNavigation(viewModel: MainViewModel, openReminderId: String? = null) 
                         popUpTo(0) { inclusive = true }
                     }
                 },
-                onBeaconDebug = {
-                    navController.navigate(Screen.BeaconDebug.route)
-                },
                 onRegisterGlasses = {
                     navController.navigate(Screen.GlassesRegister.route)
                 }
