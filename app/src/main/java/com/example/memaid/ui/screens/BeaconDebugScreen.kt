@@ -76,7 +76,7 @@ fun BeaconDebugScreen(
                         modifier = Modifier.padding(24.dp).fillMaxWidth(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("🔍 Scanning for beacons...\nMake sure Bluetooth and Location are ON.",
+                        Text("Scanning for beacons...\nMake sure Bluetooth and Location are ON.",
                             fontSize = 14.sp)
                     }
                 }
