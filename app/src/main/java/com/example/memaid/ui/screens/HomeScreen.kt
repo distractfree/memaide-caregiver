@@ -102,7 +102,7 @@ fun HomeScreen(
                     )
                 ) {
                     Text(
-                        text = "🆘  HELP",
+                        text = "HELP",
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -128,7 +128,7 @@ fun HomeScreen(
                                 .fillMaxWidth(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("✅ All reminders completed!", fontSize = 16.sp)
+                            Text("All reminders completed!", fontSize = 16.sp)
                         }
                     }
                 }
@@ -180,7 +180,7 @@ fun ReminderCard(reminder: Reminder, onClick: () -> Unit) {
     }
     val statusLabel = when (reminder.status) {
         ReminderStatus.PENDING -> "Pending"
-        ReminderStatus.ACKNOWLEDGED -> "Done ✓"
+        ReminderStatus.ACKNOWLEDGED -> "Done"
         ReminderStatus.MISSED -> "Missed"
     }
 

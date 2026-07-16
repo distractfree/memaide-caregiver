@@ -121,7 +121,7 @@ fun HelpScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "🥽 Include glasses vision",
+                    text = "Include glasses vision",
                     fontSize = 16.sp
                 )
                 Switch(
@@ -151,7 +151,7 @@ fun HelpScreen(
                 )
             ) {
                 Text(
-                    text = if (sessionActive) "⏹  End AI Session" else "🎙  Talk to AI Assistant",
+                    text = if (sessionActive) "End AI Session" else "Talk to AI Assistant",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -178,7 +178,7 @@ fun HelpScreen(
                 )
             ) {
                 Text(
-                    text = "🆘  Call Caregiver",
+                    text = "Call Caregiver",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -194,7 +194,7 @@ fun HelpScreen(
                     )
                 ) {
                     Text(
-                        text = "✓ Help request sent. Opening WhatsApp...",
+                        text = "Help request sent. Opening WhatsApp...",
                         modifier = Modifier.padding(16.dp),
                         textAlign = TextAlign.Center,
                         color = Color(0xFFE65100)
@@ -209,7 +209,7 @@ fun HelpScreen(
                     )
                 ) {
                     Text(
-                        text = "🎙 AI session active — speak now",
+                        text = "AI session active — speak now",
                         modifier = Modifier.padding(16.dp),
                         textAlign = TextAlign.Center,
                         color = Color(0xFF1565C0)

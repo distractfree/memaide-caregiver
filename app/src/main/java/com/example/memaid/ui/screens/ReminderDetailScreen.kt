@@ -114,7 +114,7 @@ fun ReminderDetailScreen(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("🔔 Test Notification (fires in 3s)")
+                Text("Test Notification (fires in 3s)")
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -131,7 +131,7 @@ fun ReminderDetailScreen(
                         containerColor = Color(0xFF2E7D32)
                     )
                 ) {
-                    Text("✓  I Did This", fontSize = 20.sp, color = Color.White)
+                    Text("I Did This", fontSize = 20.sp, color = Color.White)
                 }
             } else {
                 Card(
@@ -147,7 +147,7 @@ fun ReminderDetailScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "✅ Acknowledged",
+                            text = "Acknowledged",
                             color = Color(0xFF2E7D32),
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold

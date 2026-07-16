@@ -67,7 +67,7 @@ fun GlassesRegisterScreen(onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "🥽 Meta Glasses",
+                text = "Meta Glasses",
                 style = MaterialTheme.typography.headlineSmall
             )
             Text(
@@ -128,7 +128,7 @@ fun GlassesRegisterScreen(onBack: () -> Unit) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = if (registered) "✓ Registered" else regState.toString(),
+                                text = if (registered) "Registered" else regState.toString(),
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
