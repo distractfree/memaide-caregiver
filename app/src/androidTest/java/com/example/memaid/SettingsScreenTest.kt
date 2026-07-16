@@ -41,6 +41,7 @@ class SettingsScreenTest {
     @Test
     fun removedControls_areAbsent() {
         setSettings()
+        composeRule.onNodeWithText("Settings").assertIsDisplayed()
         composeRule.onNodeWithText("Send Test to Watch", substring = true).assertDoesNotExist()
         composeRule.onNodeWithText("Beacon Debug", substring = true).assertDoesNotExist()
         composeRule.onNodeWithText("Demo Mode", substring = true).assertDoesNotExist()
