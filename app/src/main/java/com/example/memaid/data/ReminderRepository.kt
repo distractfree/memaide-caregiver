@@ -181,13 +181,14 @@ object ReminderRepository {
         }
     }
 
-    // Fetch the logged-in caregiver's patients
-    suspend fun getPatients(token: String): Result<List<Patient>> {
+    // Fetch the logged-in caregiver's patients. The token is attached by the
+    // auth interceptor in ApiClient, so callers no longer pass it here.
+    suspend fun getPatients(): Result<List<Patient>> {
         if (demoMode) {
             return Result.success(FakeDataRepository.getFakePatients())
         }
         return try {
-            val response = ApiClient.api.getPatients("Bearer $token")
+            val response = ApiClient.api.getPatients()
             if (response.isSuccessful && response.body() != null) {
                 val list = response.body()!!.data.map { p ->
                     Patient(

@@ -230,8 +230,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadPatients() {
         viewModelScope.launch {
-            val token = sessionManager.getToken() ?: ""
-            val result = ReminderRepository.getPatients(token)
+            val result = ReminderRepository.getPatients()
             result.fold(
                 onSuccess = { patientList ->
                     _patients.value = patientList

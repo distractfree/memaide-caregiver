@@ -5,7 +5,6 @@ import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Query
-import retrofit2.http.Header
 
 interface MemAideApi {
 
@@ -38,10 +37,9 @@ interface MemAideApi {
         @Body event: ServerVitalEvent
     ): Response<Unit>
 
+    // Authorization: Bearer <jwt> is attached by ApiClient's auth interceptor.
     @GET("api/mobile/patients")
-    suspend fun getPatients(
-        @Header("Authorization") token: String
-    ): Response<ApiEnvelope<List<ServerPatientItem>>>
+    suspend fun getPatients(): Response<ApiEnvelope<List<ServerPatientItem>>>
 
     @POST("api/mobile/ai-sessions/start")
     suspend fun startAiSession(
