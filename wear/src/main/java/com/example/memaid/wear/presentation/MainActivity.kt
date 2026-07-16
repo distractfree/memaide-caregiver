@@ -133,11 +133,11 @@ fun WearApp(vitals: VitalsSensorManager) {
                     item {
                         Card(onClick = { }, modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                text = "❤️ ${if (heartRate > 0) "$heartRate bpm" else "reading..."}",
+                                text = "${if (heartRate > 0) "$heartRate bpm" else "reading..."}",
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                text = "🏃 $motionState",
+                                text = "$motionState",
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(top = 4.dp)
                             )
@@ -167,7 +167,7 @@ fun WearApp(vitals: VitalsSensorManager) {
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = if (acknowledged) "✓ Done" else "I Did This",
+                                text = if (acknowledged) "Done" else "I Did This",
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.Center
                             )
@@ -198,7 +198,7 @@ fun WearApp(vitals: VitalsSensorManager) {
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = if (streaming) "⏹ End Session" else "🆘 Help",
+                                text = if (streaming) "End Session" else "Help",
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.Center
                             )
@@ -223,7 +223,7 @@ fun WearApp(vitals: VitalsSensorManager) {
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = "📞 Call Caregiver",
+                                text = "Call Caregiver",
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.Center
                             )
