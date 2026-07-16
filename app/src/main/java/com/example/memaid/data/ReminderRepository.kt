@@ -3,7 +3,7 @@ package com.example.memaid.data
 object ReminderRepository {
 
     // true = fake data, false = real backend
-    var demoMode: Boolean = true
+    var demoMode: Boolean = false
 
     // --- Login ---
     suspend fun login(email: String, password: String): Result<LoginResponse> {
