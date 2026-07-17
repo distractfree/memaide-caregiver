@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, useReducedMotion } from 'framer-motion'
-import { AlertTriangle, Clock3, RefreshCw, UserPlus } from 'lucide-react'
+import { AlertTriangle, Clock3, FileText, MessageCircle, RefreshCw, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -12,6 +12,9 @@ import { StreamCurrentStatusCard } from '@/features/stream/components/StreamCurr
 import { StreamSessionHistory, type StreamFilterState } from '@/features/stream/components/StreamSessionHistory'
 import { useLatestStreamFrame, type FrameViewerState } from '@/features/stream/useLatestStreamFrame'
 import { useStreamStatus } from '@/features/stream/useStreamStatus'
+import { AiSessionPanel } from '@/features/ai-sessions/components/AiSessionPanel'
+import { useAiSessionDetail } from '@/features/ai-sessions/hooks/useAiSessionDetail'
+import { resolveStreamSessionAction } from '@/features/ai-sessions/aiSessionUi'
 import { formatDateTime } from '@/utils/formatting'
 import type { StreamSessionsQuery, StreamStatusSummary } from '@/types/domain'
 
@@ -87,6 +90,37 @@ export function StreamStatusPage() {
     refreshFrame()
   }, [refreshFrame, refreshStatus])
 
+  // The exact AI session linked to the *active* glasses stream. Sourced only
+  // from activeSession.aiSessionId — never a "newest patient session" guess.
+  const linkedAiSessionId = activeSession?.aiSessionId ?? null
+  const [isSessionPanelOpen, setIsSessionPanelOpen] = useState(false)
+
+  const sessionDetail = useAiSessionDetail({
+    sessionId: linkedAiSessionId,
+    patientId: selectedPatientId,
+    // Fetch a single authoritative snapshot whenever a linked session exists so
+    // the header can label Join vs Open; only poll while the panel is open.
+    enabled: Boolean(linkedAiSessionId),
+    poll: isSessionPanelOpen,
+  })
+  const streamSessionAction = resolveStreamSessionAction(linkedAiSessionId, sessionDetail.session)
+
+  // Close the panel the moment the linked session disappears or the patient
+  // changes, so a previous session's data can never linger.
+  useEffect(() => {
+    if (!linkedAiSessionId) setIsSessionPanelOpen(false)
+  }, [linkedAiSessionId])
+  useEffect(() => {
+    setIsSessionPanelOpen(false)
+  }, [selectedPatientId])
+
+  const handleSessionAction = useCallback(() => {
+    setIsSessionPanelOpen(true)
+    if (streamSessionAction.kind === 'join') {
+      void sessionDetail.join().then(() => refresh())
+    }
+  }, [refresh, sessionDetail, streamSessionAction.kind])
+
   function handleClearFilters() {
     setFilters({ ...INITIAL_FILTERS })
   }
@@ -120,6 +154,25 @@ export function StreamStatusPage() {
     filters.status !== '' || filters.source !== '' || filters.from !== null || filters.to !== null
   const viewerState = viewerStateForSummary(summary, frameState)
   const isRefreshing = isStatusRefreshing || isFrameRefreshing
+
+  const sessionHeaderAction =
+    streamSessionAction.kind === 'none' || !activeSession ? null : (
+      <Button
+        size="sm"
+        variant={streamSessionAction.kind === 'join' ? 'primary' : 'outline'}
+        loading={streamSessionAction.kind === 'join' && sessionDetail.joining}
+        leftIcon={
+          streamSessionAction.kind === 'view' ? (
+            <FileText className="h-3.5 w-3.5" />
+          ) : (
+            <MessageCircle className="h-3.5 w-3.5" />
+          )
+        }
+        onClick={handleSessionAction}
+      >
+        {streamSessionAction.label}
+      </Button>
+    )
 
   return (
     <motion.div
@@ -162,6 +215,7 @@ export function StreamStatusPage() {
               imageSrc={viewerState === 'ended' || viewerState === 'failed' ? null : frame?.imageSrc ?? null}
               startedAt={activeSession?.startedAt}
               receivedAt={frame?.receivedAt}
+              headerAction={sessionHeaderAction}
             />
           )}
 
@@ -177,6 +231,13 @@ export function StreamStatusPage() {
           )}
         </>
       )}
+
+      <AiSessionPanel
+        open={isSessionPanelOpen}
+        onClose={() => setIsSessionPanelOpen(false)}
+        detail={sessionDetail}
+        onSessionUpdated={refresh}
+      />
     </motion.div>
   )
 }

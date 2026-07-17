@@ -18,6 +18,8 @@ interface HelpEventsSectionProps {
   validationError: string | null
   onFiltersChange: (next: HelpEventsFiltersValue) => void
   onRetry: () => void
+  // Changing this (patient or filter change) resets the timeline's reveal window.
+  resetKey?: string
 }
 
 export function HelpEventsSection({
@@ -28,6 +30,7 @@ export function HelpEventsSection({
   validationError,
   onFiltersChange,
   onRetry,
+  resetKey,
 }: HelpEventsSectionProps) {
   const hasActiveFilter =
     filters.sourceDevice !== undefined ||
@@ -91,7 +94,7 @@ export function HelpEventsSection({
               />
             )
           ) : (
-            <HelpEventTimeline events={events} />
+            <HelpEventTimeline events={events} resetKey={resetKey} />
           )}
         </>
       )}

@@ -1,13 +1,5 @@
-import { useEffect, useState } from 'react'
-import { MessageCircle, ShieldAlert, CheckCircle2 } from 'lucide-react'
-import { Modal } from '@/components/ui/Modal'
-import { Button } from '@/components/ui/Button'
-import { LoadingState } from '@/components/ui/LoadingState'
-import { ErrorState } from '@/components/ui/ErrorState'
-import { formatDateTime } from '@/utils/formatting'
-import { api, ApiClientError } from '@/services/apiClient'
-import type { AiSession, AiSessionMessage } from '@/types/domain'
-import { resolveDisplayStatus } from './aiSessionDisplay'
+import { AiSessionPanel } from '@/features/ai-sessions/components/AiSessionPanel'
+import { useAiSessionDetail } from '@/features/ai-sessions/hooks/useAiSessionDetail'
 
 interface AiSessionDetailModalProps {
   sessionId: string | null
@@ -15,218 +7,23 @@ interface AiSessionDetailModalProps {
   onSessionUpdated: () => void
 }
 
-export function AiSessionDetailModal({ sessionId, onClose, onSessionUpdated }: AiSessionDetailModalProps) {
-  const [session, setSession] = useState<AiSession | null>(null)
-  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
-  const [error, setError] = useState<string | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [joining, setJoining] = useState(false)
-  const [resolving, setResolving] = useState(false)
-  const [showResolveForm, setShowResolveForm] = useState(false)
-  const [resolveSummary, setResolveSummary] = useState('')
-
-  useEffect(() => {
-    if (!sessionId) {
-      setSession(null)
-      setStatus('idle')
-      return
-    }
-
-    // Reset per-session action UI when opening a different session.
-    setActionError(null)
-    setShowResolveForm(false)
-    setResolveSummary('')
-
-    let cancelled = false
-    setStatus('loading')
-
-    api.getAiSessionById(sessionId)
-      .then(data => {
-        if (!cancelled) {
-          setSession(data)
-          setStatus('ready')
-        }
-      })
-      .catch(err => {
-        if (!cancelled) {
-          setError(err instanceof ApiClientError ? err.message : 'Failed to load session details.')
-          setStatus('error')
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [sessionId])
-
-  const handleJoin = async () => {
-    if (!session) return
-    setActionError(null)
-    setJoining(true)
-    try {
-      await api.caregiverJoinAiSession(session.id)
-      onSessionUpdated()
-      onClose()
-    } catch (err) {
-      setActionError(err instanceof ApiClientError ? err.message : 'Failed to join session.')
-    } finally {
-      setJoining(false)
-    }
-  }
-
-  const handleResolve = async () => {
-    if (!session) return
-    setActionError(null)
-    setResolving(true)
-    try {
-      const summary = resolveSummary.trim()
-      await api.resolveAiSession(session.id, summary.length > 0 ? summary : 'Resolved by caregiver')
-      onSessionUpdated()
-      onClose()
-    } catch (err) {
-      setActionError(err instanceof ApiClientError ? err.message : 'Failed to resolve session.')
-    } finally {
-      setResolving(false)
-    }
-  }
+// Thin adapter kept for the Help page's existing call site. It now delegates to
+// the shared AI-session hook + panel so Help and Stream Status share one
+// implementation. Opening is driven by `sessionId`; polling runs only while open.
+export function AiSessionDetailModal({
+  sessionId,
+  onClose,
+  onSessionUpdated,
+}: AiSessionDetailModalProps) {
+  const open = Boolean(sessionId)
+  const detail = useAiSessionDetail({ sessionId, enabled: open, poll: open })
 
   return (
-    <Modal
-      open={!!sessionId}
+    <AiSessionPanel
+      open={open}
       onClose={onClose}
-      title="AI support session"
-      description={session ? `Started ${formatDateTime(session.startedAt)}` : ''}
-      size="lg"
-    >
-      {status === 'loading' && <div className="py-12"><LoadingState label="Loading session…" /></div>}
-      {status === 'error' && <div className="py-12"><ErrorState message={error || 'Error'} onRetry={onClose} /></div>}
-      {status === 'ready' && session && (
-        <div className="mt-4 flex flex-col gap-6">
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-outline-variant/30 pb-4">
-            <div>
-              <p className="text-xs font-semibold uppercase text-text-muted">Status</p>
-              <p className="text-sm font-medium text-on-surface">{resolveDisplayStatus(session)}</p>
-            </div>
-            {session.caregiverJoinedAt && (
-              <div>
-                <p className="text-xs font-semibold uppercase text-text-muted">Caregiver joined</p>
-                <p className="text-sm font-medium text-on-surface">{formatDateTime(session.caregiverJoinedAt)}</p>
-              </div>
-            )}
-            {session.emergencySuggestedAt && (
-              <div>
-                <p className="flex items-center gap-1 text-xs font-semibold uppercase text-error"><ShieldAlert className="h-3 w-3" /> Escalation suggested</p>
-                <p className="text-sm font-medium text-error">{formatDateTime(session.emergencySuggestedAt)}</p>
-              </div>
-            )}
-          </div>
-
-          <div className="max-h-[50vh] flex-1 overflow-y-auto pr-2">
-            {session.messages && session.messages.length > 0 ? (
-              <div className="flex flex-col gap-4">
-                {session.messages.map((msg) => (
-                  <MessageBubble key={msg.id} message={msg} />
-                ))}
-              </div>
-            ) : (
-              <p className="py-8 text-center text-sm italic text-text-muted">No messages recorded for this session.</p>
-            )}
-          </div>
-
-          {actionError && (
-            <div
-              role="alert"
-              className="rounded-xl border border-error/30 bg-error-container/60 px-3 py-2.5 text-sm font-medium text-error"
-            >
-              {actionError}
-            </div>
-          )}
-
-          {showResolveForm && (
-            <div className="flex flex-col gap-2">
-              <label htmlFor="resolve-summary" className="text-[13px] font-semibold text-on-surface-variant">
-                Resolution summary <span className="font-normal text-text-muted">(optional)</span>
-              </label>
-              <textarea
-                id="resolve-summary"
-                value={resolveSummary}
-                onChange={(e) => setResolveSummary(e.target.value)}
-                rows={3}
-                placeholder="Brief note on how this was resolved…"
-                className="w-full rounded-xl border border-outline-variant/60 bg-surface-container-lowest px-4 py-3 text-sm text-on-surface placeholder:text-text-muted transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-            </div>
-          )}
-
-          <div className="flex flex-wrap justify-end gap-3 border-t border-outline-variant/30 pt-4">
-            {showResolveForm ? (
-              <>
-                <Button variant="ghost" onClick={() => setShowResolveForm(false)} disabled={resolving}>
-                  Cancel
-                </Button>
-                <Button onClick={handleResolve} loading={resolving} leftIcon={<CheckCircle2 className="h-4 w-4" />}>
-                  Confirm resolve
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button variant="outline" onClick={onClose}>Close</Button>
-                {session.isJoinable === true && (
-                  <Button onClick={handleJoin} loading={joining} leftIcon={<MessageCircle className="h-4 w-4" />}>
-                    Join session
-                  </Button>
-                )}
-                {session.status === 'caregiver_joined' && (
-                  <Button onClick={() => setShowResolveForm(true)} leftIcon={<CheckCircle2 className="h-4 w-4" />}>
-                    Resolve session
-                  </Button>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
-    </Modal>
-  )
-}
-
-// Renders one transcript entry. Roles come from the canonical API DTO:
-//   user      -> patient (right, primary)
-//   caregiver -> caregiver reply (right, accent — distinct from the patient)
-//   assistant -> AI (left, neutral bubble)
-//   system    -> lifecycle/event notice (centered, quiet) — visibly distinct
-//                from conversation so events like "Caregiver joined" are clear.
-function MessageBubble({ message }: { message: AiSessionMessage }) {
-  const { role, content, createdAt } = message
-
-  if (role === 'system') {
-    return (
-      <div className="flex flex-col items-center">
-        <div className="max-w-[90%] rounded-full border border-outline-variant/30 bg-surface-dim px-3 py-1 text-center text-xs italic text-text-muted">
-          {content}
-        </div>
-        <span className="mt-1 px-1 text-[10px] text-text-muted">{formatDateTime(createdAt)}</span>
-      </div>
-    )
-  }
-
-  const alignEnd = role === 'user' || role === 'caregiver'
-  const bubbleTone =
-    role === 'user'
-      ? 'rounded-br-none bg-primary text-white'
-      : role === 'caregiver'
-        ? 'rounded-br-none bg-accent/15 text-accent-dark'
-        : 'rounded-bl-none bg-surface-container text-on-surface'
-
-  return (
-    <div className={`flex flex-col ${alignEnd ? 'items-end' : 'items-start'}`}>
-      {role === 'caregiver' && (
-        <span className="mb-0.5 px-1 text-[10px] font-semibold uppercase tracking-wider text-accent-dark">
-          Caregiver
-        </span>
-      )}
-      <div className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${bubbleTone}`}>{content}</div>
-      <span className="mt-1 px-1 text-[10px] text-text-muted">{formatDateTime(createdAt)}</span>
-    </div>
+      detail={detail}
+      onSessionUpdated={onSessionUpdated}
+    />
   )
 }

@@ -39,6 +39,7 @@ export function HelpPage() {
   const prevPatientIdRef = useRef<string | null>(null)
   const contactRequestIdRef = useRef(0)
   const eventsRequestIdRef = useRef(0)
+  const eventsAbortRef = useRef<AbortController | null>(null)
 
   const validationError = useMemo<string | null>(() => {
     if (filters.from && filters.to && filters.from > filters.to) {
@@ -78,6 +79,12 @@ export function HelpPage() {
   const loadEvents = useCallback(
     async (patientId: string, range: HelpEventsFiltersValue) => {
       const requestId = ++eventsRequestIdRef.current
+      // Cancel any in-flight events request so a superseded patient/filter fetch
+      // cannot resolve after this one. The request-id guard below is retained as
+      // a second line of defense for responses that already left the network.
+      eventsAbortRef.current?.abort()
+      const controller = new AbortController()
+      eventsAbortRef.current = controller
       setEventsStatus('loading')
       setEventsError(null)
       try {
@@ -89,16 +96,23 @@ export function HelpPage() {
           ? new Date(`${range.to}T23:59:59.999Z`).toISOString()
           : undefined
 
-        const data = await api.listHelpEvents(patientId, {
-          sourceDevice: range.sourceDevice,
-          status: range.status,
-          from,
-          to,
-        })
+        const data = await api.listHelpEvents(
+          patientId,
+          {
+            sourceDevice: range.sourceDevice,
+            status: range.status,
+            from,
+            to,
+          },
+          { signal: controller.signal },
+        )
         if (requestId !== eventsRequestIdRef.current) return
         setEvents(data)
         setEventsStatus('ready')
       } catch (err) {
+        // A cancelled request is expected during patient/filter changes; leave
+        // the newer request to own the state instead of showing an error.
+        if (err instanceof DOMException && err.name === 'AbortError') return
         if (requestId !== eventsRequestIdRef.current) return
         if (err instanceof ApiClientError) {
           setEventsError(err.message)
@@ -118,6 +132,7 @@ export function HelpPage() {
     if (!selectedPatientId) {
       contactRequestIdRef.current++
       eventsRequestIdRef.current++
+      eventsAbortRef.current?.abort()
       setContact(null)
       setContactStatus('idle')
       setContactError(null)
@@ -137,6 +152,7 @@ export function HelpPage() {
       // re-runs, and the new patient's contact/events are never fetched.
       contactRequestIdRef.current++
       eventsRequestIdRef.current++
+      eventsAbortRef.current?.abort()
       setContact(null)
       setIsContactOpen(false)
       setEvents([])
@@ -245,6 +261,7 @@ export function HelpPage() {
         validationError={validationError}
         onFiltersChange={setFilters}
         onRetry={() => void loadEvents(selectedPatientId, filters)}
+        resetKey={`${selectedPatientId}::${filters.sourceDevice ?? ''}::${filters.status ?? ''}::${filters.from ?? ''}::${filters.to ?? ''}`}
       />
 
       <AiSessionsSection

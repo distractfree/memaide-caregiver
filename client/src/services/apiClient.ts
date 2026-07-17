@@ -268,6 +268,7 @@ export const api = {
   listHelpEvents: (
     patientId: string,
     query?: HelpEventsQuery,
+    options?: StreamRequestOptions,
   ): Promise<HelpEvent[]> =>
     request<HelpEvent[]>(
       `/api/patients/${encodeURIComponent(patientId)}/help-events`,
@@ -278,6 +279,7 @@ export const api = {
           from: toIsoDate(query?.from),
           to: toIsoDate(query?.to),
         },
+        signal: options?.signal,
       },
     ),
 
@@ -433,8 +435,14 @@ export const api = {
       },
     ),
 
-  getAiSessionById: (id: string): Promise<AiSession> =>
-    request<AiSession>(`/api/ai-sessions/${encodeURIComponent(id)}`),
+  getAiSessionById: (
+    id: string,
+    options?: StreamRequestOptions,
+  ): Promise<AiSession> =>
+    request<AiSession>(`/api/ai-sessions/${encodeURIComponent(id)}`, {
+      cache: 'no-store',
+      signal: options?.signal,
+    }),
 
   caregiverJoinAiSession: (id: string): Promise<AiSession> =>
     request<AiSession>(`/api/ai-sessions/${encodeURIComponent(id)}/caregiver-joined`, {

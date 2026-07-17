@@ -1,3 +1,4 @@
+import { type ReactNode } from 'react'
 import { Clock3, Glasses, Radio, TriangleAlert, Video, WifiOff } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import type { FrameViewerState } from '@/features/stream/useLatestStreamFrame'
@@ -8,6 +9,8 @@ interface Props {
   imageSrc: string | null
   startedAt: string | null | undefined
   receivedAt: string | null | undefined
+  // Optional AI-session action (Join/Open/View) rendered beside the state title.
+  headerAction?: ReactNode
 }
 
 type ViewerCopy = {
@@ -68,7 +71,7 @@ const VIEWER_COPY: Record<Props['state'], ViewerCopy> = {
   },
 }
 
-export function EgocentricViewer({ state, imageSrc, startedAt, receivedAt }: Props) {
+export function EgocentricViewer({ state, imageSrc, startedAt, receivedAt, headerAction }: Props) {
   const copy = VIEWER_COPY[state]
   const showImage = Boolean(imageSrc) && (state === 'live' || state === 'stale' || state === 'reconnecting')
   const showOverlay = showImage && state !== 'live'
@@ -90,10 +93,16 @@ export function EgocentricViewer({ state, imageSrc, startedAt, receivedAt }: Pro
             </h2>
           </div>
         </div>
-        <p className={`inline-flex items-center gap-1.5 text-xs font-semibold ${copy.tone}`} aria-live="polite">
-          <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-          <span>{copy.title}</span>
-        </p>
+        {/* Status stays the answer to "what is happening?"; the optional action
+            is the answer to "what can the caregiver do?" — kept side by side and
+            allowed to wrap below the title on narrow widths. */}
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          <p className={`inline-flex items-center gap-1.5 text-xs font-semibold ${copy.tone}`} aria-live="polite">
+            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>{copy.title}</span>
+          </p>
+          {headerAction}
+        </div>
       </div>
 
       <div className="relative aspect-video min-h-[13.5rem] overflow-hidden rounded-2xl border border-outline-variant/30 bg-primary sm:min-h-[18rem]">

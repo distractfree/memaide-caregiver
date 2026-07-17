@@ -1275,7 +1275,11 @@ export async function caregiverJoinSession(sessionId: string, caregiverId: strin
   return updatedSession;
 }
 
-export async function caregiverResolveSession(sessionId: string, caregiverId: string) {
+export async function caregiverResolveSession(
+  sessionId: string,
+  caregiverId: string,
+  summary: string
+) {
   const session = await prisma.aiSession.findUnique({
     where: { id: sessionId },
     include: { patient: true }
@@ -1286,6 +1290,8 @@ export async function caregiverResolveSession(sessionId: string, caregiverId: st
   }
 
   if (session.status === "resolved") {
+    // Idempotent terminal behavior: never overwrite the summary already stored
+    // for an ended session, only reconcile any still-active associated stream.
     await prisma.$transaction((tx) =>
       endStreamsForAiSession(sessionId, {
         client: tx,
@@ -1307,7 +1313,9 @@ export async function caregiverResolveSession(sessionId: string, caregiverId: st
       data: {
         status: "resolved",
         endedAt: resolvedAt,
-        summary: "Support session concluded. Patient requested assistance and caregiver coordination was recorded."
+        // Persist exactly what the caregiver submitted (already trimmed and
+        // length-validated by the route schema). Never replace with a canned string.
+        summary
       }
     });
 

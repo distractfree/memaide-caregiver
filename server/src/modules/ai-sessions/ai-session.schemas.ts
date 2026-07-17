@@ -58,6 +58,28 @@ export const resolveAiSessionSchema = z.object({
   deviceId: z.string().min(1, "deviceId is required"),
 });
 
+// Maximum length for a caregiver-entered resolution summary. Chosen explicitly
+// and documented in docs/API_REFERENCE.md. The caregiver portal soft-caps its
+// textarea below this; the server is the authoritative hard cap.
+export const CAREGIVER_RESOLVE_SUMMARY_MAX_LENGTH = 2000;
+
+// Caregiver-provided resolution summary. Trimmed, required, and length-bounded.
+// The previous behavior silently discarded this and persisted a hardcoded
+// string; the summary is now validated here and persisted verbatim.
+export const caregiverResolveAiSessionSchema = z.object({
+  summary: z
+    .string()
+    .trim()
+    .min(1, "summary is required")
+    .max(
+      CAREGIVER_RESOLVE_SUMMARY_MAX_LENGTH,
+      `summary must be at most ${CAREGIVER_RESOLVE_SUMMARY_MAX_LENGTH} characters`
+    ),
+});
+export type CaregiverResolveAiSessionInput = z.infer<
+  typeof caregiverResolveAiSessionSchema
+>;
+
 export const emergencySuggestionAckSchema = z.object({
   deviceId: z.string().min(1, "deviceId is required"),
   action: z.enum(["call_initiated", "dismissed"]),

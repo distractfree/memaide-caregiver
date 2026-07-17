@@ -264,8 +264,15 @@ This document provides a developer-facing reference for all implemented backend 
 - **Purpose:** Transition session status to `caregiver_joined`.
 
 ### `POST /api/ai-sessions/:id/resolve`
-- **Auth:** Bearer JWT
-- **Purpose:** Conclude the support session.
+- **Auth:** Bearer JWT (caregiver must own the session's patient, else `404`).
+- **Purpose:** Conclude the support session and persist the caregiver's resolution summary.
+- **Body:**
+  ```json
+  { "summary": "Caregiver-entered resolution summary." }
+  ```
+  - `summary` — **required** string, trimmed, min 1 char, max 2000 chars. Persisted **verbatim** to `AiSession.summary` on the `active`/`caregiver_joined` → `resolved` transition. (Prior behavior silently discarded the body and stored a hardcoded string — fixed in Phase 2C.)
+- **Validation:** missing / empty / whitespace-only / oversized `summary` → `400`.
+- **Idempotency:** if the session is already `resolved`, the call ends any still-active associated stream and returns `200` **without** overwriting the existing summary.
 
 ---
 

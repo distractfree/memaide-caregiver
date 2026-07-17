@@ -1273,7 +1273,8 @@ describe("AI Sessions (Backend Implementation)", () => {
 
       const first = await request(app)
         .post(`/api/ai-sessions/${aiSessionId}/resolve`)
-        .set("Authorization", `Bearer ${caregiverToken}`);
+        .set("Authorization", `Bearer ${caregiverToken}`)
+        .send({ summary: "Caregiver checked in and confirmed patient is safe." });
 
       expect(first.status).toBe(200);
       expect(p.streamSession.update).toHaveBeenCalledWith(
@@ -1295,9 +1296,101 @@ describe("AI Sessions (Backend Implementation)", () => {
       p.streamSession.findMany.mockResolvedValue([]);
       const second = await request(app)
         .post(`/api/ai-sessions/${aiSessionId}/resolve`)
-        .set("Authorization", `Bearer ${caregiverToken}`);
+        .set("Authorization", `Bearer ${caregiverToken}`)
+        .send({ summary: "Second call — already resolved." });
 
       expect(second.status).toBe(200);
+    });
+
+    it("caregiver resolve persists the exact caregiver-provided summary", async () => {
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        status: "caregiver_joined",
+        patient: { caregiverId },
+      });
+      p.aiSession.update.mockResolvedValue({ id: aiSessionId, status: "resolved" });
+      p.streamSession.findMany.mockResolvedValue([]);
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/resolve`)
+        .set("Authorization", `Bearer ${caregiverToken}`)
+        .send({ summary: "  Escorted patient back to bed and confirmed vitals.  " });
+
+      expect(res.status).toBe(200);
+      // Persisted verbatim (trimmed by the schema), never a hardcoded string.
+      expect(p.aiSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: aiSessionId },
+          data: expect.objectContaining({
+            status: "resolved",
+            summary: "Escorted patient back to bed and confirmed vitals.",
+          }),
+        })
+      );
+    });
+
+    it("caregiver resolve rejects a missing summary body with 400", async () => {
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        status: "caregiver_joined",
+        patient: { caregiverId },
+      });
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/resolve`)
+        .set("Authorization", `Bearer ${caregiverToken}`)
+        .send({});
+
+      expect(res.status).toBe(400);
+      expect(p.aiSession.update).not.toHaveBeenCalled();
+    });
+
+    it("caregiver resolve rejects an empty/whitespace summary with 400", async () => {
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        status: "caregiver_joined",
+        patient: { caregiverId },
+      });
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/resolve`)
+        .set("Authorization", `Bearer ${caregiverToken}`)
+        .send({ summary: "   " });
+
+      expect(res.status).toBe(400);
+      expect(p.aiSession.update).not.toHaveBeenCalled();
+    });
+
+    it("caregiver resolve rejects an oversized summary with 400", async () => {
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        status: "caregiver_joined",
+        patient: { caregiverId },
+      });
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/resolve`)
+        .set("Authorization", `Bearer ${caregiverToken}`)
+        .send({ summary: "x".repeat(2001) });
+
+      expect(res.status).toBe(400);
+      expect(p.aiSession.update).not.toHaveBeenCalled();
+    });
+
+    it("caregiver resolve for another caregiver's patient returns 404", async () => {
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        status: "caregiver_joined",
+        patient: { caregiverId },
+      });
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/resolve`)
+        .set("Authorization", `Bearer ${otherCaregiverToken}`)
+        .send({ summary: "Attempted cross-tenant resolve." });
+
+      expect(res.status).toBe(404);
+      expect(p.aiSession.update).not.toHaveBeenCalled();
     });
 
     it("caregiver can list AI sessions for owned patient", async () => {

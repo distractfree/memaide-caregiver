@@ -46,8 +46,12 @@ export const caregiverResolveSession = async (req: Request, res: Response, next:
   try {
     const { id } = req.params;
     const caregiverId = (req as any).caregiverId;
-    
-    const data = await aiSessionService.caregiverResolveSession(id, caregiverId);
+
+    // Validate and persist the caregiver-entered summary verbatim. This body was
+    // previously ignored and replaced by a hardcoded string (silent data loss).
+    const { summary } = schemas.caregiverResolveAiSessionSchema.parse(req.body);
+
+    const data = await aiSessionService.caregiverResolveSession(id, caregiverId, summary);
     res.json({ success: true, data });
   } catch (error) {
     next(error);
