@@ -32,12 +32,14 @@ class VoiceLoop:
         get_vision: Callable[[], VisionContext | None] | None = None,
         clock: Callable[[], float] | None = None,
         on_escalation: Callable[[Any], Awaitable[None]] | None = None,
+        get_vision_pending: Callable[[], bool] | None = None,
     ):
         self._session = session
         self._stt = stt
         self._tts = tts
         self._send = send
         self._get_vision = get_vision or (lambda: None)
+        self._get_vision_pending = get_vision_pending or (lambda: False)
         self._clock = clock or time.monotonic
         self._last_speech_at = self._clock()
         self._seq = 0
@@ -107,7 +109,10 @@ class VoiceLoop:
             seconds = now - self._last_speech_at
             self._last_speech_at = now
             turn = await self._session.handle_patient_input(
-                text, vision=self._get_vision(), seconds_since_last_speech=seconds
+                text,
+                vision=self._get_vision(),
+                seconds_since_last_speech=seconds,
+                vision_pending=self._get_vision_pending(),
             )
             await self._send({"type": "subtitle", "text": turn.text, "role": "agent"})
             await self._handle_escalation()

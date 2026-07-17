@@ -61,6 +61,7 @@ class AgentSession:
         text: str,
         vision: VisionContext | None = None,
         seconds_since_last_speech: float = 0.0,
+        vision_pending: bool = False,
     ) -> Turn:
         self.transcript.append(
             Turn(
@@ -73,7 +74,9 @@ class AgentSession:
 
         escalation = self.escalation.check(text, vision, seconds_since_last_speech)
         self.last_escalation = escalation
-        decision = await self.brain.respond(self.transcript, vision)
+        decision = await self.brain.respond(
+            self.transcript, vision, vision_pending=vision_pending
+        )
         escalate = escalation.escalate or decision.wants_escalation
         if escalate:
             self.escalated = True

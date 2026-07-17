@@ -1,4 +1,7 @@
+import asyncio
+
 from memaide.schemas import VisionContext
+from memaide.server.ws import WebSocketFrameSource
 from memaide.vision.frame_source import FrameSource, StubFrameSource
 from memaide.vision.pipeline import VisionPipeline
 
@@ -75,3 +78,40 @@ async def test_pipeline_skips_a_failing_describe_without_aborting():
 
     assert describer.calls == 1
     assert received == []  # sink never called for the failed frame
+
+
+async def test_pipeline_describes_newest_frame_and_drops_backlog():
+    # A WebSocketFrameSource buffers, so a slow describe lets frames pile up. The pipeline
+    # should skip that backlog and describe only the newest frame (real-time tracking).
+    src = WebSocketFrameSource()
+    release = asyncio.Event()
+    calls = []
+
+    class BlockingDescriber:
+        async def describe(self, frame):
+            calls.append(frame)
+            if len(calls) == 1:
+                await release.wait()  # hold the first describe while a backlog builds
+            return VisionContext(description="d", label=frame)
+
+    received = []
+
+    async def sink(ctx):
+        received.append(ctx.label)
+
+    pipeline = VisionPipeline(source=src, describer=BlockingDescriber(), sink=sink, interval=0.0)
+    task = asyncio.create_task(pipeline.run())
+
+    await src.put("f0")
+    await asyncio.sleep(0.02)  # loop pulls f0 and blocks inside describe
+    await src.put("f1")
+    await src.put("f2")
+    await src.put("f3")
+    await asyncio.sleep(0.02)  # f1..f3 now buffered behind the blocked describe
+    release.set()
+    await asyncio.sleep(0.02)  # loop finishes f0, then drains to the newest (f3)
+    await src.close()
+    await task
+
+    assert calls == ["f0", "f3"]  # f1, f2 dropped
+    assert received == ["f0", "f3"]

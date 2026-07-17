@@ -32,7 +32,16 @@ class VisionPipeline:
         self._last_at: float | None = None
 
     async def run(self) -> None:
+        # Buffering sources (e.g. the WebSocket queue) can expose drain_latest() to skip to
+        # the newest frame; stub/stream sources without it are consumed frame by frame.
+        drain_latest = getattr(self._source, "drain_latest", None)
         async for frame in self._source.frames():
+            # A slow describe() lets frames pile up in the source. Skip to the newest buffered
+            # frame so the described scene tracks real time instead of replaying a stale backlog.
+            if drain_latest is not None:
+                newest = drain_latest()
+                if newest is not None:
+                    frame = newest
             now = self._clock()
             if self._last_at is not None and (now - self._last_at) < self._interval:
                 continue

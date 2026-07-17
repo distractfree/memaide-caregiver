@@ -64,3 +64,16 @@ class VisionDescriber:
             label=data.get("label", ""),
             advisory_flags=data.get("flags", []),
         )
+
+    async def warmup(self) -> None:
+        """Prime the model/HTTP connection so the first real describe doesn't pay cold-start
+        latency. Best-effort: any failure is swallowed so it never affects a live session.
+        """
+        try:
+            await self._client.complete_json(
+                [{"role": "user", "content": "ready?"}],
+                model=self._model,
+                temperature=self._temperature,
+            )
+        except Exception:  # noqa: BLE001 - warmup is best-effort
+            pass

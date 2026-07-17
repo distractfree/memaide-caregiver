@@ -80,6 +80,23 @@ class WebSocketFrameSource(_QueueSource):
     def frames(self) -> AsyncIterator[str]:
         return self._iter()
 
+    def drain_latest(self) -> str | None:
+        """Non-blocking: discard all but the newest buffered frame and return it (None when
+        nothing is buffered). Lets the pipeline skip a stale backlog after a slow describe so
+        the scene tracks real time. The end sentinel is put back so the iterator still stops.
+        """
+        latest: str | None = None
+        while True:
+            try:
+                item = self._queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            if item is _QUEUE_END:
+                self._queue.put_nowait(_QUEUE_END)
+                break
+            latest = item
+        return latest
+
 
 class WebSocketAudioSource:
     """Segments the inbound ``audio`` PCM stream into per-utterance byte streams.
@@ -248,8 +265,16 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
         send=send,
         get_vision=lambda: latest["scene"],
         on_escalation=on_escalation,
+        # Camera is on but no scene described yet -> the brain stalls gracefully instead of
+        # saying it cannot see (first description lags the first frame by the describe latency).
+        get_vision_pending=lambda: latest["frame_url"] is not None and latest["scene"] is None,
     )
 
+    # Prime the vision model/HTTP connection now (concurrent with the glasses connecting) so the
+    # first real describe isn't paying cold-start latency. Best-effort; failure is swallowed.
+    # Optional: describers without warmup() (e.g. test stubs) just skip it.
+    _warmup = getattr(deps.describer, "warmup", None)
+    warmup_task = asyncio.create_task(_warmup()) if _warmup is not None else None
     vision_task = asyncio.create_task(pipeline.run())
     voice_task = asyncio.create_task(loop.run(audio_source.utterances()))
     await loop.greet()  # agent speaks the opening line before the patient does
@@ -286,7 +311,11 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
         await frame_source.close()
         await audio_source.close()
         await recorder.close()
-        await asyncio.gather(vision_task, voice_task, return_exceptions=True)
+        cleanup = [vision_task, voice_task]
+        if warmup_task is not None:
+            warmup_task.cancel()
+            cleanup.append(warmup_task)
+        await asyncio.gather(*cleanup, return_exceptions=True)
         record = session.stop(_OUTCOME_HANDOFF.get(outcome))
         if deps.reporter is not None and session_id is not None:
             await deps.reporter.conclude(session_id, record, outcome)

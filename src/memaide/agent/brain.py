@@ -29,6 +29,7 @@ class AgentBrain:
         transcript: list[Turn],
         vision: VisionContext | None,
         extra_context: list[str] | None = None,
+        vision_pending: bool = False,
     ) -> list[dict]:
         messages: list[dict] = [{"role": "system", "content": self._system_prompt}]
         for turn in transcript:
@@ -44,6 +45,17 @@ class AgentBrain:
             if vision.advisory_flags:
                 content += f" Advisory: {', '.join(vision.advisory_flags)}."
             messages.append({"role": "system", "content": content})
+        elif vision_pending:
+            # The camera is on but the first scene description hasn't landed yet. Guide the
+            # agent to stall gracefully instead of flatly claiming it cannot see.
+            messages.append({
+                "role": "system",
+                "content": (
+                    "[VISION CONTEXT] A camera photo is being processed but is not ready yet. "
+                    "If the person asks what you see, tell them to give you a second to look "
+                    "— do not say that you cannot see."
+                ),
+            })
         return messages
 
     async def respond(
@@ -51,8 +63,9 @@ class AgentBrain:
         transcript: list[Turn],
         vision: VisionContext | None = None,
         extra_context: list[str] | None = None,
+        vision_pending: bool = False,
     ) -> AgentDecision:
-        messages = self._build_messages(transcript, vision, extra_context)
+        messages = self._build_messages(transcript, vision, extra_context, vision_pending)
         data = await self._client.complete_json(messages, model=self._model)
         decision = AgentDecision.model_validate(data)
         return decision.model_copy(

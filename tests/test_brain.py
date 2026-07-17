@@ -74,6 +74,33 @@ async def test_build_messages_appends_vision_context():
     assert "person_on_floor" in joined
 
 
+async def test_pending_vision_note_added_when_camera_on_but_scene_not_ready():
+    client = StubClient({"reply_text": "one sec"})
+    brain = AgentBrain(client=client, patient=_patient())
+    await brain.respond(
+        [Turn(role=Role.PATIENT, text="what do you see?")],
+        vision=None,
+        vision_pending=True,
+    )
+    joined = " ".join(
+        m["content"] for m in client.last_messages if isinstance(m["content"], str)
+    )
+    assert "give you a second to look" in joined
+    assert "do not say that you cannot see" in joined
+
+
+async def test_no_pending_note_when_vision_not_pending():
+    client = StubClient({"reply_text": "hi"})
+    brain = AgentBrain(client=client, patient=_patient())
+    await brain.respond(
+        [Turn(role=Role.PATIENT, text="hi")], vision=None, vision_pending=False
+    )
+    joined = " ".join(
+        m["content"] for m in client.last_messages if isinstance(m["content"], str)
+    )
+    assert "second to look" not in joined
+
+
 async def test_build_messages_appends_advisory_segment_when_present():
     client = StubClient({"reply_text": "x"})
     brain = AgentBrain(client=client, patient=_patient())
