@@ -32,7 +32,7 @@ class KokoReporter:
 
     async def escalation(self, session_id: str, decision: EscalationDecision) -> None:
         await self._post(
-            f"/ai-sessions/{session_id}/escalation",
+            f"/api/ai-sessions/{session_id}/escalation",
             {"reason": decision.reason, "triggered_by": list(decision.triggered_by)},
         )
 
@@ -41,7 +41,7 @@ class KokoReporter:
     ) -> None:
         body = record.model_dump(mode="json")
         body["outcome"] = outcome
-        await self._post(f"/ai-sessions/{session_id}/conclude", body)
+        await self._post(f"/api/ai-sessions/{session_id}/conclude", body)
 
     async def frame(
         self, session_id: str, ctx: VisionContext, frame_url: str | None, seq: int
@@ -59,7 +59,7 @@ class KokoReporter:
         if frame_url:
             b64 = frame_url.split(",", 1)[1] if "," in frame_url else frame_url
             body["image"] = {"mime": "image/jpeg", "b64": b64}
-        await self._post(f"/ai-sessions/{session_id}/frames", body)
+        await self._post(f"/api/ai-sessions/{session_id}/frames", body)
 
     async def _post(self, path: str, body: dict) -> None:
         if self._base is None:
