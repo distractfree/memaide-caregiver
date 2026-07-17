@@ -30,6 +30,7 @@ import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
 import com.example.memaid.wear.data.ReminderStore
+import com.example.memaid.wear.data.WatchSessionStatus
 import com.example.memaid.wear.presentation.theme.MemAidTheme
 import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.Wearable
@@ -127,6 +128,18 @@ fun WearApp(vitals: VitalsSensorManager) {
         LaunchedEffect(Unit) { ReminderStore.loadCached(context) }
         val audioStreamer = remember { AudioStreamer(context) }
         var streaming by remember { mutableStateOf(false) }
+
+        // The phone owns a session already: it sent "/session_busy", so tear our half-started
+        // stream down and tell the user rather than leaving a dead "session" on the watch.
+        val busySignals by WatchSessionStatus.busySignals.collectAsState()
+        LaunchedEffect(busySignals) {
+            if (busySignals > 0) {
+                Log.d("WatchMain", "busy signal #$busySignals - tearing down stream, showing in-use")
+                audioStreamer.stopStream()
+                streaming = false
+                helpStatus = "In use on phone"
+            }
+        }
 
         AppScaffold {
             val listState = rememberTransformingLazyColumnState()

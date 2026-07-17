@@ -2,6 +2,7 @@ package com.example.memaid.wear.presentation
 
 import android.util.Log
 import com.example.memaid.wear.data.ReminderStore
+import com.example.memaid.wear.data.WatchSessionStatus
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataMapItem
@@ -19,6 +20,12 @@ class DataLayerListenerService : WearableListenerService() {
         val path = messageEvent.path
         val data = String(messageEvent.data)
         Log.d("WatchDataLayer", "📩 Message received: path=$path data=$data")
+
+        // The phone rejected our session because it already owns one — reflect that in the UI.
+        if (path == "/session_busy") {
+            Log.d("WatchDataLayer", "/session_busy received - signaling busy to UI")
+            WatchSessionStatus.signalBusy()
+        }
     }
 
     override fun onDataChanged(events: DataEventBuffer) {

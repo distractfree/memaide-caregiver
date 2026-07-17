@@ -1,13 +1,16 @@
 package com.example.memaid.ui.screens
 
 import android.Manifest
-import android.content.Intent
-import android.net.Uri
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,7 +21,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.memaid.data.FakeDataRepository
 import com.example.memaid.data.PhoneVoiceSession
 import com.example.memaid.ui.MainViewModel
 import com.meta.wearable.dat.core.Wearables
@@ -36,7 +38,10 @@ fun HelpScreen(
     // Phone-mic AI voice session (endpointer sends audio_end + commit for one coherent reply
     // per turn); optionally also streams Meta glasses camera frames into the same session.
     var sessionActive by remember { mutableStateOf(PhoneVoiceSession.isActive) }
+    var sessionBusy by remember { mutableStateOf(false) }
+    var glassesNotice by remember { mutableStateOf<String?>(null) }
     var useGlasses by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     // Glasses camera access is a *Wearables* permission (granted via the Meta AI app), separate
     // from Android's CAMERA permission. Requested last, after the Android permissions below.
@@ -45,8 +50,9 @@ fun HelpScreen(
     ) { _ ->
         // Start regardless of the exact result: GlassesFrameSource fails gracefully (logged,
         // audio keeps running) if access was actually denied.
-        PhoneVoiceSession.start(context, withGlasses = true)
-        sessionActive = true
+        val started = PhoneVoiceSession.start(context, withGlasses = true)
+        sessionActive = started
+        sessionBusy = !started
     }
 
     // Android runtime permissions: RECORD_AUDIO always, plus CAMERA when glasses are enabled.
@@ -55,14 +61,37 @@ fun HelpScreen(
     ) { grants ->
         if (grants.values.any { !it }) return@rememberLauncherForActivityResult
         if (useGlasses) {
-            glassesCamPermission.launch(Permission.CAMERA)
+            // The Wearables permission contract calls Wearables.getInstance() synchronously at
+            // launch() time, which throws (and crashes on the main thread) until the SDK has been
+            // initialized in this process. Registration state persists across launches, but the
+            // SDK instance does not — so initialize here (off the main thread; it does a native
+            // handshake) before launching the glasses permission. If init fails, fall back to an
+            // audio-only session instead of crashing.
+            scope.launch {
+                val initOk = withContext(Dispatchers.IO) {
+                    runCatching { Wearables.initialize(context.applicationContext).getOrThrow() }
+                        .onFailure { Log.e("HelpScreen", "Wearables init failed", it) }
+                        .isSuccess
+                }
+                if (initOk) {
+                    glassesCamPermission.launch(Permission.CAMERA)
+                } else {
+                    glassesNotice = "Glasses unavailable — starting audio only."
+                    val started = PhoneVoiceSession.start(context, withGlasses = false)
+                    sessionActive = started
+                    sessionBusy = !started
+                }
+            }
         } else {
-            PhoneVoiceSession.start(context, withGlasses = false)
-            sessionActive = true
+            val started = PhoneVoiceSession.start(context, withGlasses = false)
+            sessionActive = started
+            sessionBusy = !started
         }
     }
 
     fun startSession() {
+        sessionBusy = false
+        glassesNotice = null
         val perms = mutableListOf(Manifest.permission.RECORD_AUDIO)
         if (useGlasses) perms += Manifest.permission.CAMERA
         androidPermissions.launch(perms.toTypedArray())
@@ -160,14 +189,10 @@ fun HelpScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Caregiver / WhatsApp button (existing feature)
+            // Notify the caregiver via the backend help event (no WhatsApp hand-off).
             Button(
                 onClick = {
                     viewModel.sendHelpEvent(sourceDevice = "phone")
-                    val number = FakeDataRepository.CAREGIVER_WHATSAPP_NUMBER
-                    val uri = Uri.parse("https://wa.me/$number")
-                    val intent = Intent(Intent.ACTION_VIEW, uri)
-                    context.startActivity(intent)
                     helpSent = true
                 },
                 modifier = Modifier
@@ -194,7 +219,7 @@ fun HelpScreen(
                     )
                 ) {
                     Text(
-                        text = "Help request sent. Opening WhatsApp...",
+                        text = "Help request sent to your caregiver.",
                         modifier = Modifier.padding(16.dp),
                         textAlign = TextAlign.Center,
                         color = Color(0xFFE65100)
@@ -215,6 +240,50 @@ fun HelpScreen(
                         color = Color(0xFF1565C0)
                     )
                 }
+            }
+
+            if (sessionBusy) {
+                DismissibleNotice(
+                    text = "A session is already in use on the watch.",
+                    onDismiss = { sessionBusy = false }
+                )
+            }
+
+            glassesNotice?.let { notice ->
+                DismissibleNotice(
+                    text = notice,
+                    onDismiss = { glassesNotice = null }
+                )
+            }
+        }
+    }
+}
+
+// An orange info card the user can dismiss with an X (e.g. "session in use", "glasses unavailable").
+@Composable
+private fun DismissibleNotice(text: String, onDismiss: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = text,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 12.dp),
+                color = Color(0xFFE65100)
+            )
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Dismiss",
+                    tint = Color(0xFFE65100)
+                )
             }
         }
     }

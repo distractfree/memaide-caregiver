@@ -34,8 +34,14 @@ object PhoneVoiceSession {
     var isActive = false
         private set
 
-    fun start(context: Context, withGlasses: Boolean = false) {
-        if (isActive) return
+    // Returns true if the phone session is now running, false if the watch already owns a
+    // session (in which case nothing starts and the caller should show "in use").
+    fun start(context: Context, withGlasses: Boolean = false): Boolean {
+        if (isActive) return true
+        if (!HelpSessionManager.tryAcquire(HelpSessionManager.Owner.PHONE)) {
+            Log.w("PhoneVoice", "⚠️ watch session active — phone session refused")
+            return false
+        }
         isActive = true
         val appCtx = context.applicationContext
 
@@ -70,6 +76,10 @@ object PhoneVoiceSession {
 
         scope.launch {
             val deviceId = SessionManager(appCtx).getDeviceId()
+            if (deviceId == null) {
+                Log.e("PhoneVoice", "⚠️ no deviceId set; cannot start AI session")
+                return@launch
+            }
             Log.d("PhoneVoice", "🚀 starting AI session for deviceId=$deviceId")
             ReminderRepository.startAiSession(deviceId).fold(
                 onSuccess = { session ->
@@ -96,6 +106,7 @@ object PhoneVoiceSession {
                 }
             )
         }
+        return true
     }
 
     // Meta glasses camera -> JPEG data-URL -> same session WebSocket (server vision pipeline).
@@ -104,14 +115,27 @@ object PhoneVoiceSession {
     private fun startGlassesCapture(appCtx: Context) {
         framesJob = scope.launch {
             try {
-                Log.d("PhoneVoice", "🕶 starting glasses frame capture")
+                Log.d("PhoneVoice", "starting glasses frame capture")
                 val encoder = FrameEncoder()
                 val source = GlassesFrameSource(appCtx)
+                var frameCount = 0
                 encoder.encode(source.frames()).collect { dataUrl ->
+                    frameCount++
+                    // First frame + every 30th: confirms capture is producing frames and whether
+                    // the WS is up to receive them (sendFrame no-ops while disconnected).
+                    if (frameCount == 1 || frameCount % 30 == 0) {
+                        Log.d(
+                            "PhoneVoice",
+                            "glasses frame #$frameCount wsConnected=${voiceBridge.isConnected} bytes=${dataUrl.length}"
+                        )
+                    }
                     voiceBridge.sendFrame(dataUrl)
                 }
+                Log.w("PhoneVoice", "glasses frame flow ended after $frameCount frame(s)")
             } catch (e: Exception) {
-                Log.e("PhoneVoice", "🕶 glasses capture ended: ${e.message}")
+                // Full stack: this is where "no video frames" originates — session/stream setup
+                // in GlassesFrameSource (not-registered, session never STARTED, addStream failure).
+                Log.e("PhoneVoice", "glasses capture FAILED: ${e.message}", e)
             }
         }
     }
@@ -129,6 +153,7 @@ object PhoneVoiceSession {
         } catch (_: Exception) {
         }
         track = null
+        HelpSessionManager.release(HelpSessionManager.Owner.PHONE)
         Log.d("PhoneVoice", "⏹ session stopped")
     }
 }

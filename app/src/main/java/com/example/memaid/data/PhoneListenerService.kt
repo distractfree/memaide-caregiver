@@ -123,6 +123,22 @@ class PhoneListenerService : WearableListenerService() {
 
     override fun onChannelOpened(channel: ChannelClient.Channel) {
         if (channel.path != "/help_audio_stream") return
+
+        // Single-owner gate: if the phone already has a session, refuse the watch's so audio
+        // stays on one device. Tell the watch it's busy and close the channel it just opened.
+        if (!HelpSessionManager.tryAcquire(HelpSessionManager.Owner.WATCH)) {
+            Log.w("PhoneListener", "⚠️ phone session active — watch session refused")
+            channelScope.launch {
+                PhoneMessenger.sendMessage(applicationContext, "/session_busy", "phone")
+                Log.d("PhoneListener", "sent /session_busy to watch")
+            }
+            try {
+                Wearable.getChannelClient(this).close(channel)
+            } catch (e: Exception) {
+                Log.e("PhoneListener", "⚠️ Could not close refused channel: ${e.message}")
+            }
+            return
+        }
         Log.d("PhoneListener", "✅ Audio channel opened from node ${channel.nodeId}")
 
         // Open a reverse channel to send AI audio back to the watch speaker
@@ -253,6 +269,7 @@ class PhoneListenerService : WearableListenerService() {
         appSpecificErrorCode: Int
     ) {
         if (channel.path == "/help_audio_stream") {
+            HelpSessionManager.release(HelpSessionManager.Owner.WATCH)
             Log.d("PhoneListener", "Audio channel closed, reason=$closeReason")
         }
     }

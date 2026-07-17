@@ -23,6 +23,9 @@ import com.example.memaid.data.ReminderScheduler
 import com.example.memaid.data.BeaconScanner
 import com.example.memaid.data.DetectedBeacon
 import com.example.memaid.data.BeaconEvent
+import com.google.android.gms.wearable.Wearable
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.tasks.await
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -72,6 +75,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (!remindersLoaded) return@collect
                     ReminderSync.push(getApplication(), name, reminders)
                 }
+        }
+
+        // Reflect the real watch link in the UI instead of leaving the flag hardcoded false.
+        // A cheap NodeClient poll; a few seconds' latency on connect/disconnect is acceptable.
+        viewModelScope.launch {
+            while (true) {
+                _watchConnected.value = try {
+                    Wearable.getNodeClient(getApplication<Application>())
+                        .connectedNodes.await().isNotEmpty()
+                } catch (e: Exception) {
+                    false
+                }
+                delay(5_000)
+            }
         }
     }
 
