@@ -8,7 +8,6 @@ import { ErrorState } from '@/components/ui/ErrorState'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { usePatients } from '@/features/patients/PatientContext'
 import { EgocentricViewer } from '@/features/stream/components/EgocentricViewer'
-import { StreamCurrentStatusCard } from '@/features/stream/components/StreamCurrentStatusCard'
 import { StreamSessionHistory, type StreamFilterState } from '@/features/stream/components/StreamSessionHistory'
 import { useLatestStreamFrame, type FrameViewerState } from '@/features/stream/useLatestStreamFrame'
 import { useStreamStatus } from '@/features/stream/useStreamStatus'
@@ -206,8 +205,6 @@ export function StreamStatusPage() {
               <span>{error} Showing the last update — retrying automatically.</span>
             </div>
           )}
-
-          {summary && <StreamCurrentStatusCard summary={summary} />}
 
           {summary && (
             <EgocentricViewer
