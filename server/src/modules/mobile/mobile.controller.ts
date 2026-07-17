@@ -30,60 +30,60 @@ export const getPatients = asyncHandler(async (req: Request, res: Response) => {
 
 export const getReminders = asyncHandler(async (req: Request, res: Response) => {
   const query = mobileRemindersQuerySchema.parse(req.query);
-  const data = await mobileService.getMobileReminders(query);
+  const data = await mobileService.getMobileReminders(req.caregiverId!, query);
   res.status(200).json({ success: true, data });
 });
 
 export const createReminderEvent = asyncHandler(async (req: Request, res: Response) => {
   const input = createReminderEventSchema.parse(req.body);
-  const event = await mobileService.createMobileReminderEvent(input);
+  const event = await mobileService.createMobileReminderEvent(req.caregiverId!, input);
   res.status(201).json({ success: true, data: event });
 });
 
 export const getMobileHelpContact = asyncHandler(async (req: Request, res: Response) => {
   const query = mobileHelpContactQuerySchema.parse(req.query);
-  const data = await helpService.getMobileHelpContact(query);
+  const data = await helpService.getMobileHelpContact(req.caregiverId!, query);
   res.status(200).json({ success: true, data });
 });
 
 export const createMobileHelpEvent = asyncHandler(async (req: Request, res: Response) => {
   const input = createHelpEventMobileSchema.parse(req.body);
-  const event = await helpService.createMobileHelpEvent(input);
+  const event = await helpService.createMobileHelpEvent(req.caregiverId!, input);
   res.status(201).json({ success: true, data: event });
 });
 
 export const getMobileBeacons = asyncHandler(async (req: Request, res: Response) => {
   const query = mobileBeaconsQuerySchema.parse(req.query);
-  const data = await beaconService.getMobileBeacons(query);
+  const data = await beaconService.getMobileBeacons(req.caregiverId!, query);
   res.status(200).json({ success: true, data });
 });
 
 export const createMobileBeaconEvent = asyncHandler(async (req: Request, res: Response) => {
   const input = createBeaconEventMobileSchema.parse(req.body);
-  const event = await beaconService.createMobileBeaconEvent(input);
+  const event = await beaconService.createMobileBeaconEvent(req.caregiverId!, input);
   res.status(201).json({ success: true, data: event });
 });
 
 export const createMobileVitalEvent = asyncHandler(async (req: Request, res: Response) => {
   const input = createVitalEventMobileSchema.parse(req.body);
-  const event = await vitalService.createMobileVitalEvent(input);
+  const event = await vitalService.createMobileVitalEvent(req.caregiverId!, input);
   res.status(201).json({ success: true, data: event });
 });
 
 export const startMobileStreamSession = asyncHandler(async (req: Request, res: Response) => {
   const input = startStreamSessionSchema.parse(req.body);
-  const session = await streamService.startMobileStreamSession(input);
+  const session = await streamService.startMobileStreamSession(req.caregiverId!, input);
   res.status(201).json({ success: true, data: session });
 });
 
 export const stopMobileStreamSession = asyncHandler(async (req: Request, res: Response) => {
   const input = stopStreamSessionSchema.parse(req.body);
-  const session = await streamService.stopMobileStreamSession(input);
+  const session = await streamService.stopMobileStreamSession(req.caregiverId!, input);
   res.status(200).json({ success: true, data: session });
 });
 
 export const updateMobileStreamStatus = asyncHandler(async (req: Request, res: Response) => {
   const input = updateStreamStatusSchema.parse(req.body);
-  const session = await streamService.updateMobileStreamStatus(input);
+  const session = await streamService.updateMobileStreamStatus(req.caregiverId!, input);
   res.status(200).json({ success: true, data: session });
 });

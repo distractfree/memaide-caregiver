@@ -88,6 +88,13 @@ function makeToken(caregiverId: string) {
 
 const tokenA = makeToken(CAREGIVER_A_ID);
 const tokenB = makeToken(CAREGIVER_B_ID);
+
+const mobileRequest = {
+  get: (path: string) =>
+    request(app).get(path).set("Authorization", `Bearer ${tokenA}`),
+  post: (path: string) =>
+    request(app).post(path).set("Authorization", `Bearer ${tokenA}`),
+};
 const NOW = new Date("2026-05-22T16:00:00.000Z");
 
 const samplePatientA = {
@@ -408,12 +415,15 @@ describe("Protected beacon configuration routes", () => {
 });
 
 describe("Mobile beacon sync and ingestion", () => {
+  beforeEach(() => {
+    pat.findFirst.mockResolvedValue(samplePatientA);
+  });
+
   it("GET /api/mobile/beacons returns only active beacons for a valid deviceId", async () => {
-    pat.findUnique.mockResolvedValue(samplePatientForDevice);
+    pat.findFirst.mockResolvedValue(samplePatientForDevice);
     beacon.findMany.mockResolvedValue([sampleBeacon]);
 
-    const res = await request(app).get(
-      `/api/mobile/beacons?deviceId=${DEVICE_ID}`
+    const res = await mobileRequest.get(`/api/mobile/beacons?deviceId=${DEVICE_ID}`
     );
 
     expect(res.status).toBe(200);
@@ -421,8 +431,8 @@ describe("Mobile beacon sync and ingestion", () => {
     expect(res.body.data.patient.id).toBe(PATIENT_A_ID);
     expect(res.body.data.patient.deviceId).toBe(DEVICE_ID);
     expect(res.body.data.beacons).toHaveLength(1);
-    expect(pat.findUnique).toHaveBeenCalledWith({
-      where: { deviceId: DEVICE_ID },
+    expect(pat.findFirst).toHaveBeenCalledWith({
+      where: { caregiverId: CAREGIVER_A_ID, deviceId: DEVICE_ID },
       select: { id: true, name: true, deviceId: true },
     });
     expect(beacon.findMany).toHaveBeenCalledWith(
@@ -434,18 +444,17 @@ describe("Mobile beacon sync and ingestion", () => {
   });
 
   it("GET /api/mobile/beacons returns 400 without deviceId", async () => {
-    const res = await request(app).get("/api/mobile/beacons");
+    const res = await mobileRequest.get("/api/mobile/beacons");
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("VALIDATION_ERROR");
-    expect(pat.findUnique).not.toHaveBeenCalled();
+    expect(pat.findFirst).not.toHaveBeenCalled();
   });
 
   it("GET /api/mobile/beacons returns 404 for unknown deviceId", async () => {
-    pat.findUnique.mockResolvedValue(null);
+    pat.findFirst.mockResolvedValue(null);
 
-    const res = await request(app).get(
-      "/api/mobile/beacons?deviceId=unknown-device"
+    const res = await mobileRequest.get("/api/mobile/beacons?deviceId=unknown-device"
     );
 
     expect(res.status).toBe(404);
@@ -454,15 +463,14 @@ describe("Mobile beacon sync and ingestion", () => {
   });
 
   it("POST /api/mobile/beacon-events creates an event for valid deviceId and beaconId", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     beacon.findFirst.mockResolvedValue({
       id: BEACON_ID,
       roomName: "Kitchen",
     });
     beaconEvent.create.mockResolvedValue(sampleBeaconEvent);
 
-    const res = await request(app)
-      .post("/api/mobile/beacon-events")
+    const res = await mobileRequest.post("/api/mobile/beacon-events")
       .send({
         deviceId: DEVICE_ID,
         beaconId: BEACON_ID,
@@ -476,9 +484,9 @@ describe("Mobile beacon sync and ingestion", () => {
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(res.body.data.roomName).toBe("Kitchen");
-    expect(pat.findUnique).toHaveBeenCalledWith({
-      where: { deviceId: DEVICE_ID },
-      select: { id: true },
+    expect(pat.findFirst).toHaveBeenCalledWith({
+      where: { caregiverId: CAREGIVER_A_ID, deviceId: DEVICE_ID },
+      select: { id: true, name: true, deviceId: true },
     });
     expect(beacon.findFirst).toHaveBeenCalledWith({
       where: { id: BEACON_ID, patientId: PATIENT_A_ID },
@@ -498,15 +506,14 @@ describe("Mobile beacon sync and ingestion", () => {
   });
 
   it("POST /api/mobile/beacon-events uses the beacon roomName when roomName is missing", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     beacon.findFirst.mockResolvedValue({
       id: BEACON_ID,
       roomName: "Kitchen",
     });
     beaconEvent.create.mockResolvedValue(sampleBeaconEvent);
 
-    const res = await request(app)
-      .post("/api/mobile/beacon-events")
+    const res = await mobileRequest.post("/api/mobile/beacon-events")
       .send({
         deviceId: DEVICE_ID,
         beaconId: BEACON_ID,
@@ -525,11 +532,10 @@ describe("Mobile beacon sync and ingestion", () => {
   });
 
   it("POST /api/mobile/beacon-events returns 404 when beaconId does not belong to the device patient", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     beacon.findFirst.mockResolvedValue(null);
 
-    const res = await request(app)
-      .post("/api/mobile/beacon-events")
+    const res = await mobileRequest.post("/api/mobile/beacon-events")
       .send({
         deviceId: DEVICE_ID,
         beaconId: BEACON_B_ID,
@@ -542,8 +548,7 @@ describe("Mobile beacon sync and ingestion", () => {
   });
 
   it("POST /api/mobile/beacon-events returns 400 when deviceId is missing", async () => {
-    const res = await request(app)
-      .post("/api/mobile/beacon-events")
+    const res = await mobileRequest.post("/api/mobile/beacon-events")
       .send({
         beaconId: BEACON_ID,
         detectedAt: "2026-05-22T16:00:00.000Z",
@@ -555,8 +560,7 @@ describe("Mobile beacon sync and ingestion", () => {
   });
 
   it("POST /api/mobile/beacon-events returns 400 for invalid estimatedDistanceM", async () => {
-    const res = await request(app)
-      .post("/api/mobile/beacon-events")
+    const res = await mobileRequest.post("/api/mobile/beacon-events")
       .send({
         deviceId: DEVICE_ID,
         beaconId: BEACON_ID,
@@ -566,15 +570,14 @@ describe("Mobile beacon sync and ingestion", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("VALIDATION_ERROR");
-    expect(pat.findUnique).not.toHaveBeenCalled();
+    expect(pat.findFirst).not.toHaveBeenCalled();
     expect(beaconEvent.create).not.toHaveBeenCalled();
   });
 
   it("POST /api/mobile/beacon-events returns 404 for unknown deviceId", async () => {
-    pat.findUnique.mockResolvedValue(null);
+    pat.findFirst.mockResolvedValue(null);
 
-    const res = await request(app)
-      .post("/api/mobile/beacon-events")
+    const res = await mobileRequest.post("/api/mobile/beacon-events")
       .send({
         deviceId: "unknown-device",
         beaconId: BEACON_ID,
@@ -676,10 +679,10 @@ describe("Protected beacon event log routes", () => {
   });
 
   it("does not include inactive beacons in the mobile sync query", async () => {
-    pat.findUnique.mockResolvedValue(samplePatientForDevice);
+    pat.findFirst.mockResolvedValue(samplePatientForDevice);
     beacon.findMany.mockResolvedValue([sampleBeacon]);
 
-    await request(app).get(`/api/mobile/beacons?deviceId=${DEVICE_ID}`);
+    await mobileRequest.get(`/api/mobile/beacons?deviceId=${DEVICE_ID}`);
 
     expect(beacon.findMany).not.toHaveBeenCalledWith(
       expect.objectContaining({

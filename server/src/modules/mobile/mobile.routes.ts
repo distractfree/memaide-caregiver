@@ -5,7 +5,9 @@ import * as aiSessionController from "../ai-sessions/ai-session.controller";
 
 const router = Router();
 
-router.get("/patients", authMiddleware, mobileController.getPatients);
+router.use(authMiddleware);
+
+router.get("/patients", mobileController.getPatients);
 router.get("/reminders", mobileController.getReminders);
 router.post("/reminder-events", mobileController.createReminderEvent);
 router.get("/help-contact", mobileController.getMobileHelpContact);

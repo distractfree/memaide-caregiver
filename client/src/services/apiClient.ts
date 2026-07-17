@@ -17,6 +17,7 @@ import type {
   HelpEvent,
   HelpEventsQuery,
   LoginResponse,
+  LatestStreamFrameData,
   Patient,
   PatientOverview,
   RegisterInput,
@@ -52,6 +53,10 @@ export class ApiClientError extends Error {
     this.code = code
     this.details = details
   }
+}
+
+export interface StreamRequestOptions {
+  signal?: AbortSignal
 }
 
 let unauthorizedHandler: (() => void) | null = null
@@ -373,15 +378,20 @@ export const api = {
     ),
 
   // Stream status for this patient. The backend uses the signed-in caregiver.
-  getStreamStatus: (patientId: string): Promise<StreamStatusSummary> =>
+  getStreamStatus: (
+    patientId: string,
+    options?: StreamRequestOptions,
+  ): Promise<StreamStatusSummary> =>
     request<StreamStatusSummary>(
       `/api/patients/${encodeURIComponent(patientId)}/stream-status`,
+      { cache: 'no-store', signal: options?.signal },
     ),
 
   // Stream session history. The backend returns newest sessions first.
   listStreamSessions: (
     patientId: string,
     query?: StreamSessionsQuery,
+    options?: StreamRequestOptions,
   ): Promise<StreamSession[]> =>
     request<StreamSession[]>(
       `/api/patients/${encodeURIComponent(patientId)}/stream-sessions`,
@@ -392,7 +402,19 @@ export const api = {
           from: toIsoDate(query?.from),
           to: toIsoDate(query?.to),
         },
+        signal: options?.signal,
       },
+    ),
+
+  // Frame bytes are sensitive and must only be read through the authenticated,
+  // same-origin API. No retry or persistence happens in the client layer.
+  getLatestStreamFrame: (
+    streamSessionId: string,
+    options?: StreamRequestOptions,
+  ): Promise<LatestStreamFrameData> =>
+    request<LatestStreamFrameData>(
+      `/api/stream-sessions/${encodeURIComponent(streamSessionId)}/frame/latest`,
+      { cache: 'no-store', signal: options?.signal },
     ),
 
   listAiSessions: (

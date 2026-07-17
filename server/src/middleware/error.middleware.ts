@@ -19,6 +19,20 @@ export function errorMiddleware(
   res: Response,
   _next: NextFunction
 ): void {
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "status" in err &&
+    (err as { status?: unknown }).status === 413
+  ) {
+    res.status(413).json({
+      status: "error",
+      message: "Request body too large",
+      code: "PAYLOAD_TOO_LARGE",
+    });
+    return;
+  }
+
   if (err instanceof ZodError) {
     res.status(400).json({
       status: "error",

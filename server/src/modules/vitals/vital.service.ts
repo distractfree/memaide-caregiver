@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../middleware/error.middleware";
+import { findPatientForCaregiverDevice } from "../patients/patient.service";
 import type {
   CreateVitalEventMobileInput,
   ListVitalsQuery,
@@ -76,14 +77,14 @@ function mostCommonMotionState(counts: Record<string, number>) {
   return bestState;
 }
 
-export async function createMobileVitalEvent(input: CreateVitalEventMobileInput) {
-  const patient = await prisma.patient.findUnique({
-    where: { deviceId: input.deviceId },
-    select: { id: true },
-  });
-  if (!patient) {
-    throw new AppError(404, "No patient found for this device", "NOT_FOUND");
-  }
+export async function createMobileVitalEvent(
+  caregiverId: string,
+  input: CreateVitalEventMobileInput
+) {
+  const patient = await findPatientForCaregiverDevice(
+    caregiverId,
+    input.deviceId
+  );
 
   return prisma.vitalEvent.create({
     data: {

@@ -77,6 +77,13 @@ function makeToken(caregiverId: string) {
 const tokenA = makeToken(CAREGIVER_A_ID);
 const tokenB = makeToken(CAREGIVER_B_ID);
 
+const mobileRequest = {
+  get: (path: string) =>
+    request(app).get(path).set("Authorization", `Bearer ${tokenA}`),
+  post: (path: string) =>
+    request(app).post(path).set("Authorization", `Bearer ${tokenA}`),
+};
+
 const NOW = new Date("2026-05-22T10:00:00.000Z");
 
 const samplePatientA = {
@@ -287,51 +294,52 @@ describe("POST /api/patients/:patientId/help-contact", () => {
 // ─── GET /api/mobile/help-contact ─────────────────────────────────────────────
 
 describe("GET /api/mobile/help-contact", () => {
+  beforeEach(() => {
+    pat.findFirst.mockResolvedValue(samplePatientA);
+  });
+
   // Test 7: returns active contact for valid deviceId
   it("returns active help contact for valid deviceId", async () => {
-    pat.findUnique.mockResolvedValue(samplePatientForDevice);
+    pat.findFirst.mockResolvedValue(samplePatientForDevice);
     hc.findFirst.mockResolvedValue(mobileContactShape);
 
-    const res = await request(app)
-      .get(`/api/mobile/help-contact?deviceId=${DEVICE_ID}`);
+    const res = await mobileRequest.get(`/api/mobile/help-contact?deviceId=${DEVICE_ID}`);
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data.patient.id).toBe(PATIENT_A_ID);
     expect(res.body.data.patient.deviceId).toBe(DEVICE_ID);
     expect(res.body.data.helpContact.whatsappNumber).toBe(WHATSAPP_NUMBER);
-    expect(pat.findUnique).toHaveBeenCalledWith({
-      where: { deviceId: DEVICE_ID },
+    expect(pat.findFirst).toHaveBeenCalledWith({
+      where: { caregiverId: CAREGIVER_A_ID, deviceId: DEVICE_ID },
       select: { id: true, name: true, deviceId: true },
     });
   });
 
   // Test 8: missing deviceId returns 400
   it("returns 400 when deviceId query param is missing", async () => {
-    const res = await request(app).get("/api/mobile/help-contact");
+    const res = await mobileRequest.get("/api/mobile/help-contact");
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("VALIDATION_ERROR");
-    expect(pat.findUnique).not.toHaveBeenCalled();
+    expect(pat.findFirst).not.toHaveBeenCalled();
   });
 
   // Test 9: unknown deviceId returns 404
   it("returns 404 when deviceId does not match any patient", async () => {
-    pat.findUnique.mockResolvedValue(null);
+    pat.findFirst.mockResolvedValue(null);
 
-    const res = await request(app)
-      .get("/api/mobile/help-contact?deviceId=unknown-device-xyz");
+    const res = await mobileRequest.get("/api/mobile/help-contact?deviceId=unknown-device-xyz");
 
     expect(res.status).toBe(404);
     expect(res.body.code).toBe("NOT_FOUND");
   });
 
   it("returns 404 when patient has no active help contact configured", async () => {
-    pat.findUnique.mockResolvedValue(samplePatientForDevice);
+    pat.findFirst.mockResolvedValue(samplePatientForDevice);
     hc.findFirst.mockResolvedValue(null);
 
-    const res = await request(app)
-      .get(`/api/mobile/help-contact?deviceId=${DEVICE_ID}`);
+    const res = await mobileRequest.get(`/api/mobile/help-contact?deviceId=${DEVICE_ID}`);
 
     expect(res.status).toBe(404);
     expect(res.body.code).toBe("NOT_FOUND");
@@ -341,14 +349,17 @@ describe("GET /api/mobile/help-contact", () => {
 // ─── POST /api/mobile/help-events ─────────────────────────────────────────────
 
 describe("POST /api/mobile/help-events", () => {
+  beforeEach(() => {
+    pat.findFirst.mockResolvedValue(samplePatientA);
+  });
+
   // Test 10: creates phone help event using configured contact
   it("creates a phone help event using the configured help contact", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     hc.findFirst.mockResolvedValue({ whatsappNumber: WHATSAPP_NUMBER });
     he.create.mockResolvedValue(sampleHelpEvent);
 
-    const res = await request(app)
-      .post("/api/mobile/help-events")
+    const res = await mobileRequest.post("/api/mobile/help-events")
       .send({
         deviceId: DEVICE_ID,
         sourceDevice: "phone",
@@ -370,12 +381,11 @@ describe("POST /api/mobile/help-events", () => {
 
   // Test 11: creates watch help event using configured contact
   it("creates a watch help event using the configured help contact", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     hc.findFirst.mockResolvedValue({ whatsappNumber: WHATSAPP_NUMBER });
     he.create.mockResolvedValue(watchHelpEvent);
 
-    const res = await request(app)
-      .post("/api/mobile/help-events")
+    const res = await mobileRequest.post("/api/mobile/help-events")
       .send({
         deviceId: DEVICE_ID,
         sourceDevice: "watch",
@@ -393,11 +403,10 @@ describe("POST /api/mobile/help-events", () => {
 
   // Test 12: can use provided whatsappNumber (bypasses contact lookup)
   it("uses provided whatsappNumber without looking up the help contact", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     he.create.mockResolvedValue(sampleHelpEvent);
 
-    const res = await request(app)
-      .post("/api/mobile/help-events")
+    const res = await mobileRequest.post("/api/mobile/help-events")
       .send({
         deviceId: DEVICE_ID,
         sourceDevice: "phone",
@@ -416,8 +425,7 @@ describe("POST /api/mobile/help-events", () => {
 
   // Test 13: invalid sourceDevice returns 400
   it("returns 400 for an invalid sourceDevice value", async () => {
-    const res = await request(app)
-      .post("/api/mobile/help-events")
+    const res = await mobileRequest.post("/api/mobile/help-events")
       .send({
         deviceId: DEVICE_ID,
         sourceDevice: "smartwatch",
@@ -431,8 +439,7 @@ describe("POST /api/mobile/help-events", () => {
 
   // Test 14: invalid status returns 400
   it("returns 400 for an invalid status value", async () => {
-    const res = await request(app)
-      .post("/api/mobile/help-events")
+    const res = await mobileRequest.post("/api/mobile/help-events")
       .send({
         deviceId: DEVICE_ID,
         sourceDevice: "phone",
@@ -446,10 +453,9 @@ describe("POST /api/mobile/help-events", () => {
 
   // Test 15: unknown deviceId returns 404
   it("returns 404 when deviceId does not match any patient", async () => {
-    pat.findUnique.mockResolvedValue(null);
+    pat.findFirst.mockResolvedValue(null);
 
-    const res = await request(app)
-      .post("/api/mobile/help-events")
+    const res = await mobileRequest.post("/api/mobile/help-events")
       .send({
         deviceId: "unknown-device-xyz",
         sourceDevice: "phone",
@@ -463,11 +469,10 @@ describe("POST /api/mobile/help-events", () => {
 
   // Test 16: no contact and no whatsappNumber returns clean error
   it("returns 400 when no whatsappNumber provided and no active help contact exists", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     hc.findFirst.mockResolvedValue(null);
 
-    const res = await request(app)
-      .post("/api/mobile/help-events")
+    const res = await mobileRequest.post("/api/mobile/help-events")
       .send({
         deviceId: DEVICE_ID,
         sourceDevice: "watch",
@@ -480,8 +485,7 @@ describe("POST /api/mobile/help-events", () => {
   });
 
   it("returns 400 when provided whatsappNumber is not valid E.164", async () => {
-    const res = await request(app)
-      .post("/api/mobile/help-events")
+    const res = await mobileRequest.post("/api/mobile/help-events")
       .send({
         deviceId: DEVICE_ID,
         sourceDevice: "phone",
@@ -495,12 +499,11 @@ describe("POST /api/mobile/help-events", () => {
   });
 
   it("defaults triggeredAt to server time when not provided", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     hc.findFirst.mockResolvedValue({ whatsappNumber: WHATSAPP_NUMBER });
     he.create.mockResolvedValue(sampleHelpEvent);
 
-    await request(app)
-      .post("/api/mobile/help-events")
+    await mobileRequest.post("/api/mobile/help-events")
       .send({
         deviceId: DEVICE_ID,
         sourceDevice: "phone",

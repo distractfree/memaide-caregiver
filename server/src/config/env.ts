@@ -37,6 +37,23 @@ const envSchema = z.object({
   AI_AGENT_API: z.string().optional(),
   AI_AGENT_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
   AI_CALLBACK_API_KEY: z.string().optional(),
+  // Egocentric frame callbacks use a route-specific parser; ordinary API
+  // requests remain limited to 10 KB in app.ts.
+  AI_FRAME_JSON_LIMIT: z
+    .string()
+    .regex(/^\d+(kb|mb)$/i, "AI_FRAME_JSON_LIMIT must use kb or mb units")
+    .default("1mb"),
+  AI_FRAME_MAX_DECODED_BYTES: z.coerce.number().int().positive().default(786432),
+  AI_FRAME_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(300),
+  AI_FRAME_CACHE_MAX_SESSIONS: z.coerce.number().int().positive().default(50),
+}).superRefine((values, ctx) => {
+  if (values.NODE_ENV === "production" && !values.AI_CALLBACK_API_KEY?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["AI_CALLBACK_API_KEY"],
+      message: "AI_CALLBACK_API_KEY is required in production",
+    });
+  }
 });
 
 const parsed = envSchema.safeParse(process.env);

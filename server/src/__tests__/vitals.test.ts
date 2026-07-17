@@ -88,6 +88,13 @@ function makeToken(caregiverId: string) {
 const tokenA = makeToken(CAREGIVER_A_ID);
 const tokenB = makeToken(CAREGIVER_B_ID);
 
+const mobileRequest = {
+  get: (path: string) =>
+    request(app).get(path).set("Authorization", `Bearer ${tokenA}`),
+  post: (path: string) =>
+    request(app).post(path).set("Authorization", `Bearer ${tokenA}`),
+};
+
 const samplePatientA = {
   id: PATIENT_A_ID,
   caregiverId: CAREGIVER_A_ID,
@@ -160,12 +167,15 @@ beforeEach(() => {
 });
 
 describe("POST /api/mobile/vital-events", () => {
+  beforeEach(() => {
+    pat.findFirst.mockResolvedValue(samplePatientA);
+  });
+
   it("creates an event for a valid deviceId with heartRate", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     vitalEvent.create.mockResolvedValue(sampleVitalEvent);
 
-    const res = await request(app)
-      .post("/api/mobile/vital-events")
+    const res = await mobileRequest.post("/api/mobile/vital-events")
       .send({
         deviceId: DEVICE_ID,
         timestamp: "2026-05-22T16:30:00.000Z",
@@ -176,9 +186,9 @@ describe("POST /api/mobile/vital-events", () => {
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(res.body.data.heartRate).toBe(78);
-    expect(pat.findUnique).toHaveBeenCalledWith({
-      where: { deviceId: DEVICE_ID },
-      select: { id: true },
+    expect(pat.findFirst).toHaveBeenCalledWith({
+      where: { caregiverId: CAREGIVER_A_ID, deviceId: DEVICE_ID },
+      select: { id: true, name: true, deviceId: true },
     });
     expect(vitalEvent.create).toHaveBeenCalledWith({
       data: {
@@ -193,11 +203,10 @@ describe("POST /api/mobile/vital-events", () => {
   });
 
   it("creates an event for a valid deviceId with motionState and stepCount", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     vitalEvent.create.mockResolvedValue(motionStepVitalEvent);
 
-    const res = await request(app)
-      .post("/api/mobile/vital-events")
+    const res = await mobileRequest.post("/api/mobile/vital-events")
       .send({
         deviceId: DEVICE_ID,
         timestamp: "2026-05-22T16:30:00.000Z",
@@ -220,8 +229,7 @@ describe("POST /api/mobile/vital-events", () => {
   });
 
   it("returns 400 when deviceId is missing", async () => {
-    const res = await request(app)
-      .post("/api/mobile/vital-events")
+    const res = await mobileRequest.post("/api/mobile/vital-events")
       .send({
         timestamp: "2026-05-22T16:30:00.000Z",
         heartRate: 78,
@@ -230,15 +238,14 @@ describe("POST /api/mobile/vital-events", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("VALIDATION_ERROR");
-    expect(pat.findUnique).not.toHaveBeenCalled();
+    expect(pat.findFirst).not.toHaveBeenCalled();
     expect(vitalEvent.create).not.toHaveBeenCalled();
   });
 
   it("returns 404 when deviceId does not match any patient", async () => {
-    pat.findUnique.mockResolvedValue(null);
+    pat.findFirst.mockResolvedValue(null);
 
-    const res = await request(app)
-      .post("/api/mobile/vital-events")
+    const res = await mobileRequest.post("/api/mobile/vital-events")
       .send({
         deviceId: "unknown-device",
         timestamp: "2026-05-22T16:30:00.000Z",
@@ -252,8 +259,7 @@ describe("POST /api/mobile/vital-events", () => {
   });
 
   it("returns 400 for invalid heartRate", async () => {
-    const res = await request(app)
-      .post("/api/mobile/vital-events")
+    const res = await mobileRequest.post("/api/mobile/vital-events")
       .send({
         deviceId: DEVICE_ID,
         timestamp: "2026-05-22T16:30:00.000Z",
@@ -263,12 +269,11 @@ describe("POST /api/mobile/vital-events", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("VALIDATION_ERROR");
-    expect(pat.findUnique).not.toHaveBeenCalled();
+    expect(pat.findFirst).not.toHaveBeenCalled();
   });
 
   it("returns 400 for invalid stepCount", async () => {
-    const res = await request(app)
-      .post("/api/mobile/vital-events")
+    const res = await mobileRequest.post("/api/mobile/vital-events")
       .send({
         deviceId: DEVICE_ID,
         timestamp: "2026-05-22T16:30:00.000Z",
@@ -282,8 +287,7 @@ describe("POST /api/mobile/vital-events", () => {
   });
 
   it("returns 400 for invalid motionState", async () => {
-    const res = await request(app)
-      .post("/api/mobile/vital-events")
+    const res = await mobileRequest.post("/api/mobile/vital-events")
       .send({
         deviceId: DEVICE_ID,
         timestamp: "2026-05-22T16:30:00.000Z",
@@ -296,8 +300,7 @@ describe("POST /api/mobile/vital-events", () => {
   });
 
   it("returns 400 for invalid sourceDevice", async () => {
-    const res = await request(app)
-      .post("/api/mobile/vital-events")
+    const res = await mobileRequest.post("/api/mobile/vital-events")
       .send({
         deviceId: DEVICE_ID,
         timestamp: "2026-05-22T16:30:00.000Z",
@@ -310,8 +313,7 @@ describe("POST /api/mobile/vital-events", () => {
   });
 
   it("returns 400 when no sample fields are provided", async () => {
-    const res = await request(app)
-      .post("/api/mobile/vital-events")
+    const res = await mobileRequest.post("/api/mobile/vital-events")
       .send({
         deviceId: DEVICE_ID,
         timestamp: "2026-05-22T16:30:00.000Z",

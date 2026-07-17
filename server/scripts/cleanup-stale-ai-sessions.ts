@@ -21,6 +21,7 @@ import {
   computeJoinability,
   getStaleMinutes,
 } from "../src/modules/ai-sessions/ai-session.lifecycle";
+import { endStreamsForAiSession } from "../src/modules/streams/stream.service";
 
 const CLEANUP_REASON = "stale_session_cleanup";
 
@@ -47,7 +48,6 @@ async function main() {
     where: { status: { in: NON_TERMINAL_STATUSES } },
     orderBy: { startedAt: "asc" },
     include: {
-      patient: { select: { id: true, name: true } },
       messages: {
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -81,22 +81,30 @@ async function main() {
   for (const s of eligible) {
     const lastActivity = s.messages?.[0]?.createdAt ?? s.updatedAt ?? s.startedAt;
     console.log(
-      `- session=${s.id} patient=${s.patient?.name ?? s.patientId} status=${s.status} age=${ageMinutes(s.startedAt)} lastActivity=${ageMinutes(lastActivity)} action=close(cancelled)`
+      `- session=${s.id} patientId=${s.patientId} status=${s.status} age=${ageMinutes(s.startedAt)} lastActivity=${ageMinutes(lastActivity)} action=close(cancelled)`
     );
 
     if (apply) {
       const now = new Date();
-      await prisma.aiSession.update({
-        where: { id: s.id },
-        data: {
-          status: "cancelled",
-          endedAt: s.endedAt ?? now,
-          metadata: {
-            ...asRecord(s.metadata),
-            cleanupReason: CLEANUP_REASON,
-            cleanupAt: now.toISOString(),
+      await prisma.$transaction(async (tx) => {
+        await tx.aiSession.update({
+          where: { id: s.id },
+          data: {
+            status: "cancelled",
+            endedAt: s.endedAt ?? now,
+            metadata: {
+              ...asRecord(s.metadata),
+              cleanupReason: CLEANUP_REASON,
+              cleanupAt: now.toISOString(),
+            },
           },
-        },
+        });
+        await endStreamsForAiSession(s.id, {
+          client: tx,
+          endedAt: s.endedAt ?? now,
+          endReason: CLEANUP_REASON,
+          endedBy: "stale_ai_session_cleanup",
+        });
       });
     }
   }

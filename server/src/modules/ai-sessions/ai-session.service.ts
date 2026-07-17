@@ -1,5 +1,6 @@
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../middleware/error.middleware";
+import { findPatientForCaregiverDevice } from "../patients/patient.service";
 import { SCRIPTED_MESSAGES, determineNextAiMessage } from "./ai-session.messages";
 import { validateTransition, AiSessionStatus } from "./ai-session.state-machine";
 import {
@@ -11,8 +12,20 @@ import { deriveRegistrationStatus, toApiMessages } from "./ai-session.dto";
 import type {
   AiSessionConcludeCallbackInput,
   AiSessionEscalationCallbackInput,
+  AiSessionFrameCallbackInput,
   StartAiSessionInput,
 } from "./ai-session.schemas";
+import {
+  acceptLatestFrame,
+  deleteLatestFrame,
+  restoreLatestFrameAfterFailedAcceptance,
+} from "./latest-ai-frame.store";
+import {
+  endStreamsForAiSession,
+  findStreamSessionByAiSessionId,
+  isTerminalStreamStatus,
+  upsertAiSessionFrameStream,
+} from "../streams/stream.service";
 
 type PatientContext = {
   id: string;
@@ -108,11 +121,19 @@ type AiAgentStartPayload = {
 
 type JsonRecord = Record<string, unknown>;
 
+function normalizeFrameVision(input: AiSessionFrameCallbackInput) {
+  return {
+    description: input.vision?.description ?? null,
+    label: input.vision?.label ?? null,
+    flags: input.vision?.flags ?? [],
+    advisoryFlags: input.vision?.advisory_flags ?? [],
+  };
+}
+
 export class AiAgentSessionStartError extends Error {
   constructor(
     public readonly statusCode: 502 | 504,
-    public readonly upstreamStatus?: number,
-    public readonly upstreamBody?: string
+    public readonly upstreamStatus?: number
   ) {
     super("AI backend session start failed");
     this.name = "AiAgentSessionStartError";
@@ -130,6 +151,16 @@ function asJsonRecord(value: unknown): JsonRecord {
   }
 
   return value as JsonRecord;
+}
+
+function clearLatestFrameAfterDatabaseCommit(aiSessionId: string) {
+  try {
+    deleteLatestFrame(aiSessionId);
+  } catch {
+    // The database status remains the privacy boundary if process-local cache
+    // cleanup ever fails. Never log frame content or callback data here.
+    console.error("[ai-session] unable to clear latest frame", { aiSessionId });
+  }
 }
 
 function mapTranscriptSenderType(role: string) {
@@ -339,33 +370,27 @@ async function callAiAgentSessionStart(payload: AiAgentStartPayload) {
       signal: controller.signal,
     });
 
-    // Read the body once so it can be used for both parsing and diagnostics.
+    // Read only enough to validate the acknowledgement. Upstream response
+    // bodies can contain patient context and must not be logged or relayed.
     let responseBody: unknown;
-    let upstreamBody = "";
     try {
       responseBody = await response.json();
-      upstreamBody = JSON.stringify(responseBody);
     } catch {
       responseBody = undefined;
-      upstreamBody = "<non-JSON or empty response body>";
     }
 
     if (response.status !== 200) {
       console.error("[ai-session] AI agent returned a non-200 response", {
-        url: requestUrl,
         upstreamStatus: response.status,
-        upstreamBody,
       });
-      throw new AiAgentSessionStartError(502, response.status, upstreamBody);
+      throw new AiAgentSessionStartError(502, response.status);
     }
 
     if (!isRegisteredResponse(responseBody)) {
       console.error("[ai-session] AI agent did not confirm registration", {
-        url: requestUrl,
         upstreamStatus: response.status,
-        upstreamBody,
       });
-      throw new AiAgentSessionStartError(502, response.status, upstreamBody);
+      throw new AiAgentSessionStartError(502, response.status);
     }
   } catch (error) {
     if (error instanceof AiAgentSessionStartError) {
@@ -374,16 +399,12 @@ async function callAiAgentSessionStart(payload: AiAgentStartPayload) {
 
     if (isAbortError(error) || controller.signal.aborted) {
       console.error("[ai-session] AI agent session start timed out", {
-        url: requestUrl,
         timeoutMs: getAiAgentTimeoutMs(),
       });
       throw new AiAgentSessionStartError(504);
     }
 
-    console.error("[ai-session] AI agent session start network error", {
-      url: requestUrl,
-      error: error instanceof Error ? error.message : String(error),
-    });
+    console.error("[ai-session] AI agent session start network error");
     throw new AiAgentSessionStartError(502);
   } finally {
     clearTimeout(timeout);
@@ -396,20 +417,30 @@ async function markAiSessionStartFailed(sessionId: string, statusCode: 502 | 504
       where: { id: sessionId },
       select: { metadata: true },
     });
-    await prisma.aiSession.update({
-      where: { id: sessionId },
-      data: {
-        // start_failed is terminal, carries endedAt, and is never joinable.
-        status: "start_failed",
-        endedAt: new Date(),
-        metadata: {
-          ...asJsonRecord(existing?.metadata),
-          registrationFailed: true,
-          aiAgentStartFailedAt: new Date().toISOString(),
-          upstreamStatusCode: statusCode,
+    const failedAt = new Date();
+    await prisma.$transaction(async (tx) => {
+      await tx.aiSession.update({
+        where: { id: sessionId },
+        data: {
+          // start_failed is terminal, carries endedAt, and is never joinable.
+          status: "start_failed",
+          endedAt: failedAt,
+          metadata: {
+            ...asJsonRecord(existing?.metadata),
+            registrationFailed: true,
+            aiAgentStartFailedAt: failedAt.toISOString(),
+            upstreamStatusCode: statusCode,
+          },
         },
-      },
+      });
+      await endStreamsForAiSession(sessionId, {
+        client: tx,
+        endedAt: failedAt,
+        endReason: "ai_session_start_failed",
+        endedBy: "ai_session_start",
+      });
     });
+    clearLatestFrameAfterDatabaseCommit(sessionId);
   } catch {
     // Best effort: the API response should still reflect the upstream start failure.
   }
@@ -430,26 +461,47 @@ async function supersedePreviousSessions(patientId: string, newSessionId: string
     })) ?? [];
 
   const supersededAt = new Date();
-  for (const session of previous) {
-    await prisma.aiSession.update({
-      where: { id: session.id },
-      data: {
-        status: "cancelled",
-        endedAt: supersededAt,
-        metadata: {
-          ...asJsonRecord(session.metadata),
-          supersededBy: newSessionId,
-          supersededAt: supersededAt.toISOString(),
-          supersededReason: "superseded_by_new_session",
+  await prisma.$transaction(async (tx) => {
+    for (const session of previous) {
+      await tx.aiSession.update({
+        where: { id: session.id },
+        data: {
+          status: "cancelled",
+          endedAt: supersededAt,
+          metadata: {
+            ...asJsonRecord(session.metadata),
+            supersededBy: newSessionId,
+            supersededAt: supersededAt.toISOString(),
+            supersededReason: "superseded_by_new_session",
+          },
         },
-      },
-    });
+      });
+      await endStreamsForAiSession(session.id, {
+        client: tx,
+        endedAt: supersededAt,
+        endReason: "superseded_by_new_ai_session",
+        endedBy: "ai_session_supersession",
+        supersededByAiSessionId: newSessionId,
+      });
+    }
+  });
+
+  for (const session of previous) {
+    clearLatestFrameAfterDatabaseCommit(session.id);
   }
 
   return previous.length;
 }
 
-export async function startAiSession(input: StartAiSessionInput) {
+export async function startAiSession(
+  input: StartAiSessionInput,
+  caregiverId: string
+) {
+  const ownedPatient = await findPatientForCaregiverDevice(
+    caregiverId,
+    input.deviceId
+  );
+
   const patient = (await prisma.patient.findUnique({
     where: { deviceId: input.deviceId },
     select: {
@@ -528,7 +580,7 @@ export async function startAiSession(input: StartAiSessionInput) {
     },
   })) as PatientContext | null;
 
-  if (!patient) {
+  if (!patient || patient.id !== ownedPatient.id) {
     throw new AppError(404, "No patient found for this device", "NOT_FOUND");
   }
 
@@ -605,6 +657,7 @@ export async function recordEscalationCallback(
     select: {
       id: true,
       status: true,
+      endedAt: true,
       emergencySuggestedAt: true,
       metadata: true,
     },
@@ -613,6 +666,14 @@ export async function recordEscalationCallback(
   if (!session) {
     throw new AppError(404, "Session not found", "NOT_FOUND");
   }
+  if (isTerminalStatus(session.status) || session.endedAt) {
+    throw new AppError(409, "AI session is not active", "AI_SESSION_NOT_ACTIVE");
+  }
+  if (session.status === "emergency_suggested") {
+    return { success: true, alreadyEscalated: true };
+  }
+
+  validateTransition(session.status as AiSessionStatus, "emergency_suggested");
 
   const receivedAt = new Date();
   const escalationMetadata = {
@@ -621,10 +682,10 @@ export async function recordEscalationCallback(
     received_at: receivedAt.toISOString(),
   };
 
-  await prisma.aiSession.update({
-    where: { id: sessionId },
+  const transition = await prisma.aiSession.updateMany({
+    where: { id: sessionId, status: session.status, endedAt: null },
     data: {
-      status: isTerminalStatus(session.status) ? session.status : "emergency_suggested",
+      status: "emergency_suggested",
       emergencySuggestedAt: session.emergencySuggestedAt ?? receivedAt,
       metadata: {
         ...asJsonRecord(session.metadata),
@@ -632,6 +693,17 @@ export async function recordEscalationCallback(
       },
     },
   });
+
+  if (transition.count === 0) {
+    const current = await prisma.aiSession.findUnique({
+      where: { id: sessionId },
+      select: { status: true, endedAt: true },
+    });
+    if (current?.status === "emergency_suggested" && !current.endedAt) {
+      return { success: true, alreadyEscalated: true };
+    }
+    throw new AppError(409, "AI session is not active", "AI_SESSION_NOT_ACTIVE");
+  }
 
   await prisma.aiSessionMessage.create({
     data: {
@@ -656,7 +728,9 @@ export async function recordConcludeCallback(
     where: { id: sessionId },
     select: {
       id: true,
+      patientId: true,
       status: true,
+      endedAt: true,
       metadata: true,
     },
   });
@@ -664,15 +738,15 @@ export async function recordConcludeCallback(
   if (!session) {
     throw new AppError(404, "Session not found", "NOT_FOUND");
   }
-
-  // Idempotency: Anthony may retry the conclude callback. If we have already
-  // recorded a conclusion, acknowledge it without re-writing the terminal state
-  // or duplicating transcript messages.
-  const existingMetadata = asJsonRecord(session.metadata);
-  if (existingMetadata.aiConclusion) {
-    return { success: true, alreadyConcluded: true };
+  if (input.patient_id !== session.patientId) {
+    throw new AppError(
+      400,
+      "Callback patient does not match the AI session",
+      "CALLBACK_PATIENT_MISMATCH"
+    );
   }
 
+  const existingMetadata = asJsonRecord(session.metadata);
   const concludedAt = new Date();
   const endedAt = new Date(input.ended_at);
   const nextStatus =
@@ -695,47 +769,175 @@ export async function recordConcludeCallback(
     received_at: concludedAt.toISOString(),
   };
 
-  await prisma.aiSession.update({
-    where: { id: sessionId },
-    data: {
-      status: nextStatus,
-      endedAt,
-      summary: `AI session concluded with outcome ${input.outcome}. Final scene: ${input.final_scene_label ?? "unknown"}.`,
-      metadata: {
-        ...asJsonRecord(session.metadata),
-        aiConclusion: conclusionMetadata,
-      },
-    },
-  });
+  const alreadyConcluded = Boolean(existingMetadata.aiConclusion);
+  if (alreadyConcluded) {
+    await prisma.$transaction((tx) =>
+      endStreamsForAiSession(sessionId, {
+        client: tx,
+        endedAt: session.endedAt ?? endedAt,
+        endReason: nextStatus === "error" ? "ai_session_error" : "ai_session_concluded",
+        endedBy: "anthony_conclude_callback",
+      })
+    );
+    clearLatestFrameAfterDatabaseCommit(sessionId);
+    return { success: true, alreadyConcluded: true };
+  }
 
-  for (const transcriptMessage of input.transcript) {
-    await prisma.aiSessionMessage.create({
+  if (isTerminalStatus(session.status) || session.endedAt) {
+    throw new AppError(409, "AI session is not active", "AI_SESSION_NOT_ACTIVE");
+  }
+  validateTransition(session.status as AiSessionStatus, nextStatus as AiSessionStatus);
+
+  let recordedConclusion = false;
+  await prisma.$transaction(async (tx) => {
+    const transition = await tx.aiSession.updateMany({
+      where: { id: sessionId, status: session.status, endedAt: null },
       data: {
-        aiSessionId: sessionId,
-        senderType: mapTranscriptSenderType(transcriptMessage.role),
-        message: transcriptMessage.text,
-        createdAt: new Date(transcriptMessage.ts),
+        status: nextStatus,
+        endedAt,
+        summary: `AI session concluded with outcome ${input.outcome}. Final scene: ${input.final_scene_label ?? "unknown"}.`,
         metadata: {
-          type: "ai_transcript",
-          role: transcriptMessage.role,
-          ts: transcriptMessage.ts,
-          scene_label: transcriptMessage.scene_label ?? null,
-          source: "anthony_ai_backend",
+          ...existingMetadata,
+          aiConclusion: conclusionMetadata,
         },
       },
     });
+
+    if (transition.count > 0) {
+      recordedConclusion = true;
+      for (const transcriptMessage of input.transcript) {
+        await tx.aiSessionMessage.create({
+          data: {
+            aiSessionId: sessionId,
+            senderType: mapTranscriptSenderType(transcriptMessage.role),
+            message: transcriptMessage.text,
+            createdAt: new Date(transcriptMessage.ts),
+            metadata: {
+              type: "ai_transcript",
+              role: transcriptMessage.role,
+              ts: transcriptMessage.ts,
+              scene_label: transcriptMessage.scene_label ?? null,
+              source: "anthony_ai_backend",
+            },
+          },
+        });
+      }
+    }
+
+    if (recordedConclusion) {
+      await endStreamsForAiSession(sessionId, {
+        client: tx,
+        endedAt,
+        endReason: nextStatus === "error" ? "ai_session_error" : "ai_session_concluded",
+        endedBy: "anthony_conclude_callback",
+      });
+    }
+  });
+
+  if (!recordedConclusion) {
+    const current = await prisma.aiSession.findUnique({
+      where: { id: sessionId },
+      select: { metadata: true },
+    });
+    if (!asJsonRecord(current?.metadata).aiConclusion) {
+      throw new AppError(409, "AI session is not active", "AI_SESSION_NOT_ACTIVE");
+    }
   }
 
-  return { success: true };
+  clearLatestFrameAfterDatabaseCommit(sessionId);
+  return { success: true, ...(recordedConclusion ? {} : { alreadyConcluded: true }) };
 }
 
-export async function getMobileSession(sessionId: string, deviceId: string) {
+/**
+ * Receives one lightweight egocentric frame event. Image bytes are never
+ * decoded, transformed, logged, or persisted; the latest base64 value remains
+ * exclusively in the bounded in-memory cache.
+ */
+export async function recordFrameCallback(
+  sessionId: string,
+  input: AiSessionFrameCallbackInput
+): Promise<
+  | { accepted: true; receivedAt: string }
+  | { accepted: false; reason: "duplicate" | "out_of_order" }
+> {
+  const session = await prisma.aiSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      id: true,
+      patientId: true,
+      helpEventId: true,
+      status: true,
+      endedAt: true,
+    },
+  });
+
+  if (!session) {
+    throw new AppError(404, "Session not found", "NOT_FOUND");
+  }
+  if (isTerminalStatus(session.status) || session.endedAt) {
+    throw new AppError(409, "AI session is not active", "AI_SESSION_NOT_ACTIVE");
+  }
+
+  const existingStream = await findStreamSessionByAiSessionId(
+    session.patientId,
+    session.id
+  );
+  if (existingStream && (isTerminalStreamStatus(existingStream.status) || existingStream.endedAt)) {
+    throw new AppError(
+      409,
+      "Associated stream session is no longer active",
+      "STREAM_SESSION_NOT_ACTIVE"
+    );
+  }
+
+  const receivedAt = new Date().toISOString();
+  const accepted = acceptLatestFrame({
+    aiSessionId: session.id,
+    patientId: session.patientId,
+    seq: input.seq,
+    capturedAt: input.ts,
+    receivedAt,
+    image: input.image ?? null,
+    vision: normalizeFrameVision(input),
+  });
+
+  if (!accepted.accepted) {
+    return { accepted: false, reason: accepted.reason };
+  }
+
+  try {
+    await upsertAiSessionFrameStream({
+      aiSessionId: session.id,
+      patientId: session.patientId,
+      helpEventId: session.helpEventId,
+      frame: accepted.frame,
+    });
+  } catch (error) {
+    // A retry must be able to perform the bridge if the database operation
+    // fails. Do not roll back a newer callback that arrived concurrently.
+    restoreLatestFrameAfterFailedAcceptance(
+      session.id,
+      input.seq,
+      accepted.previous
+    );
+    throw error;
+  }
+
+  return { accepted: true, receivedAt };
+}
+
+export async function getMobileSession(
+  sessionId: string,
+  deviceId: string,
+  caregiverId: string
+) {
+  const patient = await findPatientForCaregiverDevice(caregiverId, deviceId);
   const session = await prisma.aiSession.findUnique({
     where: { id: sessionId },
     include: { patient: true, messages: { orderBy: { createdAt: 'asc' } } }
   });
 
-  if (!session || session.patient.deviceId !== deviceId) {
+  if (!session || session.patientId !== patient.id) {
     throw new AppError(404, "Session not found");
   }
 
@@ -749,13 +951,19 @@ export async function getMobileSession(sessionId: string, deviceId: string) {
   };
 }
 
-export async function handlePatientMessage(sessionId: string, deviceId: string, messageText: string) {
+export async function handlePatientMessage(
+  sessionId: string,
+  deviceId: string,
+  messageText: string,
+  caregiverId: string
+) {
+  const patient = await findPatientForCaregiverDevice(caregiverId, deviceId);
   const session = await prisma.aiSession.findUnique({
     where: { id: sessionId },
     include: { patient: true, messages: true }
   });
 
-  if (!session || session.patient.deviceId !== deviceId) {
+  if (!session || session.patientId !== patient.id) {
     throw new AppError(404, "Session not found");
   }
 
@@ -805,24 +1013,43 @@ export async function handlePatientMessage(sessionId: string, deviceId: string, 
   return result;
 }
 
-export async function resolveSession(sessionId: string, deviceId: string) {
+export async function resolveSession(
+  sessionId: string,
+  deviceId: string,
+  caregiverId: string
+) {
+  const patient = await findPatientForCaregiverDevice(caregiverId, deviceId);
   const session = await prisma.aiSession.findUnique({
     where: { id: sessionId },
     include: { patient: true }
   });
 
-  if (!session || session.patient.deviceId !== deviceId) {
+  if (!session || session.patientId !== patient.id) {
     throw new AppError(404, "Session not found");
   }
 
+  if (session.status === "resolved") {
+    await prisma.$transaction((tx) =>
+      endStreamsForAiSession(sessionId, {
+        client: tx,
+        endedAt: session.endedAt ?? new Date(),
+        endReason: "mobile_resolved",
+        endedBy: "mobile_resolve",
+      })
+    );
+    clearLatestFrameAfterDatabaseCommit(sessionId);
+    return session;
+  }
+
   validateTransition(session.status as AiSessionStatus, "resolved");
+  const resolvedAt = new Date();
 
   const resolvedSession = await prisma.$transaction(async (tx) => {
     const updated = await tx.aiSession.update({
       where: { id: sessionId },
       data: {
         status: "resolved",
-        endedAt: new Date(),
+        endedAt: resolvedAt,
         summary: "Support session concluded. Patient requested assistance and caregiver coordination was recorded."
       }
     });
@@ -835,19 +1062,33 @@ export async function resolveSession(sessionId: string, deviceId: string) {
       }
     });
 
+    await endStreamsForAiSession(sessionId, {
+      client: tx,
+      endedAt: resolvedAt,
+      endReason: "mobile_resolved",
+      endedBy: "mobile_resolve",
+    });
+
     return updated;
   });
 
+  clearLatestFrameAfterDatabaseCommit(sessionId);
   return resolvedSession;
 }
 
-export async function acknowledgeEmergency(sessionId: string, deviceId: string, action: "call_initiated" | "dismissed") {
+export async function acknowledgeEmergency(
+  sessionId: string,
+  deviceId: string,
+  action: "call_initiated" | "dismissed",
+  caregiverId: string
+) {
+  const patient = await findPatientForCaregiverDevice(caregiverId, deviceId);
   const session = await prisma.aiSession.findUnique({
     where: { id: sessionId },
     include: { patient: true }
   });
 
-  if (!session || session.patient.deviceId !== deviceId) {
+  if (!session || session.patientId !== patient.id) {
     throw new AppError(404, "Session not found");
   }
 
@@ -1044,14 +1285,28 @@ export async function caregiverResolveSession(sessionId: string, caregiverId: st
     throw new AppError(404, "Session not found");
   }
 
+  if (session.status === "resolved") {
+    await prisma.$transaction((tx) =>
+      endStreamsForAiSession(sessionId, {
+        client: tx,
+        endedAt: session.endedAt ?? new Date(),
+        endReason: "caregiver_resolved",
+        endedBy: "caregiver_resolve",
+      })
+    );
+    clearLatestFrameAfterDatabaseCommit(sessionId);
+    return session;
+  }
+
   validateTransition(session.status as AiSessionStatus, "resolved");
+  const resolvedAt = new Date();
 
   const updatedSession = await prisma.$transaction(async (tx) => {
     const updated = await tx.aiSession.update({
       where: { id: sessionId },
       data: {
         status: "resolved",
-        endedAt: new Date(),
+        endedAt: resolvedAt,
         summary: "Support session concluded. Patient requested assistance and caregiver coordination was recorded."
       }
     });
@@ -1064,8 +1319,16 @@ export async function caregiverResolveSession(sessionId: string, caregiverId: st
       }
     });
 
+    await endStreamsForAiSession(sessionId, {
+      client: tx,
+      endedAt: resolvedAt,
+      endReason: "caregiver_resolved",
+      endedBy: "caregiver_resolve",
+    });
+
     return updated;
   });
 
+  clearLatestFrameAfterDatabaseCommit(sessionId);
   return updatedSession;
 }

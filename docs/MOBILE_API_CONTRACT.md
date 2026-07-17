@@ -6,15 +6,13 @@ This document outlines the API contract for the mobile application integration (
 * **Local development base URL:** `http://localhost:4000`
 * **Local development API path prefix:** `/api`
 * **Android Emulator Tip:** Use `http://10.0.2.2:4000` to access the local server from the emulator.
-* **Production Base URL:** Production base URL/IP is not finalized yet. Current verified local base URL is http://localhost:4000.
-
-> [!WARNING]
-> The backend server is currently running over HTTP locally. Do not claim or configure HTTPS unless it is officially deployed and configured on the production host.
+* **Production portal and API base URL:** `https://caregiver.guardianova.com`
+* **Production transport:** HTTPS is deployed at the production URL above.
 
 ---
 
 ## Auth / Login
-Caregivers log in using this endpoint to retrieve an access token. Patient/Wearable telemetry endpoints do not require token-based authentication (they use device identification via `deviceId` instead).
+Caregivers log in using this endpoint to retrieve an access token. All mobile sync, telemetry, AI-session, and stream endpoints require that bearer token and an owned `deviceId` where the endpoint accepts one.
 
 * **Path:** `/api/auth/login`
 * **Method:** `POST`
@@ -25,7 +23,7 @@ Caregivers log in using this endpoint to retrieve an access token. Patient/Weara
   ```json
   {
     "email": "caregiver@example.com",
-    "password": "password123"
+    "password": "<caregiver-password>"
   }
   ```
 * **Success Response (200 OK):**
@@ -71,13 +69,15 @@ Caregivers log in using this endpoint to retrieve an access token. Patient/Weara
 ---
 
 ## Authorization Header
-For endpoints that require authentication (such as caregiver portal sync endpoints, e.g., `GET /api/auth/me`, and `GET /api/mobile/patients`), include the retrieved JWT in the request headers:
+For protected endpoints, including every `/api/mobile/*` endpoint, include the retrieved JWT in the request headers:
 
 ```http
 Authorization: Bearer <JWT_TOKEN>
 ```
 
-*(Note: Most telemetry/event uploads and patient sync endpoints starting with `/api/mobile/...` do **not** require this header. They use the `deviceId` parameter for routing. `GET /api/mobile/patients` is the exception and requires the caregiver Bearer token.)*
+For each mobile request with a `deviceId`, the backend confirms that device belongs to the JWT's caregiver before reading or writing data. A device owned by another caregiver is returned as `404 Not Found`.
+
+Never send this caregiver JWT to `wss://ai.guardianova.com`. The Anthony WebSocket hello contains only the session identifier documented below.
 
 ---
 
@@ -131,8 +131,8 @@ Retrieve the list of active reminders configured for the patient associated with
 
 * **Path:** `/api/mobile/reminders`
 * **Method:** `GET`
-* **Auth Required:** No (identifies patient via `deviceId`)
-* **Headers:** None required
+* **Auth Required:** Yes (caregiver Bearer token)
+* **Headers:** `Authorization: Bearer <JWT_TOKEN>`
 * **Query Parameters:**
   * `deviceId` (string, required): The unique hardware or system ID of the patient's device.
 * **Success Response (200 OK):**
@@ -177,8 +177,9 @@ Log or sync an instance of a reminder delivery, acknowledgment, or miss from the
 
 * **Path:** `/api/mobile/reminder-events`
 * **Method:** `POST`
-* **Auth Required:** No
+* **Auth Required:** Yes (caregiver Bearer token)
 * **Headers:**
+  * `Authorization: Bearer <JWT_TOKEN>`
   * `Content-Type: application/json`
 * **Request Body (JSON):**
   ```json
@@ -225,8 +226,9 @@ Report when the patient enters or exits proximity of a registered BLE beacon.
 
 * **Path:** `/api/mobile/beacon-events`
 * **Method:** `POST`
-* **Auth Required:** No
+* **Auth Required:** Yes (caregiver Bearer token)
 * **Headers:**
+  * `Authorization: Bearer <JWT_TOKEN>`
   * `Content-Type: application/json`
 * **Request Body (JSON):**
   ```json
@@ -273,8 +275,9 @@ Upload wearable vitals measurements (e.g. Heart Rate, Step Count, Motion State).
 
 * **Path:** `/api/mobile/vital-events`
 * **Method:** `POST`
-* **Auth Required:** No
+* **Auth Required:** Yes (caregiver Bearer token)
 * **Headers:**
+  * `Authorization: Bearer <JWT_TOKEN>`
   * `Content-Type: application/json`
 * **Request Body (JSON):**
   ```json
@@ -319,8 +322,9 @@ Triggered when the patient requests help or falls. This creates a record to noti
 
 * **Path:** `/api/mobile/help-events`
 * **Method:** `POST`
-* **Auth Required:** No
+* **Auth Required:** Yes (caregiver Bearer token)
 * **Headers:**
+  * `Authorization: Bearer <JWT_TOKEN>`
   * `Content-Type: application/json`
 * **Request Body (JSON):**
   ```json
@@ -359,12 +363,13 @@ Triggered when the patient requests help or falls. This creates a record to noti
 ---
 
 ### POST /api/mobile/stream/start
-Notify the backend that a smart-glasses or phone camera video stream is starting.
+Create or report a mobile stream-status session. This control endpoint is separate from the AI egocentric JPEG frame path.
 
 * **Path:** `/api/mobile/stream/start`
 * **Method:** `POST`
-* **Auth Required:** No
+* **Auth Required:** Yes (caregiver Bearer token)
 * **Headers:**
+  * `Authorization: Bearer <JWT_TOKEN>`
   * `Content-Type: application/json`
 * **Request Body (JSON):**
   ```json
@@ -374,7 +379,6 @@ Notify the backend that a smart-glasses or phone camera video stream is starting
     "source": "glasses",
     "startedAt": "2026-06-11T12:36:00.000Z",
     "status": "starting",
-    "viewerUrl": "https://stream.memaide.com/live/patient123",
     "metadata": {
       "resolution": "1080p",
       "fps": 30
@@ -396,7 +400,7 @@ Notify the backend that a smart-glasses or phone camera video stream is starting
       "endedAt": null,
       "source": "glasses",
       "status": "starting",
-      "viewerUrl": "https://stream.memaide.com/live/patient123",
+      "viewerUrl": null,
       "metadata": {
         "resolution": "1080p",
         "fps": 30
@@ -409,6 +413,7 @@ Notify the backend that a smart-glasses or phone camera video stream is starting
 * **Notes:**
   * `helpEventId`, `startedAt`, `viewerUrl`, and `metadata` are optional.
   * `startedAt` will default to the current server time if `status` is `"starting"` or `"active"` and no time is provided.
+  * The embedded caregiver frame viewer does not use `viewerUrl` for the AI glasses flow; it polls the backend latest-frame endpoint described below.
 
 ---
 
@@ -417,8 +422,9 @@ Notify the backend that a stream session has ended.
 
 * **Path:** `/api/mobile/stream/stop`
 * **Method:** `POST`
-* **Auth Required:** No
+* **Auth Required:** Yes (caregiver Bearer token)
 * **Headers:**
+  * `Authorization: Bearer <JWT_TOKEN>`
   * `Content-Type: application/json`
 * **Request Body (JSON):**
   ```json
@@ -443,7 +449,7 @@ Notify the backend that a stream session has ended.
       "endedAt": "2026-06-11T12:40:00.000Z",
       "source": "glasses",
       "status": "ended",
-      "viewerUrl": "https://stream.memaide.com/live/patient123",
+      "viewerUrl": null,
       "metadata": {
         "resolution": "1080p",
         "fps": 30
@@ -460,7 +466,7 @@ Notify the backend that a stream session has ended.
 ## Notes
 
 ### 1. Additional Implemented Endpoints
-There are a few other endpoints implemented under `/api/mobile` that might be useful for your development:
+There are a few other endpoints implemented under `/api/mobile` that might be useful for your development. Each requires `Authorization: Bearer <JWT_TOKEN>` and device ownership where a `deviceId` is supplied:
 * **`GET /api/mobile/help-contact?deviceId=...`**: Retrieve the patient's active emergency WhatsApp contact config.
 * **`GET /api/mobile/beacons?deviceId=...`**: Retrieve active beacons configured for the patient.
 * **`POST /api/mobile/stream/status`**: Update a running stream session with new status/metadata. Expects JSON body:
@@ -475,12 +481,55 @@ There are a few other endpoints implemented under `/api/mobile` that might be us
   ```
 
 ### 2. Conversational/AI Session Endpoints
+Every endpoint below requires `Authorization: Bearer <JWT_TOKEN>` and verifies the supplied `deviceId` against that JWT's caregiver.
+
+#### Start an AI session
+* **POST** `/api/mobile/ai-sessions/start`
+* **Request body:**
+  ```json
+  {
+    "deviceId": "435687675",
+    "vitals": null,
+    "beacons": []
+  }
+  ```
+* **Success response:**
+  ```json
+  {
+    "success": true,
+    "sessionId": "...",
+    "websocketUrl": "wss://ai.guardianova.com",
+    "helloMessage": {
+      "type": "hello",
+      "session_id": "..."
+    }
+  }
+  ```
+* **WebSocket hello:** Send exactly the returned `helloMessage`. Do not add a caregiver JWT or other patient data.
+
 Mobile also interacts with AI emergency support sessions:
 * `POST /api/mobile/ai-sessions/start` — Start a conversational session.
 * `GET /api/mobile/ai-sessions/:id` — Get session status.
 * `POST /api/mobile/ai-sessions/:id/messages` — Send conversation message from patient.
 * `POST /api/mobile/ai-sessions/:id/resolve` — Mark session resolved.
 * `POST /api/mobile/ai-sessions/:id/emergency-suggestion-ack` — Acknowledge recommended caregiver backup call.
+
+---
+
+### 3. Egocentric JPEG Frame Path and Caregiver Viewer
+
+The implemented frame path is:
+
+```text
+Arian glasses/phone → Anthony AI server → POST /api/ai-sessions/:sessionId/frames
+→ Koko backend latest-frame cache → authenticated caregiver Stream Status viewer
+```
+
+* **Anthony callback:** `POST /api/ai-sessions/:sessionId/frames`
+* **Callback auth:** `X-Api-Key: <AI_CALLBACK_API_KEY>` only. This is a server-to-server endpoint, not a caregiver JWT endpoint.
+* **Transport:** JPEG frame polling only—not WebRTC, HLS, or MJPEG.
+* **Viewer endpoint:** `GET /api/stream-sessions/:streamSessionId/frame/latest` requires the caregiver bearer JWT and is used by the portal's embedded Stream Status frame viewer.
+* **Storage limitation:** The current JPEG exists only in one backend process's memory. Restarting that process clears the image until Anthony posts the next frame. Run one PM2 backend process for this MVP. PostgreSQL stores lightweight metadata, never frame history or JPEG/base64 data.
 
 ---
 

@@ -74,6 +74,116 @@ export const listCaregiverAiSessionsSchema = z.object({
 
 const callbackDateTimeSchema = z.string().datetime({ offset: true });
 
+const MAX_VISION_DESCRIPTION_LENGTH = 2000;
+const MAX_VISION_LABEL_LENGTH = 100;
+const MAX_VISION_FLAGS = 50;
+const MAX_VISION_FLAG_LENGTH = 100;
+
+function getFrameMaxDecodedBytes() {
+  const value = Number(process.env.AI_FRAME_MAX_DECODED_BYTES ?? "786432");
+  return Number.isSafeInteger(value) && value > 0 ? value : 786432;
+}
+
+/**
+ * Strict raw base64 validation without decoding an image in the request path.
+ * JPEG callbacks are standard base64; unpadded canonical base64 is also
+ * accepted. Any whitespace, data URL prefix, URL-safe alphabet, malformed
+ * padding, or invalid encoded length is rejected.
+ */
+function getStrictBase64DecodedByteLength(value: string): number | null {
+  if (!value || value.startsWith("data:")) return null;
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value)) return null;
+
+  const firstPadding = value.indexOf("=");
+  const contentLength = firstPadding === -1 ? value.length : firstPadding;
+  const paddingLength = firstPadding === -1 ? 0 : value.length - firstPadding;
+  const remainder = contentLength % 4;
+
+  if (remainder === 1) return null;
+  if (paddingLength > 0) {
+    if (value.length % 4 !== 0) return null;
+    if ((paddingLength === 1 && remainder !== 3) || (paddingLength === 2 && remainder !== 2)) {
+      return null;
+    }
+  }
+
+  return Math.floor((contentLength * 3) / 4);
+}
+
+const frameTimestampSchema = z
+  .string()
+  .datetime({ offset: true })
+  .refine((value) => Number.isFinite(Date.parse(value)), "Invalid timestamp")
+  .transform((value) => new Date(value).toISOString());
+
+const optionalVisionText = (maxLength: number) =>
+  z.string().trim().max(maxLength).nullable().optional();
+
+const visionFlagSchema = z.string().trim().min(1).max(MAX_VISION_FLAG_LENGTH);
+
+const aiFrameVisionSchema = z
+  .object({
+    description: optionalVisionText(MAX_VISION_DESCRIPTION_LENGTH),
+    label: optionalVisionText(MAX_VISION_LABEL_LENGTH),
+    flags: z.array(visionFlagSchema).max(MAX_VISION_FLAGS).optional().default([]),
+    advisory_flags: z
+      .array(visionFlagSchema)
+      .max(MAX_VISION_FLAGS)
+      .optional()
+      .default([]),
+  })
+  .strict();
+
+const aiFrameImageSchema = z
+  .object({
+    mime: z.literal("image/jpeg"),
+    b64: z.string().min(1),
+  })
+  .strict()
+  .superRefine((image, ctx) => {
+    const decodedBytes = getStrictBase64DecodedByteLength(image.b64);
+    if (decodedBytes === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["b64"],
+        message: "image.b64 must be raw, valid base64 without a data URL prefix",
+      });
+      return;
+    }
+    if (decodedBytes > getFrameMaxDecodedBytes()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["b64"],
+        message: "Decoded image exceeds the configured maximum size",
+      });
+    }
+  });
+
+export const aiSessionFrameCallbackSchema = z
+  .object({
+    seq: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+    ts: frameTimestampSchema,
+    vision: aiFrameVisionSchema.optional(),
+    image: aiFrameImageSchema.optional(),
+  })
+  .strict()
+  .superRefine((input, ctx) => {
+    const vision = input.vision;
+    const hasVisionContent = Boolean(
+      vision &&
+        (Boolean(vision.description) ||
+          Boolean(vision.label) ||
+          vision.flags.length > 0 ||
+          vision.advisory_flags.length > 0)
+    );
+    if (!input.image && !hasVisionContent) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "A frame callback requires an image or meaningful vision data",
+      });
+    }
+  });
+
 export const aiSessionEscalationCallbackSchema = z.object({
   reason: z.string().trim().min(1, "reason is required"),
   triggered_by: z.array(z.string().trim().min(1)).default([]),
@@ -107,4 +217,7 @@ export type AiSessionEscalationCallbackInput = z.infer<
 >;
 export type AiSessionConcludeCallbackInput = z.infer<
   typeof aiSessionConcludeCallbackSchema
+>;
+export type AiSessionFrameCallbackInput = z.infer<
+  typeof aiSessionFrameCallbackSchema
 >;

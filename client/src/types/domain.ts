@@ -452,6 +452,14 @@ export interface StreamActiveSessionSummary {
   source: StreamSessionSource
   viewerUrl: string | null
   startedAt: string | null
+  // Lightweight frame availability only. The normal status response never
+  // carries image data or advisory observations.
+  aiSessionId?: string | null
+  frameAvailable?: boolean
+  lastFrameSeq?: number | null
+  lastFrameAt?: string | null
+  visionLabel?: string | null
+  visionDescription?: string | null
 }
 
 export interface StreamLatestSessionSummary {
@@ -477,6 +485,31 @@ export interface StreamSessionsQuery {
   from?: Date | string
   to?: Date | string
 }
+
+export interface LatestStreamFrameImage {
+  mime: 'image/jpeg'
+  b64: string
+}
+
+// Vision remains transport-compatible only. The caregiver UI deliberately
+// does not interpret or render it until that metadata is clinically validated.
+export type LatestStreamFrameData =
+  | {
+      available: true
+      streamSessionId: string
+      aiSessionId: string | null
+      seq: number
+      capturedAt: string
+      receivedAt: string
+      image: LatestStreamFrameImage | null
+      vision?: unknown
+    }
+  | {
+      available: false
+      streamSessionId: string
+      aiSessionId: string | null
+      frameStatus: string
+    }
 
 // Raw backend lifecycle status. Kept as a broad union so the UI never crashes on
 // a status it did not anticipate; presentation is driven by `displayStatus`.

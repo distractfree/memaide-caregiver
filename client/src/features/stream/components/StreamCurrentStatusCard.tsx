@@ -60,7 +60,7 @@ export function StreamCurrentStatusCard({ summary }: Props) {
             </span>
           </div>
 
-          {viewerAvailable && activeSession.viewerUrl ? (
+          {viewerAvailable && activeSession.viewerUrl && activeSession.source !== 'glasses' ? (
             <div className="flex flex-col gap-2">
               <a
                 href={activeSession.viewerUrl}
@@ -78,7 +78,9 @@ export function StreamCurrentStatusCard({ summary }: Props) {
             </div>
           ) : (
             <p className="text-[11px] text-text-muted">
-              No viewer link is currently available for this session.
+              {activeSession.source === 'glasses'
+                ? 'Latest smart-glasses frames appear in the embedded viewer below.'
+                : 'No viewer link is currently available for this session.'}
             </p>
           )}
         </div>

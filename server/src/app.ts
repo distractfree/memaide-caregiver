@@ -36,6 +36,7 @@ import {
   patientAiSessionRouter,
   aiSessionByIdRouter,
 } from "./modules/ai-sessions/ai-session.routes";
+import { aiFrameCallbackRouter } from "./modules/ai-sessions/ai-frame.routes";
 import mobileRouter from "./modules/mobile/mobile.routes";
 import { notFoundMiddleware } from "./middleware/not-found.middleware";
 import { errorMiddleware } from "./middleware/error.middleware";
@@ -57,7 +58,7 @@ app.use(
       callback(null, false);
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Api-Key"],
     credentials: true,
   })
 );
@@ -67,7 +68,11 @@ if (env.NODE_ENV === "development") {
   app.use(morgan("dev"));
 }
 
-// Body parsing
+// Frame callbacks need larger JSON payloads. This dedicated route is mounted
+// before the global parser, so every other endpoint remains capped at 10 KB.
+app.use("/api/ai-sessions", aiFrameCallbackRouter);
+
+// Body parsing for all ordinary API routes.
 app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: true }));
 

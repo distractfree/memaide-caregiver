@@ -8,7 +8,7 @@ MemAide (GuardiaNova) is a senior care project backend designed to support welln
 - **Not** for medical diagnosis or medical monitoring.
 - BLE distance calculation is approximate.
 - WhatsApp call integration is opened separately on the mobile device, not controlled or replaced by this app.
-- Stream status is currently metadata only (no real WebRTC/MJPEG transport implemented yet).
+- Egocentric streaming uses authenticated JPEG-frame polling in the embedded caregiver Stream Status viewer. It is not WebRTC, HLS, or MJPEG.
 
 ## Current Supported Features
 The backend MVP currently supports:
@@ -19,7 +19,8 @@ The backend MVP currently supports:
 - **Help/Emergency**: Help contact configuration and help event ingestion.
 - **Beacons**: BLE beacon configuration, event ingestion, and reports.
 - **Vitals**: Vitals (heart rate, step count, motion) event ingestion and reports.
-- **Streams**: Stream session status tracking (metadata only).
+- **AI Sessions**: Authenticated mobile session start, Anthony registration, and the WebSocket hello contract.
+- **Egocentric Streams**: Anthony frame callbacks, bounded latest-frame caching, stream-session lifecycle tracking, and the authenticated caregiver viewer.
 
 ## Tech Stack
 - **Node.js** & **TypeScript**
@@ -28,7 +29,7 @@ The backend MVP currently supports:
 - **PostgreSQL** as the database (runs in Docker)
 - **Zod** for schema validation
 - **JWT** for authentication
-- **Jest** & **Supertest** for automated testing
+- **Vitest** & **Supertest** for automated testing
 
 ## Folder Structure Overview
 ```text
@@ -55,20 +56,32 @@ C:\MemAide\
 ## Security Model
 - **Caregiver Auth:** Standard JWT bearer token mechanism for the caregiver web portal.
 - **Ownership Enforcement:** Strict caregiver ownership enforcement on all patient data. Cross-caregiver access attempts return `404 Not Found`.
-- **Mobile MVP Endpoints:** Mobile API endpoints are currently unprotected by JWT and use an exact `deviceId` lookup for simplicity in the MVP.
+- **Mobile Endpoints:** Every `/api/mobile/*` route requires `Authorization: Bearer <caregiver JWT>`. Device-based requests also verify that the `deviceId` belongs to that authenticated caregiver; cross-caregiver attempts return `404 Not Found`.
+- **Anthony Callback:** `POST /api/ai-sessions/:sessionId/frames` accepts only `X-Api-Key: <AI_CALLBACK_API_KEY>`. It does not accept a caregiver JWT.
+- **WebSocket Boundary:** The caregiver JWT must never be sent to `wss://ai.guardianova.com`. The WebSocket hello is only `{ "type": "hello", "session_id": "..." }`.
+
+## Production Integration
+- **Portal and API base URL:** `https://caregiver.guardianova.com`
+- **AI session start:** The mobile app posts its owned `deviceId` to `/api/mobile/ai-sessions/start`; the response returns the Anthony WebSocket URL and the minimal hello payload.
+- **Frame path:** Arian glasses/phone → Anthony AI server → keyed frame callback → Koko latest-frame cache → authenticated caregiver Stream Status viewer.
+- **Viewer:** The portal renders the latest JPEG in its embedded Stream Status frame viewer; it never connects directly to Anthony.
+
+## Egocentric Frame Cache Limitation
+- The latest JPEG frame is held only in the single backend process's memory.
+- A backend restart clears the currently displayed image; Anthony's next accepted frame restores it.
+- Run exactly one PM2 backend process for this MVP.
+- PostgreSQL stores lightweight frame metadata only. It stores neither frame history nor JPEG/base64 image data.
 
 ## Known Limitations / Future Work
-- **Frontend Integration:** Full integration with the frontend web portal is pending.
-- **Android/Wear OS Implementation:** Full implementation on the mobile side is pending.
+- **Android/Wear OS Verification:** Continue real-device validation of the documented JWT, `deviceId`, session-start, and stream-status contracts.
 - **BLE Scanning:** Actual BLE scanning and smoothing are simulated on the backend side/waiting for mobile implementation.
-- **Streaming:** Real smart-glasses stream transport (WebRTC/MJPEG) is not yet implemented.
-- **Mobile Security:** Production auth hardening is needed for mobile endpoints (currently relying on `deviceId`).
+- **Frame Continuity:** The MVP has no persistent frame history or multi-process frame cache; Anthony must send a new frame after a backend restart.
 - **Deployment:** General deployment hardening and CI/CD pipelines are needed.
 
 ## Local Development Setup
 
 ### Environment Variables
-Create a `.env` file in `C:\MemAide\server` with the following variables:
+Create a local `.env` file in `C:\MemAide_github\server` using the repository's environment example and locally managed credentials. Do not commit or document real secrets.
 ```env
 PORT=4000
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/memaide?schema=public"
@@ -117,12 +130,10 @@ Start the development server:
 npm run dev
 ```
 
-## Demo Credentials & Data
+## Demo Data
 
-### Demo Login
-- **Email:** `demo@memaide.local`
-- **Password:** `Password123!`
+Use the local seed process only in an approved development database. Keep real credentials, JWTs, callback keys, and patient data out of handoff documents.
 
-### Demo Patients
+### Example Patients
 - **Mary Johnson** (Device ID: `android-demo-001`)
 - **Robert Lee** (Device ID: `android-demo-002`)

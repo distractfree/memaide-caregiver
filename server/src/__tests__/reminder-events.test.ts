@@ -66,6 +66,13 @@ function makeToken(caregiverId: string) {
 const tokenA = makeToken(CAREGIVER_A_ID);
 const tokenB = makeToken(CAREGIVER_B_ID);
 
+const mobileRequest = {
+  get: (path: string) =>
+    request(app).get(path).set("Authorization", `Bearer ${tokenA}`),
+  post: (path: string) =>
+    request(app).post(path).set("Authorization", `Bearer ${tokenA}`),
+};
+
 const SCHEDULED_AT = new Date("2026-05-22T08:00:00.000Z");
 const DELIVERED_AT = new Date("2026-05-22T08:00:05.000Z");
 const ACKNOWLEDGED_AT = new Date("2026-05-22T08:03:05.000Z");
@@ -134,13 +141,16 @@ beforeEach(() => {
 // ─── Mobile event ingestion ────────────────────────────────────────────────────
 
 describe("POST /api/mobile/reminder-events", () => {
+  beforeEach(() => {
+    pat.findFirst.mockResolvedValue(samplePatientA);
+  });
+
   it("creates a delivered event for a valid deviceId and reminderId", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     rem.findFirst.mockResolvedValue({ id: REMINDER_ID });
     evt.create.mockResolvedValue(deliveredEvent);
 
-    const res = await request(app)
-      .post("/api/mobile/reminder-events")
+    const res = await mobileRequest.post("/api/mobile/reminder-events")
       .send({
         deviceId: DEVICE_ID,
         reminderId: REMINDER_ID,
@@ -154,9 +164,9 @@ describe("POST /api/mobile/reminder-events", () => {
     expect(res.body.success).toBe(true);
     expect(res.body.data.status).toBe("delivered");
     expect(res.body.data.sourceDevice).toBe("phone");
-    expect(pat.findUnique).toHaveBeenCalledWith({
-      where: { deviceId: DEVICE_ID },
-      select: { id: true },
+    expect(pat.findFirst).toHaveBeenCalledWith({
+      where: { caregiverId: CAREGIVER_A_ID, deviceId: DEVICE_ID },
+      select: { id: true, name: true, deviceId: true },
     });
     expect(rem.findFirst).toHaveBeenCalledWith({
       where: { id: REMINDER_ID, patientId: PATIENT_A_ID },
@@ -166,12 +176,11 @@ describe("POST /api/mobile/reminder-events", () => {
   });
 
   it("creates an acknowledged event from watch", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     rem.findFirst.mockResolvedValue({ id: REMINDER_ID });
     evt.create.mockResolvedValue(acknowledgedEvent);
 
-    const res = await request(app)
-      .post("/api/mobile/reminder-events")
+    const res = await mobileRequest.post("/api/mobile/reminder-events")
       .send({
         deviceId: DEVICE_ID,
         reminderId: REMINDER_ID,
@@ -196,12 +205,11 @@ describe("POST /api/mobile/reminder-events", () => {
   });
 
   it("creates a missed event with null acknowledgedAt", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     rem.findFirst.mockResolvedValue({ id: REMINDER_ID });
     evt.create.mockResolvedValue(missedEvent);
 
-    const res = await request(app)
-      .post("/api/mobile/reminder-events")
+    const res = await mobileRequest.post("/api/mobile/reminder-events")
       .send({
         deviceId: DEVICE_ID,
         reminderId: REMINDER_ID,
@@ -222,8 +230,7 @@ describe("POST /api/mobile/reminder-events", () => {
   });
 
   it("returns 400 when deviceId is missing", async () => {
-    const res = await request(app)
-      .post("/api/mobile/reminder-events")
+    const res = await mobileRequest.post("/api/mobile/reminder-events")
       .send({
         reminderId: REMINDER_ID,
         scheduledAt: "2026-05-22T08:00:00.000Z",
@@ -237,8 +244,7 @@ describe("POST /api/mobile/reminder-events", () => {
   });
 
   it("returns 400 for an invalid status value", async () => {
-    const res = await request(app)
-      .post("/api/mobile/reminder-events")
+    const res = await mobileRequest.post("/api/mobile/reminder-events")
       .send({
         deviceId: DEVICE_ID,
         reminderId: REMINDER_ID,
@@ -252,8 +258,7 @@ describe("POST /api/mobile/reminder-events", () => {
   });
 
   it("returns 400 for an invalid sourceDevice value", async () => {
-    const res = await request(app)
-      .post("/api/mobile/reminder-events")
+    const res = await mobileRequest.post("/api/mobile/reminder-events")
       .send({
         deviceId: DEVICE_ID,
         reminderId: REMINDER_ID,
@@ -267,10 +272,9 @@ describe("POST /api/mobile/reminder-events", () => {
   });
 
   it("returns 404 when deviceId does not match any patient", async () => {
-    pat.findUnique.mockResolvedValue(null);
+    pat.findFirst.mockResolvedValue(null);
 
-    const res = await request(app)
-      .post("/api/mobile/reminder-events")
+    const res = await mobileRequest.post("/api/mobile/reminder-events")
       .send({
         deviceId: "unknown-device",
         reminderId: REMINDER_ID,
@@ -285,11 +289,10 @@ describe("POST /api/mobile/reminder-events", () => {
   });
 
   it("returns 404 when reminderId does not belong to the patient", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     rem.findFirst.mockResolvedValue(null);
 
-    const res = await request(app)
-      .post("/api/mobile/reminder-events")
+    const res = await mobileRequest.post("/api/mobile/reminder-events")
       .send({
         deviceId: DEVICE_ID,
         reminderId: "wrong-reminder-id",
@@ -304,12 +307,11 @@ describe("POST /api/mobile/reminder-events", () => {
   });
 
   it("defaults deliveredAt to server time when status is delivered and deliveredAt is omitted", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     rem.findFirst.mockResolvedValue({ id: REMINDER_ID });
     evt.create.mockResolvedValue(deliveredEvent);
 
-    await request(app)
-      .post("/api/mobile/reminder-events")
+    await mobileRequest.post("/api/mobile/reminder-events")
       .send({
         deviceId: DEVICE_ID,
         reminderId: REMINDER_ID,
@@ -328,12 +330,11 @@ describe("POST /api/mobile/reminder-events", () => {
   });
 
   it("defaults acknowledgedAt to server time when status is acknowledged and acknowledgedAt is omitted", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     rem.findFirst.mockResolvedValue({ id: REMINDER_ID });
     evt.create.mockResolvedValue(acknowledgedEvent);
 
-    await request(app)
-      .post("/api/mobile/reminder-events")
+    await mobileRequest.post("/api/mobile/reminder-events")
       .send({
         deviceId: DEVICE_ID,
         reminderId: REMINDER_ID,

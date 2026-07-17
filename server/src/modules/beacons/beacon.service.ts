@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../middleware/error.middleware";
+import { findPatientForCaregiverDevice } from "../patients/patient.service";
 import type {
   BeaconReportQuery,
   CreateBeaconEventMobileInput,
@@ -283,14 +284,14 @@ export async function getBeaconReport(
   };
 }
 
-export async function getMobileBeacons(query: MobileBeaconsQuery) {
-  const patient = await prisma.patient.findUnique({
-    where: { deviceId: query.deviceId },
-    select: { id: true, name: true, deviceId: true },
-  });
-  if (!patient) {
-    throw new AppError(404, "No patient found for this device", "NOT_FOUND");
-  }
+export async function getMobileBeacons(
+  caregiverId: string,
+  query: MobileBeaconsQuery
+) {
+  const patient = await findPatientForCaregiverDevice(
+    caregiverId,
+    query.deviceId
+  );
 
   const beacons = await prisma.beacon.findMany({
     where: { patientId: patient.id, active: true },
@@ -311,15 +312,13 @@ export async function getMobileBeacons(query: MobileBeaconsQuery) {
 }
 
 export async function createMobileBeaconEvent(
+  caregiverId: string,
   input: CreateBeaconEventMobileInput
 ) {
-  const patient = await prisma.patient.findUnique({
-    where: { deviceId: input.deviceId },
-    select: { id: true },
-  });
-  if (!patient) {
-    throw new AppError(404, "No patient found for this device", "NOT_FOUND");
-  }
+  const patient = await findPatientForCaregiverDevice(
+    caregiverId,
+    input.deviceId
+  );
 
   const beacon = await prisma.beacon.findFirst({
     where: { id: input.beaconId, patientId: patient.id },

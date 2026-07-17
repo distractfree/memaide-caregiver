@@ -59,6 +59,13 @@ function makeToken(caregiverId: string) {
 const tokenA = makeToken(CAREGIVER_A_ID);
 const tokenB = makeToken(CAREGIVER_B_ID);
 
+const mobileRequest = {
+  get: (path: string) =>
+    request(app).get(path).set("Authorization", `Bearer ${tokenA}`),
+  post: (path: string) =>
+    request(app).post(path).set("Authorization", `Bearer ${tokenA}`),
+};
+
 const samplePatientA = {
   id: PATIENT_A_ID,
   caregiverId: CAREGIVER_A_ID,
@@ -393,16 +400,19 @@ describe("DELETE /api/reminders/:id", () => {
 // ─── Mobile sync ───────────────────────────────────────────────────────────────
 
 describe("GET /api/mobile/reminders", () => {
+  beforeEach(() => {
+    pat.findFirst.mockResolvedValue(samplePatientA);
+  });
+
   it("returns active reminders for a known deviceId", async () => {
-    pat.findUnique.mockResolvedValue({
+    pat.findFirst.mockResolvedValue({
       id: PATIENT_A_ID,
       name: "Mary Johnson",
       deviceId: DEVICE_ID,
     });
     rem.findMany.mockResolvedValue([sampleReminder]);
 
-    const res = await request(app).get(
-      `/api/mobile/reminders?deviceId=${DEVICE_ID}`
+    const res = await mobileRequest.get(`/api/mobile/reminders?deviceId=${DEVICE_ID}`
     );
 
     expect(res.status).toBe(200);
@@ -411,8 +421,8 @@ describe("GET /api/mobile/reminders", () => {
     expect(res.body.data.patient.deviceId).toBe(DEVICE_ID);
     expect(res.body.data.reminders).toHaveLength(1);
     expect(res.body.data.reminders[0].type).toBe("medication");
-    expect(pat.findUnique).toHaveBeenCalledWith({
-      where: { deviceId: DEVICE_ID },
+    expect(pat.findFirst).toHaveBeenCalledWith({
+      where: { caregiverId: CAREGIVER_A_ID, deviceId: DEVICE_ID },
       select: { id: true, name: true, deviceId: true },
     });
     expect(rem.findMany).toHaveBeenCalledWith(
@@ -423,35 +433,28 @@ describe("GET /api/mobile/reminders", () => {
   });
 
   it("returns 400 when deviceId query param is missing", async () => {
-    const res = await request(app).get("/api/mobile/reminders");
+    const res = await mobileRequest.get("/api/mobile/reminders");
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("VALIDATION_ERROR");
   });
 
   it("returns 404 when deviceId does not match any patient", async () => {
-    pat.findUnique.mockResolvedValue(null);
+    pat.findFirst.mockResolvedValue(null);
 
-    const res = await request(app).get(
-      "/api/mobile/reminders?deviceId=unknown-device"
+    const res = await mobileRequest.get("/api/mobile/reminders?deviceId=unknown-device"
     );
 
     expect(res.status).toBe(404);
     expect(res.body.code).toBe("NOT_FOUND");
   });
 
-  it("does not require authentication", async () => {
-    pat.findUnique.mockResolvedValue({
-      id: PATIENT_A_ID,
-      name: "Mary Johnson",
-      deviceId: DEVICE_ID,
-    });
-    rem.findMany.mockResolvedValue([]);
-
+  it("requires a caregiver token", async () => {
     const res = await request(app).get(
       `/api/mobile/reminders?deviceId=${DEVICE_ID}`
     );
 
-    expect(res.status).toBe(200);
-    expect(res.body.data.reminders).toHaveLength(0);
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe("MISSING_TOKEN");
+    expect(rem.findMany).not.toHaveBeenCalled();
   });
 });

@@ -1,18 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { UserPlus } from 'lucide-react'
+import { motion, useReducedMotion } from 'framer-motion'
+import { AlertTriangle, Clock3, RefreshCw, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { usePatients } from '@/features/patients/PatientContext'
+import { EgocentricViewer } from '@/features/stream/components/EgocentricViewer'
 import { StreamCurrentStatusCard } from '@/features/stream/components/StreamCurrentStatusCard'
 import { StreamSessionHistory, type StreamFilterState } from '@/features/stream/components/StreamSessionHistory'
-import { api, ApiClientError } from '@/services/apiClient'
-import type { StreamSession, StreamStatusSummary } from '@/types/domain'
-
-type PageStatus = 'idle' | 'loading' | 'ready' | 'error'
+import { useLatestStreamFrame, type FrameViewerState } from '@/features/stream/useLatestStreamFrame'
+import { useStreamStatus } from '@/features/stream/useStreamStatus'
+import { formatDateTime } from '@/utils/formatting'
+import type { StreamSessionsQuery, StreamStatusSummary } from '@/types/domain'
 
 const INITIAL_FILTERS: StreamFilterState = {
   status: '',
@@ -21,17 +22,20 @@ const INITIAL_FILTERS: StreamFilterState = {
   to: null,
 }
 
+function viewerStateForSummary(
+  summary: StreamStatusSummary | null,
+  frameState: FrameViewerState,
+): FrameViewerState | 'unavailable' | 'ended' | 'failed' {
+  if (summary?.activeSession) return frameState
+  if (summary?.displayStatus === 'failed') return 'failed'
+  if (summary?.displayStatus === 'ended') return 'ended'
+  return 'unavailable'
+}
+
 export function StreamStatusPage() {
   const { selectedPatientId } = usePatients()
-
   const [filters, setFilters] = useState<StreamFilterState>(INITIAL_FILTERS)
-  const [summary, setSummary] = useState<StreamStatusSummary | null>(null)
-  const [sessions, setSessions] = useState<StreamSession[] | null>(null)
-  const [status, setStatus] = useState<PageStatus>('idle')
-  const [error, setError] = useState<string | null>(null)
-
-  const prevPatientIdRef = useRef<string | null>(null)
-  const requestIdRef = useRef(0)
+  const prefersReducedMotion = useReducedMotion()
 
   const validationError = useMemo<string | null>(() => {
     if (filters.from && filters.to && filters.from > filters.to) {
@@ -40,90 +44,60 @@ export function StreamStatusPage() {
     return null
   }, [filters.from, filters.to])
 
-  const loadData = useCallback(async (patientId: string, range: StreamFilterState) => {
-    const requestId = ++requestIdRef.current
-    setStatus('loading')
-    setError(null)
-    try {
-      // Send the full UTC day so the selected end date is included.
-      const from = range.from
-        ? new Date(`${range.from}T00:00:00.000Z`).toISOString()
-        : undefined
-      const to = range.to
-        ? new Date(`${range.to}T23:59:59.999Z`).toISOString()
-        : undefined
+  const historyQuery = useMemo<StreamSessionsQuery>(
+    () => ({
+      status: filters.status || undefined,
+      source: filters.source || undefined,
+      // Send whole UTC dates so the user-selected end date remains inclusive.
+      from: filters.from ? `${filters.from}T00:00:00.000Z` : undefined,
+      to: filters.to ? `${filters.to}T23:59:59.999Z` : undefined,
+    }),
+    [filters],
+  )
 
-      const [summaryData, sessionsData] = await Promise.all([
-        api.getStreamStatus(patientId),
-        api.listStreamSessions(patientId, {
-          status: range.status || undefined,
-          source: range.source || undefined,
-          from,
-          to,
-        }),
-      ])
+  const {
+    summary,
+    sessions,
+    status,
+    error,
+    isRefreshing: isStatusRefreshing,
+    refresh: refreshStatus,
+  } = useStreamStatus({
+    patientId: selectedPatientId,
+    historyQuery,
+    // Invalid history filters pause only the history request; status remains
+    // near-real-time and the existing data remains on screen.
+    historyEnabled: !validationError,
+  })
 
-      if (requestId !== requestIdRef.current) return
-      setSummary(summaryData)
-      setSessions(sessionsData)
-      setStatus('ready')
-    } catch (err) {
-      if (requestId !== requestIdRef.current) return
-      if (err instanceof ApiClientError) {
-        setError(err.message)
-      } else {
-        setError('Unable to load stream status.')
-      }
-      setStatus('error')
-    }
-  }, [])
+  const activeSession = summary?.activeSession ?? null
+  const {
+    frame,
+    state: frameState,
+    isRefreshing: isFrameRefreshing,
+    refresh: refreshFrame,
+  } = useLatestStreamFrame({
+    patientId: selectedPatientId,
+    streamSessionId: activeSession?.id ?? null,
+    enabled: Boolean(activeSession),
+  })
 
-  useEffect(() => {
-    const prev = prevPatientIdRef.current
-    prevPatientIdRef.current = selectedPatientId
-
-    if (!selectedPatientId) {
-      requestIdRef.current++
-      setSummary(null)
-      setSessions(null)
-      setStatus('idle')
-      setError(null)
-      setFilters(INITIAL_FILTERS)
-      return
-    }
-
-    if (prev && prev !== selectedPatientId) {
-      // Patient changed, so clear old data and reload with default filters.
-      // Use a fresh object (not the stable INITIAL_FILTERS reference) so the
-      // filters state always changes identity — otherwise, when filters were
-      // already default, React bails out of the update, this effect never
-      // re-runs, and the new patient's summary/sessions are never fetched.
-      requestIdRef.current++
-      setSummary(null)
-      setSessions(null)
-      setFilters({ ...INITIAL_FILTERS })
-      return
-    }
-
-    if (validationError) {
-      // Do not call the backend with an invalid date range.
-      return
-    }
-
-    void loadData(selectedPatientId, filters)
-  }, [selectedPatientId, filters, validationError, loadData])
+  const refresh = useCallback(() => {
+    refreshStatus()
+    refreshFrame()
+  }, [refreshFrame, refreshStatus])
 
   function handleClearFilters() {
-    setFilters(INITIAL_FILTERS)
+    setFilters({ ...INITIAL_FILTERS })
   }
 
   if (!selectedPatientId) {
     return (
       <motion.div
         className="flex flex-col gap-6"
-        initial={{ opacity: 0, y: 6 }}
+        initial={prefersReducedMotion ? false : { opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25 }}
+        transition={{ duration: prefersReducedMotion ? 0 : 0.25 }}
       >
         <PageHeader />
         <EmptyState
@@ -144,15 +118,21 @@ export function StreamStatusPage() {
   const showFatalError = status === 'error' && summary === null && sessions === null
   const hasActiveFilter =
     filters.status !== '' || filters.source !== '' || filters.from !== null || filters.to !== null
+  const viewerState = viewerStateForSummary(summary, frameState)
+  const isRefreshing = isStatusRefreshing || isFrameRefreshing
 
   return (
     <motion.div
       className="flex flex-col gap-6"
-      initial={{ opacity: 0, y: 6 }}
+      initial={prefersReducedMotion ? false : { opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
+      transition={{ duration: prefersReducedMotion ? 0 : 0.25 }}
     >
-      <PageHeader />
+      <PageHeader
+        isRefreshing={isRefreshing}
+        onRefresh={refresh}
+        lastFrameReceivedAt={frame?.receivedAt ?? null}
+      />
 
       {showInitialLoader ? (
         <LoadingState label="Loading stream status…" />
@@ -160,20 +140,30 @@ export function StreamStatusPage() {
         <ErrorState
           title="Unable to load stream status"
           message={error ?? 'Something went wrong. Please try again.'}
-          onRetry={() => void loadData(selectedPatientId, filters)}
+          onRetry={refresh}
         />
       ) : (
         <>
-          {status === 'error' && error && (
+          {error && (
             <div
               role="alert"
-              className="rounded-xl border border-error/30 bg-error-container/60 px-3 py-2.5 text-sm text-error font-medium"
+              className="flex items-center gap-2 rounded-xl border border-error/30 bg-error-container/60 px-3 py-2.5 text-sm font-medium text-error"
             >
-              {error}
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>{error} Showing the last update — retrying automatically.</span>
             </div>
           )}
 
           {summary && <StreamCurrentStatusCard summary={summary} />}
+
+          {summary && (
+            <EgocentricViewer
+              state={viewerState}
+              imageSrc={viewerState === 'ended' || viewerState === 'failed' ? null : frame?.imageSrc ?? null}
+              startedAt={activeSession?.startedAt}
+              receivedAt={frame?.receivedAt}
+            />
+          )}
 
           {sessions && (
             <StreamSessionHistory
@@ -191,10 +181,37 @@ export function StreamStatusPage() {
   )
 }
 
-function PageHeader() {
+interface PageHeaderProps {
+  isRefreshing?: boolean
+  lastFrameReceivedAt?: string | null
+  onRefresh?: () => void
+}
+
+function PageHeader({ isRefreshing = false, lastFrameReceivedAt, onRefresh }: PageHeaderProps) {
   return (
-    <div className="flex flex-col gap-2">
-      <h1 className="text-3xl font-semibold tracking-tight text-on-surface">Stream Status</h1>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-2">
+        <h1 className="text-3xl font-semibold tracking-tight text-on-surface">Stream Status</h1>
+      </div>
+      {onRefresh && (
+        <div className="flex flex-col gap-2 sm:items-end">
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<RefreshCw className={isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />}
+            disabled={isRefreshing}
+            onClick={onRefresh}
+          >
+            Refresh
+          </Button>
+          <p className="inline-flex items-center gap-1.5 text-xs text-text-muted">
+            <Clock3 className="h-3.5 w-3.5" />
+            {lastFrameReceivedAt
+              ? `Last frame ${formatDateTime(lastFrameReceivedAt)}`
+              : 'No frame received yet'}
+          </p>
+        </div>
+      )}
     </div>
   )
 }

@@ -79,11 +79,43 @@ export const handleConcludeCallback = async (req: Request, res: Response, next: 
   }
 };
 
+export const handleFrameCallback = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { sessionId } = req.params;
+    const input = schemas.aiSessionFrameCallbackSchema.parse(req.body);
+    const result = await aiSessionService.recordFrameCallback(sessionId, input);
+
+    if (!result.accepted) {
+      res.status(202).json({
+        success: true,
+        accepted: false,
+        reason: result.reason,
+        sessionId,
+        seq: input.seq,
+      });
+      return;
+    }
+
+    res.status(202).json({
+      success: true,
+      accepted: true,
+      sessionId,
+      seq: input.seq,
+      receivedAt: result.receivedAt,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // MOBILE CONTROLLERS
 export const startMobileSession = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const validatedData = schemas.startAiSessionSchema.parse(req.body);
-    const data = await aiSessionService.startAiSession(validatedData);
+    const data = await aiSessionService.startAiSession(
+      validatedData,
+      req.caregiverId!
+    );
     res.status(200).json(data);
   } catch (error) {
     if (error instanceof aiSessionService.AiAgentSessionStartError) {
@@ -92,15 +124,14 @@ export const startMobileSession = async (req: Request, res: Response, next: Next
         message: "AI backend session start failed",
       };
 
-      // Outside production, surface safe upstream diagnostics (never the API key)
-      // so integration issues can be debugged from the response itself.
+      // Outside production, expose the upstream status only. Response bodies
+      // can contain patient context and are intentionally never relayed.
       if (
         process.env.NODE_ENV !== "production" &&
         error.upstreamStatus !== undefined
       ) {
         responseBody.details = {
           upstreamStatus: error.upstreamStatus,
-          upstreamBody: error.upstreamBody,
         };
       }
 
@@ -119,7 +150,11 @@ export const getMobileSession = async (req: Request, res: Response, next: NextFu
       return res.status(400).json({ status: "error", message: "deviceId query parameter is required", code: "VALIDATION_ERROR" });
     }
 
-    const data = await aiSessionService.getMobileSession(id, deviceId);
+    const data = await aiSessionService.getMobileSession(
+      id,
+      deviceId,
+      req.caregiverId!
+    );
     res.json({ success: true, data });
   } catch (error) {
     next(error);
@@ -131,7 +166,12 @@ export const handleMobileMessage = async (req: Request, res: Response, next: Nex
     const { id } = req.params;
     const validatedData = schemas.addAiSessionMessageSchema.parse(req.body);
     
-    const data = await aiSessionService.handlePatientMessage(id, validatedData.deviceId, validatedData.message);
+    const data = await aiSessionService.handlePatientMessage(
+      id,
+      validatedData.deviceId,
+      validatedData.message,
+      req.caregiverId!
+    );
     res.json({ success: true, data });
   } catch (error) {
     next(error);
@@ -143,7 +183,11 @@ export const resolveMobileSession = async (req: Request, res: Response, next: Ne
     const { id } = req.params;
     const validatedData = schemas.resolveAiSessionSchema.parse(req.body);
     
-    const data = await aiSessionService.resolveSession(id, validatedData.deviceId);
+    const data = await aiSessionService.resolveSession(
+      id,
+      validatedData.deviceId,
+      req.caregiverId!
+    );
     res.json({ success: true, data });
   } catch (error) {
     next(error);
@@ -155,7 +199,12 @@ export const emergencySuggestionAck = async (req: Request, res: Response, next: 
     const { id } = req.params;
     const validatedData = schemas.emergencySuggestionAckSchema.parse(req.body);
     
-    const data = await aiSessionService.acknowledgeEmergency(id, validatedData.deviceId, validatedData.action);
+    const data = await aiSessionService.acknowledgeEmergency(
+      id,
+      validatedData.deviceId,
+      validatedData.action,
+      req.caregiverId!
+    );
     res.json({ success: true, data });
   } catch (error) {
     next(error);

@@ -1,16 +1,17 @@
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../middleware/error.middleware";
+import { findPatientForCaregiverDevice } from "../patients/patient.service";
 import type { MobileRemindersQuery } from "./mobile.schemas";
 import type { CreateReminderEventInput } from "../reminder-events/reminder-event.schemas";
 
-export async function getMobileReminders(query: MobileRemindersQuery) {
-  const patient = await prisma.patient.findUnique({
-    where: { deviceId: query.deviceId },
-    select: { id: true, name: true, deviceId: true },
-  });
-  if (!patient) {
-    throw new AppError(404, "No patient found for this device", "NOT_FOUND");
-  }
+export async function getMobileReminders(
+  caregiverId: string,
+  query: MobileRemindersQuery
+) {
+  const patient = await findPatientForCaregiverDevice(
+    caregiverId,
+    query.deviceId
+  );
 
   const reminders = await prisma.reminder.findMany({
     where: { patientId: patient.id, active: true },
@@ -28,14 +29,14 @@ export async function getMobileReminders(query: MobileRemindersQuery) {
   return { patient, reminders };
 }
 
-export async function createMobileReminderEvent(input: CreateReminderEventInput) {
-  const patient = await prisma.patient.findUnique({
-    where: { deviceId: input.deviceId },
-    select: { id: true },
-  });
-  if (!patient) {
-    throw new AppError(404, "No patient found for this device", "NOT_FOUND");
-  }
+export async function createMobileReminderEvent(
+  caregiverId: string,
+  input: CreateReminderEventInput
+) {
+  const patient = await findPatientForCaregiverDevice(
+    caregiverId,
+    input.deviceId
+  );
 
   const reminder = await prisma.reminder.findFirst({
     where: { id: input.reminderId, patientId: patient.id },

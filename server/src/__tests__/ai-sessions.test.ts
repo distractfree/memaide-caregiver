@@ -15,6 +15,7 @@ vi.mock("../config/env", () => ({
 vi.mock("../lib/prisma", () => ({
   prisma: {
     patient: {
+      findFirst: vi.fn(),
       findUnique: vi.fn(),
     },
     caregiver: {
@@ -24,10 +25,17 @@ vi.mock("../lib/prisma", () => ({
       create: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
       findMany: vi.fn(),
     },
     aiSessionMessage: {
       create: vi.fn(),
+    },
+    streamSession: {
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
     },
     helpEvent: {
       findUnique: vi.fn(),
@@ -37,7 +45,10 @@ vi.mock("../lib/prisma", () => ({
       findFirst: vi.fn(),
     },
     $transaction: vi.fn((callback) => callback({
-      aiSession: { update: vi.fn().mockResolvedValue({}) },
+      aiSession: {
+        update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
       aiSessionMessage: { create: vi.fn().mockResolvedValue({}) }
     })),
   },
@@ -46,6 +57,11 @@ vi.mock("../lib/prisma", () => ({
 import app from "../app";
 import { prisma } from "../lib/prisma";
 import jwt from "jsonwebtoken";
+import {
+  acceptLatestFrame,
+  getLatestFrame,
+  resetLatestFrameStoreForTests,
+} from "../modules/ai-sessions/latest-ai-frame.store";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const p = prisma as any;
@@ -54,6 +70,13 @@ const caregiverId = "caregiver-id";
 const otherCaregiverId = "other-caregiver-id";
 const caregiverToken = jwt.sign({ sub: caregiverId }, "test-jwt-secret-vitest-min16chars", { expiresIn: "1h" });
 const otherCaregiverToken = jwt.sign({ sub: otherCaregiverId }, "test-jwt-secret-vitest-min16chars", { expiresIn: "1h" });
+
+const mobileRequest = {
+  get: (path: string) =>
+    request(app).get(path).set("Authorization", `Bearer ${caregiverToken}`),
+  post: (path: string) =>
+    request(app).post(path).set("Authorization", `Bearer ${caregiverToken}`),
+};
 
 const patientId = "patient-id";
 const deviceId = "test-device-id";
@@ -188,6 +211,13 @@ describe("AI Sessions (Backend Implementation)", () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+    resetLatestFrameStoreForTests();
+    p.$transaction.mockImplementation((callback: (tx: typeof p) => unknown) => callback(p));
+    p.streamSession.findMany.mockResolvedValue([]);
+    p.streamSession.create.mockResolvedValue({});
+    p.streamSession.update.mockResolvedValue({});
+    p.aiSession.updateMany.mockResolvedValue({ count: 1 });
+    p.patient.findFirst.mockResolvedValue(patientContext);
     process.env.AI_AGENT_URL = aiAgentUrl;
     process.env.AI_AGENT_WS_URL = aiAgentWsUrl;
     process.env.AI_AGENT_API_KEY = aiAgentApiKey;
@@ -199,7 +229,7 @@ describe("AI Sessions (Backend Implementation)", () => {
     it("returns 200 when deviceId exists and Anthony returns registered", async () => {
       setupSuccessfulAiStart();
 
-      const res = await request(app).post("/api/mobile/ai-sessions/start").send({
+      const res = await mobileRequest.post("/api/mobile/ai-sessions/start").send({
         deviceId,
         vitals: startVitals,
         beacons: [startBeacon],
@@ -235,7 +265,7 @@ describe("AI Sessions (Backend Implementation)", () => {
       setupSuccessfulAiStart();
       p.helpEvent.findUnique.mockResolvedValue({ id: helpEventId, patientId });
 
-      const res = await request(app).post("/api/mobile/ai-sessions/start").send({
+      const res = await mobileRequest.post("/api/mobile/ai-sessions/start").send({
         deviceId,
         helpEventId,
         sourceDevice: "phone"
@@ -255,7 +285,7 @@ describe("AI Sessions (Backend Implementation)", () => {
       p.patient.findUnique.mockResolvedValue(patientContext);
       p.helpEvent.findUnique.mockResolvedValue({ id: helpEventId, patientId: "other-patient" });
 
-      const res = await request(app).post("/api/mobile/ai-sessions/start").send({
+      const res = await mobileRequest.post("/api/mobile/ai-sessions/start").send({
         deviceId,
         helpEventId,
         sourceDevice: "phone"
@@ -267,7 +297,7 @@ describe("AI Sessions (Backend Implementation)", () => {
     it("returns 404 when deviceId does not match a patient", async () => {
       p.patient.findUnique.mockResolvedValue(null);
 
-      const res = await request(app).post("/api/mobile/ai-sessions/start").send({
+      const res = await mobileRequest.post("/api/mobile/ai-sessions/start").send({
         deviceId: "unknown-device",
       });
       expect(res.status).toBe(404);
@@ -280,20 +310,20 @@ describe("AI Sessions (Backend Implementation)", () => {
       p.aiSession.update.mockResolvedValue({ id: aiSessionId, status: "start_failed" });
       mockAiAgentResponse(statusCode);
 
-      const res = await request(app).post("/api/mobile/ai-sessions/start").send({
+      const res = await mobileRequest.post("/api/mobile/ai-sessions/start").send({
         deviceId,
         vitals: startVitals,
         beacons: [startBeacon],
       });
 
       expect(res.status).toBe(502);
-      // Non-production responses include safe upstream diagnostics (no API key).
+      // Non-production responses expose only the upstream status. Raw upstream
+      // bodies can contain patient context and must never be relayed.
       expect(res.body).toEqual({
         success: false,
         message: "AI backend session start failed",
         details: {
           upstreamStatus: statusCode,
-          upstreamBody: expect.any(String),
         },
       });
       expect(p.aiSession.update).toHaveBeenCalledWith(
@@ -323,7 +353,7 @@ describe("AI Sessions (Backend Implementation)", () => {
         })
       );
 
-      const res = await request(app).post("/api/mobile/ai-sessions/start").send({
+      const res = await mobileRequest.post("/api/mobile/ai-sessions/start").send({
         deviceId,
         vitals: startVitals,
       });
@@ -353,8 +383,7 @@ describe("AI Sessions (Backend Implementation)", () => {
       vi.stubGlobal("fetch", vi.fn().mockReturnValue(fetchPromise));
 
       let settled = false;
-      const pendingResponse = request(app)
-        .post("/api/mobile/ai-sessions/start")
+      const pendingResponse = mobileRequest.post("/api/mobile/ai-sessions/start")
         .send({ deviceId, vitals: startVitals })
         .then((response) => {
           settled = true;
@@ -377,7 +406,7 @@ describe("AI Sessions (Backend Implementation)", () => {
     it("sends the required session context to Anthony", async () => {
       const fetchMock = setupSuccessfulAiStart();
 
-      await request(app).post("/api/mobile/ai-sessions/start").send({
+      await mobileRequest.post("/api/mobile/ai-sessions/start").send({
         deviceId,
         vitals: startVitals,
         beacons: [startBeacon],
@@ -438,7 +467,7 @@ describe("AI Sessions (Backend Implementation)", () => {
     it("accepts an explicit null vitals field", async () => {
       const fetchMock = setupSuccessfulAiStart();
 
-      const res = await request(app).post("/api/mobile/ai-sessions/start").send({
+      const res = await mobileRequest.post("/api/mobile/ai-sessions/start").send({
         deviceId,
         vitals: null,
         beacons: [],
@@ -452,7 +481,7 @@ describe("AI Sessions (Backend Implementation)", () => {
     it("accepts an omitted vitals field", async () => {
       const fetchMock = setupSuccessfulAiStart();
 
-      const res = await request(app).post("/api/mobile/ai-sessions/start").send({
+      const res = await mobileRequest.post("/api/mobile/ai-sessions/start").send({
         deviceId,
       });
 
@@ -464,7 +493,7 @@ describe("AI Sessions (Backend Implementation)", () => {
     it("accepts a valid vitals object", async () => {
       setupSuccessfulAiStart();
 
-      const res = await request(app).post("/api/mobile/ai-sessions/start").send({
+      const res = await mobileRequest.post("/api/mobile/ai-sessions/start").send({
         deviceId,
         vitals: startVitals,
       });
@@ -476,7 +505,7 @@ describe("AI Sessions (Backend Implementation)", () => {
     it("rejects a malformed vitals object with 400", async () => {
       p.patient.findUnique.mockResolvedValue(patientContext);
 
-      const res = await request(app).post("/api/mobile/ai-sessions/start").send({
+      const res = await mobileRequest.post("/api/mobile/ai-sessions/start").send({
         deviceId,
         // heart_rate out of range and required timestamp missing.
         vitals: { heart_rate: 500 },
@@ -493,7 +522,7 @@ describe("AI Sessions (Backend Implementation)", () => {
       p.aiSession.update.mockResolvedValue({ id: aiSessionId, status: "active" });
       const fetchMock = mockAiAgentResponse(200);
 
-      const res = await request(app).post("/api/mobile/ai-sessions/start").send({
+      const res = await mobileRequest.post("/api/mobile/ai-sessions/start").send({
         deviceId,
       });
 
@@ -524,7 +553,7 @@ describe("AI Sessions (Backend Implementation)", () => {
       p.aiSession.update.mockResolvedValue({ id: aiSessionId, status: "active" });
       const fetchMock = mockAiAgentResponse(200);
 
-      const res = await request(app).post("/api/mobile/ai-sessions/start").send({
+      const res = await mobileRequest.post("/api/mobile/ai-sessions/start").send({
         deviceId,
       });
 
@@ -558,7 +587,7 @@ describe("AI Sessions (Backend Implementation)", () => {
       p.aiSession.update.mockResolvedValue({ id: aiSessionId, status: "active" });
       const fetchMock = mockAiAgentResponse(200);
 
-      await request(app).post("/api/mobile/ai-sessions/start").send({ deviceId });
+      await mobileRequest.post("/api/mobile/ai-sessions/start").send({ deviceId });
 
       const [, requestOptions] = fetchMock.mock.calls[0];
       const anthonyBody = JSON.parse(String(requestOptions.body));
@@ -576,7 +605,7 @@ describe("AI Sessions (Backend Implementation)", () => {
       p.aiSession.update.mockResolvedValue({ id: aiSessionId, status: "active" });
       const fetchMock = mockAiAgentResponse(200);
 
-      await request(app).post("/api/mobile/ai-sessions/start").send({ deviceId });
+      await mobileRequest.post("/api/mobile/ai-sessions/start").send({ deviceId });
 
       const [, requestOptions] = fetchMock.mock.calls[0];
       const anthonyBody = JSON.parse(String(requestOptions.body));
@@ -584,25 +613,26 @@ describe("AI Sessions (Backend Implementation)", () => {
     });
 
     it("should return initial scripted messages", async () => {
-      p.aiSession.findUnique.mockResolvedValue({ id: aiSessionId, patient: { deviceId }, messages: [{ message: "System" }, { message: "AI1" }, { message: "AI2" }] });
+      p.aiSession.findUnique.mockResolvedValue({ id: aiSessionId, patientId, patient: { deviceId }, messages: [{ message: "System" }, { message: "AI1" }, { message: "AI2" }] });
 
-      const res = await request(app).get(`/api/mobile/ai-sessions/${aiSessionId}?deviceId=${deviceId}`);
+      const res = await mobileRequest.get(`/api/mobile/ai-sessions/${aiSessionId}?deviceId=${deviceId}`);
       expect(res.status).toBe(200);
       expect(res.body.data.messages).toBeDefined();
     });
 
     it("mobile get session requires matching deviceId", async () => {
-      p.aiSession.findUnique.mockResolvedValue({ id: aiSessionId, patient: { deviceId } });
+      p.patient.findFirst.mockResolvedValue(null);
+      p.aiSession.findUnique.mockResolvedValue({ id: aiSessionId, patientId, patient: { deviceId } });
 
-      const res = await request(app).get(`/api/mobile/ai-sessions/${aiSessionId}?deviceId=other-device`);
+      const res = await mobileRequest.get(`/api/mobile/ai-sessions/${aiSessionId}?deviceId=other-device`);
       expect(res.status).toBe(404);
     });
 
     it("mobile message creates patient message and AI response", async () => {
-      p.aiSession.findUnique.mockResolvedValue({ id: aiSessionId, status: "active", patient: { deviceId }, messages: [] });
+      p.aiSession.findUnique.mockResolvedValue({ id: aiSessionId, patientId, status: "active", patient: { deviceId }, messages: [] });
       p.$transaction.mockResolvedValue({ patientMessage: { message: "I feel dizzy" }, aiResponse: { message: "Response" }, sessionStatus: "active" });
 
-      const res = await request(app).post(`/api/mobile/ai-sessions/${aiSessionId}/messages`).send({
+      const res = await mobileRequest.post(`/api/mobile/ai-sessions/${aiSessionId}/messages`).send({
         deviceId,
         message: "I feel dizzy",
         senderType: "patient"
@@ -611,10 +641,10 @@ describe("AI Sessions (Backend Implementation)", () => {
     });
 
     it("high-risk words trigger safe emergency_suggested behavior", async () => {
-      p.aiSession.findUnique.mockResolvedValue({ id: aiSessionId, status: "active", patient: { deviceId }, messages: [] });
+      p.aiSession.findUnique.mockResolvedValue({ id: aiSessionId, patientId, status: "active", patient: { deviceId }, messages: [] });
       p.$transaction.mockResolvedValue({ patientMessage: { message: "fall hurt" }, aiResponse: { message: "Response" }, sessionStatus: "emergency_suggested" });
 
-      const res = await request(app).post(`/api/mobile/ai-sessions/${aiSessionId}/messages`).send({
+      const res = await mobileRequest.post(`/api/mobile/ai-sessions/${aiSessionId}/messages`).send({
         deviceId,
         message: "fall hurt",
         senderType: "patient"
@@ -624,24 +654,56 @@ describe("AI Sessions (Backend Implementation)", () => {
     });
 
     it("emergency ack logs event but does not call emergency services", async () => {
-      p.aiSession.findUnique.mockResolvedValue({ id: aiSessionId, status: "emergency_suggested", patient: { deviceId } });
+      p.aiSession.findUnique.mockResolvedValue({ id: aiSessionId, patientId, status: "emergency_suggested", patient: { deviceId } });
       p.aiSessionMessage.create.mockResolvedValue({});
 
-      const res = await request(app).post(`/api/mobile/ai-sessions/${aiSessionId}/emergency-suggestion-ack`).send({
+      const res = await mobileRequest.post(`/api/mobile/ai-sessions/${aiSessionId}/emergency-suggestion-ack`).send({
         deviceId,
         action: "call_initiated"
       });
       expect(res.status).toBe(200);
     });
 
-    it("resolve session from mobile", async () => {
-      p.aiSession.findUnique.mockResolvedValue({ id: aiSessionId, status: "active", patient: { deviceId } });
-      p.$transaction.mockResolvedValue({ status: "resolved" });
+    it("mobile resolve ends associated streams and clears the frame cache", async () => {
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        patientId,
+        status: "active",
+        patient: { deviceId },
+      });
+      p.aiSession.update.mockResolvedValue({ id: aiSessionId, status: "resolved" });
+      p.streamSession.findMany.mockResolvedValue([
+        {
+          id: "mobile-resolve-stream",
+          status: "active",
+          endedAt: null,
+          metadata: { aiSessionId },
+        },
+      ]);
+      acceptLatestFrame({
+        aiSessionId,
+        patientId,
+        seq: 1,
+        capturedAt: "2026-07-08T02:10:00.000Z",
+        receivedAt: "2026-07-08T02:10:01.000Z",
+        image: null,
+        vision: { description: null, label: null, flags: [], advisoryFlags: [] },
+      });
 
-      const res = await request(app).post(`/api/mobile/ai-sessions/${aiSessionId}/resolve`).send({
+      const res = await mobileRequest.post(`/api/mobile/ai-sessions/${aiSessionId}/resolve`).send({
         deviceId,
       });
       expect(res.status).toBe(200);
+      expect(p.streamSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "mobile-resolve-stream" },
+          data: expect.objectContaining({
+            status: "ended",
+            metadata: expect.objectContaining({ endReason: "mobile_resolved" }),
+          }),
+        })
+      );
+      expect(getLatestFrame(aiSessionId)).toBeNull();
     });
 
     it("starting a new session supersedes previous non-terminal sessions", async () => {
@@ -651,9 +713,26 @@ describe("AI Sessions (Backend Implementation)", () => {
       p.aiSession.findMany.mockResolvedValue([
         { id: "old-session-1", metadata: { sourceDevice: "phone" } },
       ]);
+      p.streamSession.findMany.mockResolvedValue([
+        {
+          id: "old-session-stream",
+          status: "active",
+          endedAt: null,
+          metadata: { aiSessionId: "old-session-1" },
+        },
+      ]);
+      acceptLatestFrame({
+        aiSessionId: "old-session-1",
+        patientId,
+        seq: 1,
+        capturedAt: "2026-07-08T02:10:00.000Z",
+        receivedAt: "2026-07-08T02:10:01.000Z",
+        image: null,
+        vision: { description: null, label: null, flags: [], advisoryFlags: [] },
+      });
       mockAiAgentResponse(200);
 
-      const res = await request(app).post("/api/mobile/ai-sessions/start").send({ deviceId });
+      const res = await mobileRequest.post("/api/mobile/ai-sessions/start").send({ deviceId });
 
       expect(res.status).toBe(200);
       // Only previous, non-terminal sessions for this patient are considered.
@@ -680,6 +759,19 @@ describe("AI Sessions (Backend Implementation)", () => {
           }),
         })
       );
+      expect(p.streamSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "old-session-stream" },
+          data: expect.objectContaining({
+            status: "ended",
+            metadata: expect.objectContaining({
+              endReason: "superseded_by_new_ai_session",
+              supersededByAiSessionId: aiSessionId,
+            }),
+          }),
+        })
+      );
+      expect(getLatestFrame("old-session-1")).toBeNull();
     });
 
     it("a failed start does not supersede the patient's existing sessions", async () => {
@@ -687,13 +779,24 @@ describe("AI Sessions (Backend Implementation)", () => {
       p.aiSession.create.mockResolvedValue({ id: aiSessionId });
       p.aiSession.update.mockResolvedValue({ id: aiSessionId, status: "start_failed" });
       p.aiSession.findUnique.mockResolvedValue({ id: aiSessionId, metadata: null });
+      acceptLatestFrame({
+        aiSessionId: "previous-working-session",
+        patientId,
+        seq: 1,
+        capturedAt: "2026-07-08T02:10:00.000Z",
+        receivedAt: "2026-07-08T02:10:01.000Z",
+        image: null,
+        vision: { description: null, label: null, flags: [], advisoryFlags: [] },
+      });
       mockAiAgentResponse(503);
 
-      const res = await request(app).post("/api/mobile/ai-sessions/start").send({ deviceId });
+      const res = await mobileRequest.post("/api/mobile/ai-sessions/start").send({ deviceId });
 
       expect(res.status).toBe(502);
       // Supersede only runs after a successful registration.
       expect(p.aiSession.findMany).not.toHaveBeenCalled();
+      expect(p.streamSession.update).not.toHaveBeenCalled();
+      expect(getLatestFrame("previous-working-session")).not.toBeNull();
     });
   });
 
@@ -705,7 +808,6 @@ describe("AI Sessions (Backend Implementation)", () => {
         emergencySuggestedAt: null,
         metadata: null,
       });
-      p.aiSession.update.mockResolvedValue({ id: aiSessionId, status: "emergency_suggested" });
       p.aiSessionMessage.create.mockResolvedValue({});
 
       const res = await request(app)
@@ -715,9 +817,9 @@ describe("AI Sessions (Backend Implementation)", () => {
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ success: true });
-      expect(p.aiSession.update).toHaveBeenCalledWith(
+      expect(p.aiSession.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: aiSessionId },
+          where: { id: aiSessionId, status: "active", endedAt: null },
           data: expect.objectContaining({
             status: "emergency_suggested",
             emergencySuggestedAt: expect.any(Date),
@@ -778,6 +880,7 @@ describe("AI Sessions (Backend Implementation)", () => {
     it("conclude callback returns 200 with a valid API key", async () => {
       p.aiSession.findUnique.mockResolvedValue({
         id: aiSessionId,
+        patientId,
         status: "active",
         metadata: null,
       });
@@ -796,6 +899,7 @@ describe("AI Sessions (Backend Implementation)", () => {
     it("conclude callback saves transcript messages", async () => {
       p.aiSession.findUnique.mockResolvedValue({
         id: aiSessionId,
+        patientId,
         status: "active",
         metadata: null,
       });
@@ -841,6 +945,7 @@ describe("AI Sessions (Backend Implementation)", () => {
     it("conclude callback updates session endedAt, status, and outcome metadata", async () => {
       p.aiSession.findUnique.mockResolvedValue({
         id: aiSessionId,
+        patientId,
         status: "active",
         metadata: { sourceDevice: "phone" },
       });
@@ -852,8 +957,8 @@ describe("AI Sessions (Backend Implementation)", () => {
         .set("X-Api-Key", aiCallbackApiKey)
         .send(concludeBody);
 
-      expect(p.aiSession.update).toHaveBeenCalledWith({
-        where: { id: aiSessionId },
+      expect(p.aiSession.updateMany).toHaveBeenCalledWith({
+        where: { id: aiSessionId, status: "active", endedAt: null },
         data: expect.objectContaining({
           status: "resolved",
           endedAt: new Date("2026-07-08T02:14:32+00:00"),
@@ -870,6 +975,108 @@ describe("AI Sessions (Backend Implementation)", () => {
           }),
         }),
       });
+    });
+
+    it("conclude ends associated streams and clears the current-process frame", async () => {
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        patientId,
+        status: "active",
+        endedAt: null,
+        metadata: null,
+      });
+      p.aiSession.update.mockResolvedValue({ id: aiSessionId, status: "resolved" });
+      p.aiSessionMessage.create.mockResolvedValue({});
+      p.streamSession.findMany.mockResolvedValue([
+        {
+          id: "glasses-stream-for-conclude",
+          status: "active",
+          endedAt: null,
+          metadata: { aiSessionId, lastFrameSeq: 12 },
+        },
+      ]);
+      acceptLatestFrame({
+        aiSessionId,
+        patientId,
+        seq: 12,
+        capturedAt: "2026-07-08T02:14:00.000Z",
+        receivedAt: "2026-07-08T02:14:01.000Z",
+        image: null,
+        vision: { description: null, label: null, flags: [], advisoryFlags: [] },
+      });
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/conclude`)
+        .set("X-Api-Key", aiCallbackApiKey)
+        .send(concludeBody);
+
+      expect(res.status).toBe(200);
+      expect(p.streamSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "glasses-stream-for-conclude" },
+          data: expect.objectContaining({
+            status: "ended",
+            endedAt: new Date("2026-07-08T02:14:32+00:00"),
+            metadata: expect.objectContaining({
+              aiSessionId,
+              lastFrameSeq: 12,
+              frameAvailable: false,
+              endReason: "ai_session_concluded",
+              endedBy: "anthony_conclude_callback",
+            }),
+          }),
+        })
+      );
+      expect(getLatestFrame(aiSessionId)).toBeNull();
+    });
+
+    it("rejects a frame after conclude without repopulating the cache or reopening history", async () => {
+      p.aiSession.findUnique
+        .mockResolvedValueOnce({
+          id: aiSessionId,
+          patientId,
+          status: "active",
+          endedAt: null,
+          metadata: null,
+        })
+        .mockResolvedValueOnce({
+          id: aiSessionId,
+          patientId,
+          helpEventId,
+          status: "resolved",
+          endedAt: new Date("2026-07-08T02:14:32+00:00"),
+        });
+      p.aiSession.update.mockResolvedValue({ id: aiSessionId, status: "resolved" });
+      p.aiSessionMessage.create.mockResolvedValue({});
+      p.streamSession.findMany.mockResolvedValue([
+        {
+          id: "ended-by-conclude-stream",
+          status: "active",
+          endedAt: null,
+          metadata: { aiSessionId },
+        },
+      ]);
+
+      const concluded = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/conclude`)
+        .set("X-Api-Key", aiCallbackApiKey)
+        .send(concludeBody);
+      expect(concluded.status).toBe(200);
+
+      const frame = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/frames`)
+        .set("X-Api-Key", aiCallbackApiKey)
+        .send({
+          seq: 99,
+          ts: "2026-07-08T02:15:00.000Z",
+          vision: { label: "kitchen" },
+        });
+
+      expect(frame.status).toBe(409);
+      expect(frame.body.code).toBe("AI_SESSION_NOT_ACTIVE");
+      expect(getLatestFrame(aiSessionId)).toBeNull();
+      expect(p.streamSession.create).not.toHaveBeenCalled();
+      expect(p.streamSession.update).toHaveBeenCalledTimes(1);
     });
 
     it.each([undefined, "wrong-key"])(
@@ -907,6 +1114,7 @@ describe("AI Sessions (Backend Implementation)", () => {
       // Session already carries an aiConclusion (a prior conclude was recorded).
       p.aiSession.findUnique.mockResolvedValue({
         id: aiSessionId,
+        patientId,
         status: "resolved",
         metadata: { aiConclusion: { anthony_session_id: "abc-123" } },
       });
@@ -922,9 +1130,176 @@ describe("AI Sessions (Backend Implementation)", () => {
       expect(p.aiSession.update).not.toHaveBeenCalled();
       expect(p.aiSessionMessage.create).not.toHaveBeenCalled();
     });
+
+    it("duplicate conclude still reconciles an accidentally active stream", async () => {
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        patientId,
+        status: "resolved",
+        endedAt: new Date("2026-07-08T02:14:32+00:00"),
+        metadata: { aiConclusion: { anthony_session_id: "abc-123" } },
+      });
+      p.streamSession.findMany.mockResolvedValue([
+        {
+          id: "orphaned-active-glasses-stream",
+          status: "active",
+          endedAt: null,
+          metadata: { aiSessionId },
+        },
+      ]);
+      acceptLatestFrame({
+        aiSessionId,
+        patientId,
+        seq: 13,
+        capturedAt: "2026-07-08T02:14:00.000Z",
+        receivedAt: "2026-07-08T02:14:01.000Z",
+        image: null,
+        vision: { description: null, label: null, flags: [], advisoryFlags: [] },
+      });
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/conclude`)
+        .set("X-Api-Key", aiCallbackApiKey)
+        .send(concludeBody);
+
+      expect(res.status).toBe(200);
+      expect(p.aiSession.update).not.toHaveBeenCalled();
+      expect(p.aiSessionMessage.create).not.toHaveBeenCalled();
+      expect(p.streamSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: "orphaned-active-glasses-stream" } })
+      );
+      expect(getLatestFrame(aiSessionId)).toBeNull();
+    });
+
+    it("rejects a late conclude callback before it can rewrite a terminal session", async () => {
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        patientId,
+        status: "cancelled",
+        endedAt: new Date("2026-07-08T02:14:32.000Z"),
+        metadata: null,
+      });
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/conclude`)
+        .set("X-Api-Key", aiCallbackApiKey)
+        .send(concludeBody);
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe("AI_SESSION_NOT_ACTIVE");
+      expect(p.aiSession.updateMany).not.toHaveBeenCalled();
+      expect(p.aiSessionMessage.create).not.toHaveBeenCalled();
+    });
+
+    it("rejects a conclude callback whose patient does not match the URL session", async () => {
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        patientId,
+        status: "active",
+        endedAt: null,
+        metadata: null,
+      });
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/conclude`)
+        .set("X-Api-Key", aiCallbackApiKey)
+        .send({ ...concludeBody, patient_id: "another-patient" });
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe("CALLBACK_PATIENT_MISMATCH");
+      expect(p.aiSession.updateMany).not.toHaveBeenCalled();
+      expect(p.aiSessionMessage.create).not.toHaveBeenCalled();
+    });
+
+    it("treats a concurrent conclude loser as idempotent without writing transcripts", async () => {
+      p.aiSession.findUnique
+        .mockResolvedValueOnce({
+          id: aiSessionId,
+          patientId,
+          status: "active",
+          endedAt: null,
+          metadata: null,
+        })
+        .mockResolvedValueOnce({ metadata: { aiConclusion: { received_at: "2026-07-08T02:14:32.000Z" } } });
+      p.aiSession.updateMany.mockResolvedValue({ count: 0 });
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/conclude`)
+        .set("X-Api-Key", aiCallbackApiKey)
+        .send(concludeBody);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ success: true });
+      expect(p.aiSessionMessage.create).not.toHaveBeenCalled();
+    });
+
+    it("rejects escalation for a terminal session without writing an event", async () => {
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        status: "resolved",
+        endedAt: new Date("2026-07-08T02:14:32.000Z"),
+        emergencySuggestedAt: null,
+        metadata: null,
+      });
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/escalation`)
+        .set("X-Api-Key", aiCallbackApiKey)
+        .send(escalationBody);
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe("AI_SESSION_NOT_ACTIVE");
+      expect(p.aiSession.updateMany).not.toHaveBeenCalled();
+      expect(p.aiSessionMessage.create).not.toHaveBeenCalled();
+    });
   });
 
   describe("Caregiver Endpoints", () => {
+    it("caregiver resolve ends associated streams and is safe to repeat", async () => {
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        status: "active",
+        patient: { caregiverId },
+      });
+      p.aiSession.update.mockResolvedValue({ id: aiSessionId, status: "resolved" });
+      p.streamSession.findMany.mockResolvedValue([
+        {
+          id: "caregiver-resolve-stream",
+          status: "active",
+          endedAt: null,
+          metadata: { aiSessionId },
+        },
+      ]);
+
+      const first = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/resolve`)
+        .set("Authorization", `Bearer ${caregiverToken}`);
+
+      expect(first.status).toBe(200);
+      expect(p.streamSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "caregiver-resolve-stream" },
+          data: expect.objectContaining({
+            status: "ended",
+            metadata: expect.objectContaining({ endReason: "caregiver_resolved" }),
+          }),
+        })
+      );
+
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        status: "resolved",
+        endedAt: new Date("2026-07-08T02:14:32.000Z"),
+        patient: { caregiverId },
+      });
+      p.streamSession.findMany.mockResolvedValue([]);
+      const second = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/resolve`)
+        .set("Authorization", `Bearer ${caregiverToken}`);
+
+      expect(second.status).toBe(200);
+    });
+
     it("caregiver can list AI sessions for owned patient", async () => {
       p.patient.findUnique.mockResolvedValue({ id: patientId, caregiverId });
       p.aiSession.findMany.mockResolvedValue([{ id: aiSessionId, _count: { messages: 0 } }]);
@@ -1075,7 +1450,7 @@ describe("AI Sessions (Backend Implementation)", () => {
       p.helpContact.findFirst.mockResolvedValue({ id: "contact-id", whatsappNumber: "123456" });
       p.helpEvent.create.mockResolvedValue({ id: helpEventId });
 
-      const res = await request(app).post("/api/mobile/help-events").send({
+      const res = await mobileRequest.post("/api/mobile/help-events").send({
         deviceId,
         sourceDevice: "phone",
         status: "triggered",

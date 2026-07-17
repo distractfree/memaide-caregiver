@@ -6,18 +6,22 @@ This guide is for the Android and Wear OS mobile development teams integrating w
 During local development, point your mobile app's networking client to the backend server.
 *(Note: Use `http://10.0.2.2:4000` if testing from an Android emulator).*
 
+Production portal and API base URL: `https://caregiver.guardianova.com`
+
 ## Authentication / Device Identification
-Most MVP mobile API endpoints do **not** use JWT authentication. Instead, they rely on a `deviceId` string.
-- `GET /api/mobile/patients` requires the caregiver JWT and returns the logged-in caregiver's patient `deviceId` values.
-- Existing reminder, help, beacon, vital, AI session, and stream mobile endpoints still use `deviceId` and do not require JWT.
+Every `/api/mobile/*` endpoint requires the logged-in caregiver's bearer JWT.
+- Send `Authorization: Bearer <JWT_TOKEN>` on every mobile request, including telemetry and stream updates.
+- `GET /api/mobile/patients` returns the logged-in caregiver's patient `deviceId` values.
 - Send the `deviceId` with every `deviceId`-based request.
 - For `GET` requests, append it as a query parameter: `?deviceId=android-demo-001`
 - For `POST` requests, include it in the JSON body: `{ "deviceId": "android-demo-001", ... }`
-- The backend uses this ID to automatically link telemetry and sync data to the correct Patient profile.
+- The backend verifies that the supplied device belongs to the authenticated caregiver before reading or writing data. A cross-caregiver device is returned as `404 Not Found`.
+- Never send the caregiver JWT to `wss://ai.guardianova.com`.
 
 ## Mobile Sync Endpoints (GET)
 
 Fetch configuration and settings that the caregiver has set up in the web portal.
+Every endpoint in this guide requires `Authorization: Bearer <JWT_TOKEN>` in addition to the documented `deviceId` input where applicable.
 
 ### Lookup Patients After Login
 - **GET** `/api/mobile/patients`
@@ -65,12 +69,13 @@ Push telemetry, events, and status updates from the mobile device to the backend
     "deviceId": "android-demo-001",
     "reminderId": "cm...abc123",
     "scheduledAt": "2026-05-22T08:00:00Z",
-    "status": "completed",
+    "status": "acknowledged",
     "deliveredAt": "2026-05-22T08:00:05Z",
     "acknowledgedAt": "2026-05-22T08:05:10Z",
-    "sourceDevice": "wear_os"
+    "sourceDevice": "watch"
   }
   ```
+  Use only `scheduled`, `delivered`, `acknowledged`, or `missed` for `status`; use only `phone`, `watch`, or `system` for `sourceDevice`.
 
 ### Upload Help Events
 - **POST** `/api/mobile/help-events`
@@ -86,15 +91,28 @@ Push telemetry, events, and status updates from the mobile device to the backend
 
 ### Start AI Support Session
 - **POST** `/api/mobile/ai-sessions/start`
-- **Purpose:** Start an AI support session (scripted). Must be called after a Help Event is created if AI support is desired.
+- **Purpose:** Start and register an Anthony AI support session. A help event is optional unless the app needs to associate one.
 - **Example Body:**
   ```json
   {
-    "deviceId": "android-demo-001",
-    "helpEventId": "cm...def456",
-    "sourceDevice": "phone"
+    "deviceId": "435687675",
+    "vitals": null,
+    "beacons": []
   }
   ```
+- **Success response:**
+  ```json
+  {
+    "success": true,
+    "sessionId": "...",
+    "websocketUrl": "wss://ai.guardianova.com",
+    "helloMessage": {
+      "type": "hello",
+      "session_id": "..."
+    }
+  }
+  ```
+- **WebSocket:** Connect only to the returned `websocketUrl` and send exactly the returned `helloMessage`. Do not send the caregiver JWT on that connection.
 
 ### Send AI Session Message
 - **POST** `/api/mobile/ai-sessions/:id/messages`
@@ -142,13 +160,13 @@ Push telemetry, events, and status updates from the mobile device to the backend
     "heartRate": 72,
     "stepCount": 4500,
     "motionState": "walking",
-    "sourceDevice": "wear_os"
+    "sourceDevice": "watch"
   }
   ```
 
 ## Stream Status Endpoints (POST)
 
-These endpoints are currently for **status metadata only**. They let the caregiver portal know that the smart-glasses camera is active.
+These authenticated mobile endpoints create or update stream-status records. They are separate from the implemented AI egocentric JPEG frame path.
 
 ### Start Stream
 - **POST** `/api/mobile/stream/start`
@@ -156,8 +174,26 @@ These endpoints are currently for **status metadata only**. They let the caregiv
 
 ### Update Stream Status
 - **POST** `/api/mobile/stream/status`
-- **Body:** `{ "deviceId": "android-demo-001", "sessionId": "cm...ghi789", "status": "active" }`
+- **Body:** `{ "deviceId": "android-demo-001", "streamSessionId": "cm...ghi789", "status": "active" }`
 
 ### Stop Stream
 - **POST** `/api/mobile/stream/stop`
-- **Body:** `{ "deviceId": "android-demo-001", "sessionId": "cm...ghi789" }`
+- **Body:** `{ "deviceId": "android-demo-001", "streamSessionId": "cm...ghi789" }`
+
+## Egocentric JPEG Frame Viewer
+
+The current end-to-end frame flow is:
+
+```text
+Arian glasses/phone
+→ Anthony AI server
+→ POST /api/ai-sessions/:sessionId/frames
+→ Koko backend latest-frame cache
+→ authenticated caregiver Stream Status viewer
+```
+
+- Anthony calls `POST /api/ai-sessions/:sessionId/frames` with `X-Api-Key: <AI_CALLBACK_API_KEY>`.
+- The caregiver portal polls the backend and shows the latest JPEG in its embedded Stream Status frame viewer.
+- This is JPEG frame polling, not WebRTC, HLS, or MJPEG. The portal does not connect directly to Anthony.
+- The latest image is held only in a single backend process's memory. A restart clears it; Anthony's next frame restores it. Run one PM2 backend process for this MVP.
+- PostgreSQL stores lightweight metadata only—no frame history and no JPEG/base64 image data.

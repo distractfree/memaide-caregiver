@@ -42,6 +42,27 @@ export async function listMobilePatients(caregiverId: string) {
   return patients.map(({ id, name, deviceId }) => ({ id, name, deviceId }));
 }
 
+/**
+ * Resolves a device only inside the authenticated caregiver's patient set.
+ * Keep this lookup scoped in the database so callers never learn whether a
+ * device belongs to a different caregiver.
+ */
+export async function findPatientForCaregiverDevice(
+  caregiverId: string,
+  deviceId: string
+) {
+  const patient = await prisma.patient.findFirst({
+    where: { caregiverId, deviceId },
+    select: { id: true, name: true, deviceId: true },
+  });
+
+  if (!patient) {
+    throw new AppError(404, "No patient found for this device", "NOT_FOUND");
+  }
+
+  return patient;
+}
+
 export async function createPatient(caregiverId: string, input: CreatePatientInput) {
   return prisma.patient.create({
     data: { ...input, caregiverId },

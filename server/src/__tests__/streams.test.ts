@@ -72,6 +72,11 @@ vi.mock("../lib/prisma", () => ({
 
 import app from "../app";
 import { prisma } from "../lib/prisma";
+import {
+  acceptLatestFrame,
+  getLatestFrame,
+  resetLatestFrameStoreForTests,
+} from "../modules/ai-sessions/latest-ai-frame.store";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const pat = prisma.patient as any;
@@ -99,6 +104,13 @@ function makeToken(caregiverId: string) {
 
 const tokenA = makeToken(CAREGIVER_A_ID);
 const tokenB = makeToken(CAREGIVER_B_ID);
+
+const mobileRequest = {
+  get: (path: string) =>
+    request(app).get(path).set("Authorization", `Bearer ${tokenA}`),
+  post: (path: string) =>
+    request(app).post(path).set("Authorization", `Bearer ${tokenA}`),
+};
 
 const samplePatientA = {
   id: PATIENT_A_ID,
@@ -141,15 +153,19 @@ const unavailableSession = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetLatestFrameStoreForTests();
 });
 
 describe("Mobile stream session endpoints", () => {
+  beforeEach(() => {
+    pat.findFirst.mockResolvedValue(samplePatientA);
+  });
+
   it("POST /api/mobile/stream/start creates stream session for valid deviceId", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     streamSession.create.mockResolvedValue(activeSession);
 
-    const res = await request(app)
-      .post("/api/mobile/stream/start")
+    const res = await mobileRequest.post("/api/mobile/stream/start")
       .send({
         deviceId: DEVICE_ID,
         source: "glasses",
@@ -161,9 +177,9 @@ describe("Mobile stream session endpoints", () => {
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(res.body.data.status).toBe("active");
-    expect(pat.findUnique).toHaveBeenCalledWith({
-      where: { deviceId: DEVICE_ID },
-      select: { id: true },
+    expect(pat.findFirst).toHaveBeenCalledWith({
+      where: { caregiverId: CAREGIVER_A_ID, deviceId: DEVICE_ID },
+      select: { id: true, name: true, deviceId: true },
     });
     expect(streamSession.create).toHaveBeenCalledWith({
       data: {
@@ -179,11 +195,10 @@ describe("Mobile stream session endpoints", () => {
   });
 
   it("POST /api/mobile/stream/start defaults status to starting and startedAt to server time", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     streamSession.create.mockResolvedValue({ ...activeSession, status: "starting" });
 
-    const res = await request(app)
-      .post("/api/mobile/stream/start")
+    const res = await mobileRequest.post("/api/mobile/stream/start")
       .send({
         deviceId: DEVICE_ID,
         source: "mock",
@@ -201,10 +216,9 @@ describe("Mobile stream session endpoints", () => {
   });
 
   it("POST /api/mobile/stream/start with unknown deviceId returns 404", async () => {
-    pat.findUnique.mockResolvedValue(null);
+    pat.findFirst.mockResolvedValue(null);
 
-    const res = await request(app)
-      .post("/api/mobile/stream/start")
+    const res = await mobileRequest.post("/api/mobile/stream/start")
       .send({
         deviceId: "unknown-device",
         source: "glasses",
@@ -216,8 +230,7 @@ describe("Mobile stream session endpoints", () => {
   });
 
   it("POST /api/mobile/stream/start with invalid source returns 400", async () => {
-    const res = await request(app)
-      .post("/api/mobile/stream/start")
+    const res = await mobileRequest.post("/api/mobile/stream/start")
       .send({
         deviceId: DEVICE_ID,
         source: "smartglasses",
@@ -225,12 +238,11 @@ describe("Mobile stream session endpoints", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("VALIDATION_ERROR");
-    expect(pat.findUnique).not.toHaveBeenCalled();
+    expect(pat.findFirst).not.toHaveBeenCalled();
   });
 
   it("POST /api/mobile/stream/start with invalid viewerUrl returns 400", async () => {
-    const res = await request(app)
-      .post("/api/mobile/stream/start")
+    const res = await mobileRequest.post("/api/mobile/stream/start")
       .send({
         deviceId: DEVICE_ID,
         source: "glasses",
@@ -243,11 +255,10 @@ describe("Mobile stream session endpoints", () => {
   });
 
   it("POST /api/mobile/stream/start with helpEventId belonging to another patient returns 404", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     helpEvent.findFirst.mockResolvedValue(null);
 
-    const res = await request(app)
-      .post("/api/mobile/stream/start")
+    const res = await mobileRequest.post("/api/mobile/stream/start")
       .send({
         deviceId: DEVICE_ID,
         source: "glasses",
@@ -264,12 +275,11 @@ describe("Mobile stream session endpoints", () => {
   });
 
   it("POST /api/mobile/stream/stop ends stream session for valid deviceId/session", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     streamSession.findFirst.mockResolvedValue(activeSession);
     streamSession.update.mockResolvedValue(endedSession);
 
-    const res = await request(app)
-      .post("/api/mobile/stream/stop")
+    const res = await mobileRequest.post("/api/mobile/stream/stop")
       .send({
         deviceId: DEVICE_ID,
         streamSessionId: STREAM_SESSION_ID,
@@ -284,16 +294,22 @@ describe("Mobile stream session endpoints", () => {
     });
     expect(streamSession.update).toHaveBeenCalledWith({
       where: { id: STREAM_SESSION_ID },
-      data: { status: "ended", endedAt: expect.any(Date) },
+      data: expect.objectContaining({
+        status: "ended",
+        endedAt: expect.any(Date),
+        metadata: expect.objectContaining({
+          endReason: "mobile_stream_stopped",
+          frameAvailable: false,
+        }),
+      }),
     });
   });
 
   it("POST /api/mobile/stream/stop with session belonging to another patient returns 404", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     streamSession.findFirst.mockResolvedValue(null);
 
-    const res = await request(app)
-      .post("/api/mobile/stream/stop")
+    const res = await mobileRequest.post("/api/mobile/stream/stop")
       .send({
         deviceId: DEVICE_ID,
         streamSessionId: "other-session",
@@ -305,8 +321,7 @@ describe("Mobile stream session endpoints", () => {
   });
 
   it("POST /api/mobile/stream/stop with invalid status returns 400", async () => {
-    const res = await request(app)
-      .post("/api/mobile/stream/stop")
+    const res = await mobileRequest.post("/api/mobile/stream/stop")
       .send({
         deviceId: DEVICE_ID,
         streamSessionId: STREAM_SESSION_ID,
@@ -315,16 +330,55 @@ describe("Mobile stream session endpoints", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("VALIDATION_ERROR");
-    expect(pat.findUnique).not.toHaveBeenCalled();
+    expect(pat.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("mobile stream stop clears an associated cached glasses frame and remains idempotent", async () => {
+    const aiSessionId = "stream-stop-ai-session";
+    const associatedActiveStream = {
+      ...activeSession,
+      metadata: { aiSessionId },
+    };
+    streamSession.findFirst.mockResolvedValue(associatedActiveStream);
+    streamSession.update.mockResolvedValue({ ...associatedActiveStream, status: "ended", endedAt: ENDED_AT });
+    acceptLatestFrame({
+      aiSessionId,
+      patientId: PATIENT_A_ID,
+      seq: 1,
+      capturedAt: "2026-05-22T16:30:00.000Z",
+      receivedAt: "2026-05-22T16:30:01.000Z",
+      image: null,
+      vision: { description: null, label: null, flags: [], advisoryFlags: [] },
+    });
+
+    const first = await mobileRequest.post("/api/mobile/stream/stop").send({
+      deviceId: DEVICE_ID,
+      streamSessionId: STREAM_SESSION_ID,
+    });
+
+    expect(first.status).toBe(200);
+    expect(getLatestFrame(aiSessionId)).toBeNull();
+
+    streamSession.findFirst.mockResolvedValue({
+      ...associatedActiveStream,
+      status: "ended",
+      endedAt: ENDED_AT,
+    });
+    const second = await mobileRequest.post("/api/mobile/stream/stop").send({
+      deviceId: DEVICE_ID,
+      streamSessionId: STREAM_SESSION_ID,
+    });
+
+    expect(second.status).toBe(200);
+    expect(streamSession.update).toHaveBeenCalledTimes(1);
   });
 
   it("POST /api/mobile/stream/status updates active status", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     streamSession.findFirst.mockResolvedValue({ ...activeSession, status: "starting" });
     streamSession.update.mockResolvedValue(activeSession);
 
-    const res = await request(app)
-      .post("/api/mobile/stream/status")
+    const res = await mobileRequest.post("/api/mobile/stream/status")
       .send({
         deviceId: DEVICE_ID,
         streamSessionId: STREAM_SESSION_ID,
@@ -341,12 +395,11 @@ describe("Mobile stream session endpoints", () => {
   });
 
   it("POST /api/mobile/stream/status with failed sets endedAt if missing", async () => {
-    pat.findUnique.mockResolvedValue({ id: PATIENT_A_ID });
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
     streamSession.findFirst.mockResolvedValue(activeSession);
     streamSession.update.mockResolvedValue({ ...activeSession, status: "failed", endedAt: ENDED_AT });
 
-    const res = await request(app)
-      .post("/api/mobile/stream/status")
+    const res = await mobileRequest.post("/api/mobile/stream/status")
       .send({
         deviceId: DEVICE_ID,
         streamSessionId: STREAM_SESSION_ID,
@@ -356,8 +409,31 @@ describe("Mobile stream session endpoints", () => {
     expect(res.status).toBe(200);
     expect(streamSession.update).toHaveBeenCalledWith({
       where: { id: STREAM_SESSION_ID },
-      data: { status: "failed", endedAt: expect.any(Date) },
+      data: expect.objectContaining({
+        status: "failed",
+        endedAt: expect.any(Date),
+        metadata: expect.objectContaining({
+          endReason: "mobile_stream_status_updated",
+          frameAvailable: false,
+        }),
+      }),
     });
+  });
+
+  it("POST /api/mobile/stream/status cannot reactivate an ended stream", async () => {
+    pat.findFirst.mockResolvedValue({ id: PATIENT_A_ID });
+    streamSession.findFirst.mockResolvedValue(endedSession);
+
+    const res = await mobileRequest.post("/api/mobile/stream/status")
+      .send({
+        deviceId: DEVICE_ID,
+        streamSessionId: endedSession.id,
+        status: "active",
+      });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("STREAM_SESSION_NOT_ACTIVE");
+    expect(streamSession.update).not.toHaveBeenCalled();
   });
 });
 

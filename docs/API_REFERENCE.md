@@ -154,7 +154,7 @@ This document provides a developer-facing reference for all implemented backend 
 ## Reminder Events / Reports
 
 ### `POST /api/mobile/reminder-events`
-- **Auth:** MVP Device ID Lookup
+- **Auth:** Bearer caregiver JWT; `deviceId` ownership cross-check
 - **Purpose:** Called by the mobile app to report the status of a reminder execution.
 - **Body:**
   ```json
@@ -199,11 +199,11 @@ This document provides a developer-facing reference for all implemented backend 
 - **Purpose:** View logs of past emergency requests made by the patient.
 
 ### `GET /api/mobile/help-contact`
-- **Auth:** MVP Device ID Lookup (`?deviceId=android-demo-001`)
+- **Auth:** Bearer caregiver JWT; `deviceId` ownership cross-check
 - **Purpose:** Called by the mobile app to sync the configured emergency WhatsApp number.
 
 ### `POST /api/mobile/help-events`
-- **Auth:** MVP Device ID Lookup
+- **Auth:** Bearer caregiver JWT; `deviceId` ownership cross-check
 - **Purpose:** Called by the mobile app when an emergency is triggered.
 - **Body:**
   ```json
@@ -221,7 +221,7 @@ This document provides a developer-facing reference for all implemented backend 
 ## AI Sessions
 
 ### `POST /api/mobile/ai-sessions/start`
-- **Auth:** MVP Device ID Lookup
+- **Auth:** Bearer caregiver JWT; `deviceId` ownership cross-check
 - **Purpose:** Called explicitly by the mobile app to start a scripted AI support session after an emergency help event is created.
 - **Body:**
   ```json
@@ -233,7 +233,7 @@ This document provides a developer-facing reference for all implemented backend 
   ```
 
 ### `POST /api/mobile/ai-sessions/:id/messages`
-- **Auth:** MVP Device ID Lookup
+- **Auth:** Bearer caregiver JWT; `deviceId` ownership cross-check
 - **Purpose:** Send a patient message to the scripted AI session.
 - **Body:**
   ```json
@@ -245,7 +245,7 @@ This document provides a developer-facing reference for all implemented backend 
   ```
 
 ### `POST /api/mobile/ai-sessions/:id/emergency-suggestion-ack`
-- **Auth:** MVP Device ID Lookup
+- **Auth:** Bearer caregiver JWT; `deviceId` ownership cross-check
 - **Purpose:** Acknowledge an emergency suggestion.
 - **Body:**
   ```json
@@ -299,11 +299,11 @@ This document provides a developer-facing reference for all implemented backend 
 - **Purpose:** Delete a beacon configuration.
 
 ### `GET /api/mobile/beacons`
-- **Auth:** MVP Device ID Lookup (`?deviceId=android-demo-001`)
+- **Auth:** Bearer caregiver JWT; `deviceId` ownership cross-check
 - **Purpose:** Called by the mobile app to sync beacon scanning configurations.
 
 ### `POST /api/mobile/beacon-events`
-- **Auth:** MVP Device ID Lookup
+- **Auth:** Bearer caregiver JWT; `deviceId` ownership cross-check
 - **Purpose:** Called by the mobile app to upload filtered proximity events (e.g., patient dwelled in the Living Room).
 
 ### `GET /api/patients/:patientId/beacon-events`
@@ -319,7 +319,7 @@ This document provides a developer-facing reference for all implemented backend 
 ## Vitals
 
 ### `POST /api/mobile/vital-events`
-- **Auth:** MVP Device ID Lookup
+- **Auth:** Bearer caregiver JWT; `deviceId` ownership cross-check
 - **Purpose:** Called by Wear OS / Android Health to upload periodic health telemetry.
 - **Body:**
   ```json
@@ -348,15 +348,15 @@ This document provides a developer-facing reference for all implemented backend 
 *Note: Streams are currently metadata-only in the MVP.*
 
 ### `POST /api/mobile/stream/start`
-- **Auth:** MVP Device ID Lookup
+- **Auth:** Bearer caregiver JWT; `deviceId` ownership cross-check
 - **Purpose:** Called by smart-glasses or mobile app to notify the backend a stream has started.
 
 ### `POST /api/mobile/stream/status`
-- **Auth:** MVP Device ID Lookup
+- **Auth:** Bearer caregiver JWT; `deviceId` ownership cross-check
 - **Purpose:** Called periodically to update the status of an ongoing stream session.
 
 ### `POST /api/mobile/stream/stop`
-- **Auth:** MVP Device ID Lookup
+- **Auth:** Bearer caregiver JWT; `deviceId` ownership cross-check
 - **Purpose:** Called to end a stream session.
 
 ### `GET /api/patients/:patientId/stream-sessions`
@@ -370,6 +370,45 @@ This document provides a developer-facing reference for all implemented backend 
 ### `GET /api/stream-sessions/:id`
 - **Auth:** Bearer JWT
 - **Purpose:** Get details of a specific stream session.
+
+### `GET /api/stream-sessions/:id/frame/latest`
+- **Auth:** Bearer JWT for the caregiver who owns the stream session's patient.
+- **Purpose:** Retrieve the latest in-memory egocentric frame event for polling.
+- **Response:** `200` with `data.available: false` while waiting, after the
+  five-minute cache TTL, or whenever the StreamSession/associated AiSession is
+  terminal. Terminal data includes a lightweight `frameStatus` such as `ended`,
+  `failed`, or `unavailable`; it never includes JPEG base64.
+- **Privacy boundary:** The endpoint verifies caregiver ownership, stream
+  status (`active`/`starting` only), `endedAt`, `metadata.aiSessionId`,
+  associated AiSession terminal state, and cache patient ID before returning a
+  cached JPEG. Database terminal state blocks stale process-local cache entries.
+- **Caching:** `Cache-Control: private, no-store, max-age=0` and `Pragma: no-cache`.
+
+### `POST /api/ai-sessions/:sessionId/frames`
+- **Auth:** `X-Api-Key: <AI_CALLBACK_API_KEY>`; this is server-to-server and
+  never accepts a caregiver JWT.
+- **Purpose:** Anthony's processed egocentric frame callback. It returns fast
+  `202` responses and does not persist image data.
+- **Body:**
+  ```json
+  {
+    "seq": 12,
+    "ts": "2026-07-15T10:32:00.000000+00:00",
+    "vision": {
+      "description": "An older adult seated at a kitchen table.",
+      "label": "kitchen",
+      "flags": ["person_seated"],
+      "advisory_flags": ["no_motion"]
+    },
+    "image": { "mime": "image/jpeg", "b64": "raw-base64-only" }
+  }
+  ```
+- `image` is optional. The callback accepts vision-only and image-only events;
+  `advisory_flags` are preserved only as backend metadata and are not an alert
+  or normal Stream Status field.
+- **Response:** Accepted and duplicate/out-of-order callbacks return `202`.
+  Duplicate/out-of-order callbacks use `accepted: false`; a terminal AiSession
+  or terminal associated StreamSession returns `409` and is never reactivated.
 
 ---
 
@@ -403,13 +442,13 @@ This document provides a developer-facing reference for all implemented backend 
 
 ## Mobile Sync (Overview)
 
-Most `/api/mobile/*` endpoints are designed for the patient device and do not require a caregiver JWT. Instead, they require the `deviceId` to be passed (as a query parameter for GET requests, or in the JSON body for POST requests).
+Every `/api/mobile/*` endpoint requires `Authorization: Bearer <caregiver JWT>`. The app must send the raw login JWT only to the GuardiaNova API; it must not send that JWT to Anthony's WebSocket.
 
-`GET /api/mobile/patients` is the exception. It requires `Authorization: Bearer <JWT_TOKEN>` and returns the logged-in caregiver's patients with only `id`, `name`, and `deviceId`. The mobile app should call it after login, choose the correct `deviceId`, then use that `deviceId` with the existing sync endpoints.
+`GET /api/mobile/patients` returns the logged-in caregiver's patients with only `id`, `name`, and `deviceId`. For every remaining mobile route, `deviceId` is still required (as a query parameter for GET requests or in the JSON body for POST requests), and the backend verifies that it belongs to the authenticated caregiver before reading or writing data.
 
 - `GET /api/mobile/patients`
 - `GET /api/mobile/reminders?deviceId=...`
 - `GET /api/mobile/help-contact?deviceId=...`
 - `GET /api/mobile/beacons?deviceId=...`
 
-These endpoints are strictly partitioned on the backend; providing a `deviceId` will only return the configurations belonging to that specific patient.
+The mobile AI-session start response retains the same `websocketUrl` and `helloMessage`. Anthony's WebSocket hello remains `{ "type": "hello", "session_id": "..." }` and uses no caregiver JWT.

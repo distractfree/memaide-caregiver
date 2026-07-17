@@ -1,5 +1,6 @@
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../middleware/error.middleware";
+import { findPatientForCaregiverDevice } from "../patients/patient.service";
 import type {
   CreateHelpContactInput,
   CreateHelpEventMobileInput,
@@ -110,14 +111,14 @@ export async function listHelpEvents(
   });
 }
 
-export async function getMobileHelpContact(query: MobileHelpContactQuery) {
-  const patient = await prisma.patient.findUnique({
-    where: { deviceId: query.deviceId },
-    select: { id: true, name: true, deviceId: true },
-  });
-  if (!patient) {
-    throw new AppError(404, "No patient found for this device", "NOT_FOUND");
-  }
+export async function getMobileHelpContact(
+  caregiverId: string,
+  query: MobileHelpContactQuery
+) {
+  const patient = await findPatientForCaregiverDevice(
+    caregiverId,
+    query.deviceId
+  );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const helpContact = await (prisma as any).helpContact.findFirst({
@@ -141,14 +142,14 @@ export async function getMobileHelpContact(query: MobileHelpContactQuery) {
   return { patient, helpContact };
 }
 
-export async function createMobileHelpEvent(input: CreateHelpEventMobileInput) {
-  const patient = await prisma.patient.findUnique({
-    where: { deviceId: input.deviceId },
-    select: { id: true },
-  });
-  if (!patient) {
-    throw new AppError(404, "No patient found for this device", "NOT_FOUND");
-  }
+export async function createMobileHelpEvent(
+  caregiverId: string,
+  input: CreateHelpEventMobileInput
+) {
+  const patient = await findPatientForCaregiverDevice(
+    caregiverId,
+    input.deviceId
+  );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const hc = (prisma as any).helpContact;

@@ -12,4 +12,5 @@ patientStreamStatusRouter.get("/", streamController.getStatus);
 
 export const streamSessionByIdRouter = Router();
 streamSessionByIdRouter.use(authMiddleware);
+streamSessionByIdRouter.get("/:id/frame/latest", streamController.getLatestFrame);
 streamSessionByIdRouter.get("/:id", streamController.getById);

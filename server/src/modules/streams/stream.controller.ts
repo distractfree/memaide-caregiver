@@ -11,7 +11,10 @@ import * as streamService from "./stream.service";
 export const startMobileStreamSession = asyncHandler(
   async (req: Request, res: Response) => {
     const input = startStreamSessionSchema.parse(req.body);
-    const session = await streamService.startMobileStreamSession(input);
+    const session = await streamService.startMobileStreamSession(
+      req.caregiverId!,
+      input
+    );
     res.status(201).json({ success: true, data: session });
   }
 );
@@ -19,7 +22,10 @@ export const startMobileStreamSession = asyncHandler(
 export const stopMobileStreamSession = asyncHandler(
   async (req: Request, res: Response) => {
     const input = stopStreamSessionSchema.parse(req.body);
-    const session = await streamService.stopMobileStreamSession(input);
+    const session = await streamService.stopMobileStreamSession(
+      req.caregiverId!,
+      input
+    );
     res.status(200).json({ success: true, data: session });
   }
 );
@@ -27,7 +33,10 @@ export const stopMobileStreamSession = asyncHandler(
 export const updateMobileStreamStatus = asyncHandler(
   async (req: Request, res: Response) => {
     const input = updateStreamStatusSchema.parse(req.body);
-    const session = await streamService.updateMobileStreamStatus(input);
+    const session = await streamService.updateMobileStreamStatus(
+      req.caregiverId!,
+      input
+    );
     res.status(200).json({ success: true, data: session });
   }
 );
@@ -48,6 +57,18 @@ export const getById = asyncHandler(async (req: Request, res: Response) => {
     req.params.id
   );
   res.status(200).json({ success: true, data: session });
+});
+
+export const getLatestFrame = asyncHandler(async (req: Request, res: Response) => {
+  const frame = await streamService.getLatestFrameForCaregiver(
+    req.caregiverId!,
+    req.params.id
+  );
+  res.set({
+    "Cache-Control": "private, no-store, max-age=0",
+    Pragma: "no-cache",
+  });
+  res.status(200).json({ success: true, data: frame });
 });
 
 export const getStatus = asyncHandler(async (req: Request, res: Response) => {
