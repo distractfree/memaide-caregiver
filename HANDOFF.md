@@ -36,17 +36,18 @@ end-to-end from the phone**. This session's changes:
   hardcoded greeting is the opener). Commit `5401758`.
 - 205 pytest pass.
 
-**Client (Android):**
-- `arian/student1-work` — audio pipeline (watch→phone→WS) + `audio_end` VAD markers (`1dd4840`).
-- `anthony/phone-mic` — **phone-mic test path (no watch needed):** Help screen
-  "🎤 Talk to AI (phone mic)" → `PhoneVoiceSession` streams the phone mic and plays `audio_out`.
-  Builds.
-- `anthony/glasses-video` — Meta Wearables DAT glasses camera → `{type:frame,data_url}` video
-  leg as an isolated **minSdk-29 `:glasses` module** (app stays 26 via `tools:overrideLibrary`).
-  **Builds into an APK** (verified via CLI `./gradlew :app:assembleDebug`); runtime/pairing
-  untested. Needs `github_token` + `mwdat_application_id` + `mwdat_client_token` in
-  `local.properties`. Consistent with §5: DAT camera is I420 (the port's `FrameEncoder` already
-  assumes I420), and there is **no glasses mic** in mwdat 0.8.0 (audio stays phone/watch-sourced).
+**Client (Android):** — all of it now lives on **one branch `watch-phone-app`** (renamed from
+`arian/glasses-audio-app` on 2026-07-20; the per-feature `anthony/glasses-video`, `anthony/phone-mic`,
+`anthony/audio-end` and `glasses-test` branches were deleted local+remote — their content is all in
+`watch-phone-app`).
+- Audio pipeline (watch→phone→WS) + `audio_end` VAD markers.
+- **Phone-mic test path (no watch needed):** Help screen "Talk to AI Assistant" →
+  `PhoneVoiceSession` streams the phone mic and plays `audio_out`.
+- Meta Wearables DAT glasses camera → `{type:frame,data_url}` video leg (`GlassesFrameSource`
+  I420 → `FrameEncoder` JPEG). Needs `github_token` + `mwdat_application_id` + `mwdat_client_token`
+  in `local.properties`. **Now runs end-to-end on real hardware** (Pixel 7a + Galaxy Watch6
+  `SM_R940` over wireless adb); builds/installs/launches from CLI. Consistent with §5: DAT camera
+  is I420, and there is **no glasses mic** in mwdat 0.8.0 (audio stays phone/watch-sourced).
 
 **Next up (starting in a new chat):**
 1. **Debounced turn-taking** — the crude energy VAD splits one sentence into 2–3 replies.
@@ -57,9 +58,23 @@ end-to-end from the phone**. This session's changes:
    path end-to-end (frames → `VisionDescriber`/real `VisionCheck` → vision-driven escalation).
    Prior context: `docs/superpowers/specs/2026-07-01-glasses-vision-trace-and-whatsapp-design.md`.
 
-Worktrees in play: `memaide-fix` (student3-work), `memaide-phonemic`, `memaide-glasses`,
-`memaide-arian`. The main repo folder is parked on `arian/student1-work` and needs cleanup back
-to `anthony/student3-work` (careful: untracked `.env` + Python files there).
+**Open bugs / cross-team fixes:**
+- **(koko's side) Vision frames don't render on the caregiver website.** My AI server is
+  producing/forwarding the frames, but they aren't actually loading onto the portal — koko needs
+  to fix the ingest/display so the frames from my AI server show up on the site.
+- **(client) Glasses "unavailable" after the first vision session — FIXED 2026-07-20** (commit
+  `b32b9e1` on `watch-phone-app`). Root cause: `Wearables.initialize()` is a hard process singleton
+  that returns `WearablesError.ALREADY_INITIALIZED` (a *failure*) on every call after the first;
+  `HelpScreen` treated that as failure and fell back to audio-only on every session after the first.
+  Fix: treat `ALREADY_INITIALIZED` as success (typed `DatResult.fold`), matching
+  `GlassesFrameSource.ensureInitialized`. **Still to confirm on device:** whether a second session's
+  `Wearables.createSession()` is fully clean — the SDK refuses a stale session with
+  `SESSION_ALREADY_EXISTS` if the prior `DeviceSession` wasn't left `STOPPED`; watch logcat for it.
+
+Worktrees in play (2026-07-20): `mem_aide` (**`watch-phone-app`** — the Android app),
+`memaide-fix` (`anthony/student3-work` — this AI server), `memaide-phonemic` (`arian/student1-work`),
+`memaide-arian` (detached). The `memaide-glasses` and `memaide-audio-end` worktrees were removed in
+the branch cleanup.
 
 ---
 
