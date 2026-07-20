@@ -25,6 +25,7 @@ import com.example.memaid.data.PhoneVoiceSession
 import com.example.memaid.ui.MainViewModel
 import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.types.Permission
+import com.meta.wearable.dat.core.types.WearablesError
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,9 +70,23 @@ fun HelpScreen(
             // audio-only session instead of crashing.
             scope.launch {
                 val initOk = withContext(Dispatchers.IO) {
-                    runCatching { Wearables.initialize(context.applicationContext).getOrThrow() }
-                        .onFailure { Log.e("HelpScreen", "Wearables init failed", it) }
-                        .isSuccess
+                    // The SDK is a process singleton: initialize() succeeds only on the first call
+                    // and returns ALREADY_INITIALIZED (a *failure*) on every call after that. We
+                    // only need the instance to exist before launching the permission contract
+                    // (which calls getInstance() synchronously), so an already-initialized SDK is
+                    // success for us. Treating it as failure is what made glasses report
+                    // "unavailable" on every session after the first.
+                    Wearables.initialize(context.applicationContext).fold(
+                        { true },
+                        { err, _ ->
+                            if (err == WearablesError.ALREADY_INITIALIZED) {
+                                true
+                            } else {
+                                Log.e("HelpScreen", "Wearables init failed: ${err.description}")
+                                false
+                            }
+                        }
+                    )
                 }
                 if (initOk) {
                     glassesCamPermission.launch(Permission.CAMERA)
