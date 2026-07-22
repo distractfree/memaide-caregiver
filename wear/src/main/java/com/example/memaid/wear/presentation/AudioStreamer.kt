@@ -60,9 +60,15 @@ class AudioStreamer(private val context: Context) {
                 )
                 val bufferSize = maxOf(minBuf, 3840) // ~80ms at 24kHz 16-bit mono
 
+                // VOICE_RECOGNITION, not VOICE_COMMUNICATION: on this watch the voice-comm/AEC
+                // capture path returns near-silence (endpointer level ~0 vs threshold 500), so
+                // speech is never detected and the AI never replies. VOICE_RECOGNITION captures
+                // the raw mic with no AEC/AGC — clean for STT. Echo is instead handled by the
+                // phone-side half-duplex gate (it stops forwarding the watch mic while the AI
+                // reply is playing), so we don't need the source's echo cancellation here.
                 @Suppress("MissingPermission")
                 recorder = AudioRecord(
-                    MediaRecorder.AudioSource.VOICE_COMMUNICATION, // hardware echo cancellation
+                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
                     sampleRate,
                     AudioFormat.CHANNEL_IN_MONO,
                     AudioFormat.ENCODING_PCM_16BIT,
