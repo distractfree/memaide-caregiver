@@ -26,6 +26,7 @@ object PhoneVoiceSession {
     private var mic: PhoneMicStreamer? = null
     private var track: AudioTrack? = null
     private var framesJob: Job? = null
+    private var appContext: Context? = null
 
     @Volatile
     var isActive = false
@@ -41,6 +42,11 @@ object PhoneVoiceSession {
         }
         isActive = true
         val appCtx = context.applicationContext
+        appContext = appCtx
+
+        // When glasses are connected, keep the AI reply on the phone speaker rather than letting
+        // the platform route voice audio to the glasses over Bluetooth.
+        if (withGlasses) GlassesAudioRoute.routeToPhoneSpeaker(appCtx)
 
         // Play AI audio_out (24kHz mono PCM16) through the phone speaker.
         val sampleRate = 24000
@@ -119,6 +125,8 @@ object PhoneVoiceSession {
         } catch (_: Exception) {
         }
         track = null
+        appContext?.let { GlassesAudioRoute.clear(it) }
+        appContext = null
         HelpSessionManager.release(HelpSessionManager.Owner.PHONE)
         Log.d("PhoneVoice", "⏹ session stopped")
     }
