@@ -4,21 +4,19 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
-import retrofit2.http.Query
 
 interface MemAideApi {
 
-    // --- Login (caregiver) ---
-    @POST("api/auth/login")
-    suspend fun login(
-        @Body request: LoginRequest
-    ): Response<ApiEnvelope<LoginData>>
+    // --- Patient login (phone number, no password) ---
+    // Returns a token that identifies the patient on every subsequent api/mobile/* call.
+    @POST("api/mobile/patient-login")
+    suspend fun patientLogin(
+        @Body request: PatientLoginRequest
+    ): Response<PatientLoginResponse>
 
-    // --- Reminders (identified by deviceId, no auth header) ---
+    // --- Reminders (patient resolved from the Bearer token; no deviceId) ---
     @GET("api/mobile/reminders")
-    suspend fun getReminders(
-        @Query("deviceId") deviceId: String
-    ): Response<ApiEnvelope<RemindersData>>
+    suspend fun getReminders(): Response<ApiEnvelope<RemindersData>>
 
     // --- Reminder events ---
     @POST("api/mobile/reminder-events")
@@ -36,10 +34,6 @@ interface MemAideApi {
     suspend fun postVitalEvent(
         @Body event: ServerVitalEvent
     ): Response<Unit>
-
-    // Authorization: Bearer <jwt> is attached by ApiClient's auth interceptor.
-    @GET("api/mobile/patients")
-    suspend fun getPatients(): Response<ApiEnvelope<List<ServerPatientItem>>>
 
     @POST("api/mobile/ai-sessions/start")
     suspend fun startAiSession(

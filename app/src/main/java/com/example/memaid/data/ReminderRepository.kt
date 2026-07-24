@@ -5,28 +5,25 @@ object ReminderRepository {
     // true = fake data, false = real backend
     var demoMode: Boolean = false
 
-    // --- Login ---
-    suspend fun login(email: String, password: String): Result<LoginResponse> {
+    // --- Patient login (phone number, no password) ---
+    // Returns the raw login payload: a token (which the caller stores as the Bearer
+    // credential) plus the patient id. The patient's display name is NOT in this response —
+    // it arrives with the first reminders fetch.
+    suspend fun patientLogin(phoneNumber: String): Result<PatientLoginResponse> {
         if (demoMode) {
             return Result.success(
-                LoginResponse(
+                PatientLoginResponse(
+                    success = true,
                     token = "fake_token_12345",
-                    caregiverId = "c001",
-                    name = email.substringBefore("@")
+                    patient = PatientLoginInfo(id = FakeDataRepository.PATIENT_ID)
                 )
             )
         }
         return try {
-            val response = ApiClient.api.login(LoginRequest(email, password))
-            if (response.isSuccessful && response.body() != null) {
-                val data = response.body()!!.data
-                Result.success(
-                    LoginResponse(
-                        token = data.token,
-                        caregiverId = data.caregiver.id,
-                        name = data.caregiver.name
-                    )
-                )
+            val response = ApiClient.api.patientLogin(PatientLoginRequest(phoneNumber))
+            val body = response.body()
+            if (response.isSuccessful && body != null && body.success) {
+                Result.success(body)
             } else {
                 Result.failure(Exception("Login failed: ${response.code()}"))
             }
@@ -35,46 +32,13 @@ object ReminderRepository {
         }
     }
 
-    // --- Get reminders ---
-    suspend fun getReminders(deviceId: String): Result<List<Reminder>> {
-        if (demoMode) {
-            return Result.success(FakeDataRepository.getFakeReminders())
-        }
-        return try {
-            val response = ApiClient.api.getReminders(deviceId)
-            if (response.isSuccessful && response.body() != null) {
-                val data = response.body()!!.data
-                // Translate server reminders into our UI model
-                val mapped = data.reminders.map { sr ->
-                    Reminder(
-                        reminderId = sr.id,
-                        patientId = data.patient.id,
-                        title = sr.type.replaceFirstChar { it.uppercase() },
-                        description = sr.description,
-                        timeOfDay = sr.timeOfDay,
-                        frequency = sr.frequency,
-                        active = sr.active,
-                        status = ReminderStatus.PENDING
-                    )
-                }
-                Result.success(mapped)
-            } else {
-                Result.failure(Exception("Server error: ${response.code()}"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
     // --- Send acknowledgment ---
     suspend fun sendAck(
-        deviceId: String,
         reminderId: String,
         sourceDevice: String,
         timeOfDay: String
     ): Result<Unit> {
         val event = ServerReminderEvent(
-            deviceId = deviceId,
             reminderId = reminderId,
             status = "acknowledged",
             sourceDevice = sourceDevice,
@@ -100,12 +64,13 @@ object ReminderRepository {
     }
 
     // Returns the patient name AND reminders, so the UI can show the real patient.
-    suspend fun getRemindersWithPatient(deviceId: String): Result<Pair<String, List<Reminder>>> {
+    // The patient is resolved server-side from the Bearer token — no deviceId is sent.
+    suspend fun getRemindersWithPatient(): Result<Pair<String, List<Reminder>>> {
         if (demoMode) {
             return Result.success(Pair("Demo Patient", FakeDataRepository.getFakeReminders()))
         }
         return try {
-            val response = ApiClient.api.getReminders(deviceId)
+            val response = ApiClient.api.getReminders()
             if (response.isSuccessful && response.body() != null) {
                 val data = response.body()!!.data
                 val patientName = data.patient.name
@@ -131,9 +96,8 @@ object ReminderRepository {
     }
 
     // --- Send help event ---
-    suspend fun sendHelp(deviceId: String, sourceDevice: String, whatsappNumber: String?): Result<Unit> {
+    suspend fun sendHelp(sourceDevice: String, whatsappNumber: String?): Result<Unit> {
         val event = ServerHelpEvent(
-            deviceId = deviceId,
             sourceDevice = sourceDevice,
             status = "triggered",
             triggeredAt = TimeUtils.nowIsoUtc(),
@@ -156,9 +120,8 @@ object ReminderRepository {
         }
     }
 
-    suspend fun sendVitals(deviceId: String, heartRate: Int, motionState: String): Result<Unit> {
+    suspend fun sendVitals(heartRate: Int, motionState: String): Result<Unit> {
         val event = ServerVitalEvent(
-            deviceId = deviceId,
             heartRate = heartRate.takeIf { it > 0 },
             motionState = motionState,
             sourceDevice = "watch",
@@ -181,36 +144,11 @@ object ReminderRepository {
         }
     }
 
-    // Fetch the logged-in caregiver's patients. The token is attached by the
-    // auth interceptor in ApiClient, so callers no longer pass it here.
-    suspend fun getPatients(): Result<List<Patient>> {
-        if (demoMode) {
-            return Result.success(FakeDataRepository.getFakePatients())
-        }
-        return try {
-            val response = ApiClient.api.getPatients()
-            if (response.isSuccessful && response.body() != null) {
-                val list = response.body()!!.data.map { p ->
-                    Patient(
-                        patientId = p.id,
-                        name = p.name,
-                        deviceId = p.deviceId
-                    )
-                }
-                list.forEach { println("👤 Patient: name=${it.name} deviceId=${it.deviceId}") }
-                Result.success(list)
-            } else {
-                Result.failure(Exception("Server error: ${response.code()}"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun startAiSession(deviceId: String): Result<AiSessionData> {
+    // The patient is resolved from the Bearer token, so no deviceId is passed here.
+    suspend fun startAiSession(): Result<AiSessionData> {
         return try {
             val response = ApiClient.api.startAiSession(
-                AiSessionStartRequest(deviceId = deviceId, vitals = null, beacons = emptyList())
+                AiSessionStartRequest(vitals = null, beacons = emptyList())
             )
             if (response.isSuccessful && response.body() != null) {
                 Result.success(response.body()!!)

@@ -23,6 +23,12 @@ class SessionManager(context: Context) {
             .apply()
     }
 
+    // Saved right after phone login, before the patient's name is known (the login response
+    // only carries the id — the name arrives with the first reminders fetch).
+    fun savePatientId(patientId: String) {
+        prefs.edit().putString("patient_id", patientId).apply()
+    }
+
     fun getPatientId(): String? = prefs.getString("patient_id", null)
 
     fun getPatientName(): String? = prefs.getString("patient_name", null)
@@ -61,17 +67,5 @@ class SessionManager(context: Context) {
     // Clear all acknowledgments (useful for testing / new day reset)
     fun clearAcknowledgments() {
         prefs.edit().remove("acked_reminders").apply()
-    }
-
-    // The backend identifies the patient by deviceId. Null means no patient is selected.
-    //
-    // This used to fall back to the "wewe" seed device, which meant that after a logout —
-    // or before a patient was picked — the app kept posting the patient's vitals under a
-    // device that isn't theirs. The backend answers 404 "No patient found for this device",
-    // but had that seed row existed, the data would have silently landed on someone else.
-    fun getDeviceId(): String? = prefs.getString("device_id", null)
-
-    fun saveDeviceId(deviceId: String) {
-        prefs.edit().putString("device_id", deviceId).apply()
     }
 }

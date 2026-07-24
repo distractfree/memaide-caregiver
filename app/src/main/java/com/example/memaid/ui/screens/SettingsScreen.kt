@@ -21,7 +21,7 @@ fun SettingsScreen(
 ) {
     // Read the REAL current values
     val patientName by viewModel.patientName.collectAsState()
-    val deviceId = viewModel.sessionManager.getDeviceId() ?: "Not set"
+    val patientId = viewModel.sessionManager.getPatientId() ?: "Not set"
 
     Scaffold(
         topBar = {
@@ -45,8 +45,7 @@ fun SettingsScreen(
             Text("Patient Configuration", style = MaterialTheme.typography.titleMedium)
 
             SettingsRow(label = "Patient Name", value = patientName)
-            SettingsRow(label = "Device ID", value = deviceId)
-            SettingsRow(label = "Caregiver", value = viewModel.sessionManager.getCaregiverName() ?: "—")
+            SettingsRow(label = "Patient ID", value = patientId)
 
             Spacer(modifier = Modifier.weight(1f))
 

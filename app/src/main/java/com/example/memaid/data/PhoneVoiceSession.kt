@@ -75,13 +75,12 @@ object PhoneVoiceSession {
         }
 
         scope.launch {
-            val deviceId = SessionManager(appCtx).getDeviceId()
-            if (deviceId == null) {
-                Log.e("PhoneVoice", "⚠️ no deviceId set; cannot start AI session")
+            if (!SessionManager(appCtx).isLoggedIn()) {
+                Log.e("PhoneVoice", "⚠️ not logged in; cannot start AI session")
                 return@launch
             }
-            Log.d("PhoneVoice", "🚀 starting AI session for deviceId=$deviceId")
-            ReminderRepository.startAiSession(deviceId).fold(
+            Log.d("PhoneVoice", "🚀 starting AI session")
+            ReminderRepository.startAiSession().fold(
                 onSuccess = { session ->
                     Log.d("PhoneVoice", "✅ session ${session.sessionId} -> ${session.websocketUrl}")
                     val helloJson =

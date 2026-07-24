@@ -44,13 +44,12 @@ class PhoneListenerService : WearableListenerService() {
 
                 // Call the backend help endpoint
                 CoroutineScope(Dispatchers.IO).launch {
-                    val deviceId = SessionManager(applicationContext).getDeviceId()
-                    if (deviceId == null) {
-                        Log.w("PhoneListener", "⚠️ No patient selected — help event not sent")
+                    if (!SessionManager(applicationContext).isLoggedIn()) {
+                        Log.w("PhoneListener", "⚠️ Not logged in — help event not sent")
                         return@launch
                     }
                     val whatsapp = "+" + FakeDataRepository.CAREGIVER_WHATSAPP_NUMBER
-                    val result = ReminderRepository.sendHelp(deviceId, "watch", whatsapp)
+                    val result = ReminderRepository.sendHelp("watch", whatsapp)
                     result.fold(
                         onSuccess = { Log.d("PhoneListener", "✅ Help event posted to backend") },
                         onFailure = { e -> Log.e("PhoneListener", "⚠️ Help post failed: ${e.message}") }
@@ -67,13 +66,12 @@ class PhoneListenerService : WearableListenerService() {
 
                 CoroutineScope(Dispatchers.IO).launch {
                     val session = SessionManager(applicationContext)
-                    val deviceId = session.getDeviceId()
-                    if (deviceId == null) {
-                        Log.w("PhoneListener", "⚠️ No patient selected — ack not sent")
+                    if (!session.isLoggedIn()) {
+                        Log.w("PhoneListener", "⚠️ Not logged in — ack not sent")
                         return@launch
                     }
                     val result = ReminderRepository.sendAck(
-                        deviceId, reminderId, "watch", timeOfDay
+                        reminderId, "watch", timeOfDay
                     )
                     result.fold(
                         onSuccess = {
@@ -101,15 +99,14 @@ class PhoneListenerService : WearableListenerService() {
                 Log.d("PhoneListener", "❤️ Vitals from watch: HR=$hr motion=$motion")
 
                 CoroutineScope(Dispatchers.IO).launch {
-                    val deviceId = SessionManager(applicationContext).getDeviceId()
-                    if (deviceId == null) {
-                        Log.w("PhoneListener", "⚠️ No patient selected — vitals not sent")
+                    if (!SessionManager(applicationContext).isLoggedIn()) {
+                        Log.w("PhoneListener", "⚠️ Not logged in — vitals not sent")
                         return@launch
                     }
-                    val result = ReminderRepository.sendVitals(deviceId, hr, motion)
+                    val result = ReminderRepository.sendVitals(hr, motion)
                     result.fold(
                         onSuccess = {
-                            Log.d("PhoneListener", "✅ Vitals posted to backend (deviceId=$deviceId)")
+                            Log.d("PhoneListener", "✅ Vitals posted to backend")
                         },
                         onFailure = { e -> Log.e("PhoneListener", "⚠️ Vitals post failed: ${e.message}") }
                     )
@@ -184,13 +181,12 @@ class PhoneListenerService : WearableListenerService() {
 
         // STEP 1: Start the AI session (professor's rule — wait for 200 before opening WS)
         channelScope.launch {
-            val deviceId = SessionManager(applicationContext).getDeviceId()
-            if (deviceId == null) {
-                Log.w("PhoneListener", "⚠️ No patient selected — AI session not started")
+            if (!SessionManager(applicationContext).isLoggedIn()) {
+                Log.w("PhoneListener", "⚠️ Not logged in — AI session not started")
                 return@launch
             }
-            Log.d("PhoneListener", "🚀 Starting AI session for deviceId=$deviceId")
-            val result = ReminderRepository.startAiSession(deviceId)
+            Log.d("PhoneListener", "🚀 Starting AI session")
+            val result = ReminderRepository.startAiSession()
             result.fold(
                 onSuccess = { session ->
                     Log.d("PhoneListener", "✅ AI session started: sessionId=${session.sessionId}")

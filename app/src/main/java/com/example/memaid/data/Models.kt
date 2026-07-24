@@ -65,15 +65,24 @@ data class VitalEvent(
     val sourceDevice: String = "watch"
 )
 
-data class LoginRequest(
-    val email: String,
-    val password: String
+// Patient login: phone number only, no password. The token returned here identifies the
+// patient on every api/mobile/* call, so nothing downstream sends a deviceId anymore.
+// Phone must include the leading "+" and country code (e.g. "+11234567890").
+data class PatientLoginRequest(
+    val phoneNumber: String
 )
 
-data class LoginResponse(
+// Response shape (per Koko): { success, token, patient: { id } }.
+// Note the token is top-level (not nested under "data"), and the patient carries only an
+// id — the human-readable name arrives later from GET api/mobile/reminders.
+data class PatientLoginResponse(
+    val success: Boolean,
     val token: String,
-    val caregiverId: String,
-    val name: String
+    val patient: PatientLoginInfo
+)
+
+data class PatientLoginInfo(
+    val id: String
 )
 
 data class Patient(
@@ -98,19 +107,6 @@ data class ApiEnvelope<T>(
     val data: T
 )
 
-// ---- Login ----
-data class LoginData(
-    val token: String,
-    val caregiver: CaregiverInfo
-)
-
-data class CaregiverInfo(
-    val id: String,
-    val name: String,
-    val email: String,
-    val createdAt: String?
-)
-
 // ---- Reminders (server shape) ----
 // The server returns reminders nested under data.reminders,
 // alongside a patient object.
@@ -122,7 +118,9 @@ data class RemindersData(
 data class ServerPatient(
     val id: String,
     val name: String,
-    val deviceId: String
+    // The patient is now resolved from the Bearer token; deviceId is no longer required
+    // and may be absent from the response, so keep it optional.
+    val deviceId: String? = null
 )
 
 // The server's reminder uses different field names than our UI model.
@@ -137,8 +135,9 @@ data class ServerReminder(
 
 // ---- Event request bodies (server shape) ----
 
+// The patient is resolved from the Bearer token, so these event bodies no longer carry a
+// deviceId (per Koko: "use the token for all mobile API calls; do not send deviceId").
 data class ServerReminderEvent(
-    val deviceId: String,
     val reminderId: String,
     val status: String,            // scheduled | delivered | acknowledged | missed
     val sourceDevice: String,      // phone | watch | system
@@ -147,26 +146,13 @@ data class ServerReminderEvent(
 )
 
 data class ServerHelpEvent(
-    val deviceId: String,
     val sourceDevice: String,      // phone | watch | system
     val status: String,            // triggered | whatsapp_opened | failed | cancelled
     val triggeredAt: String? = null,
     val whatsappNumber: String? = null
 )
 
-// Patient list from GET /api/mobile/patients
-data class PatientsData(
-    val patients: List<ServerPatientItem>
-)
-
-data class ServerPatientItem(
-    val id: String,
-    val name: String,
-    val deviceId: String?
-)
-
 data class ServerVitalEvent(
-    val deviceId: String,
     val heartRate: Int?,           // omitted when the watch has no reading
     val motionState: String,
     val sourceDevice: String,
@@ -174,7 +160,6 @@ data class ServerVitalEvent(
 )
 
 data class AiSessionStartRequest(
-    val deviceId: String,
     val vitals: String? = null,
     val beacons: List<String> = emptyList()
 )
