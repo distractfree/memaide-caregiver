@@ -1,19 +1,20 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../middleware/error.middleware";
-import { findPatientForCaregiverDevice } from "../patients/patient.service";
+import { resolveMobilePatient } from "../patients/patient.service";
+import type { MobileActor } from "../mobile/mobile-auth.service";
+import type {
+  MobileStartStreamInput,
+  MobileStopStreamInput,
+  MobileUpdateStreamStatusInput,
+} from "../mobile/mobile.schemas";
 import { isTerminalStatus } from "../ai-sessions/ai-session.lifecycle";
 import type { LatestAiFrame } from "../ai-sessions/latest-ai-frame.store";
 import {
   deleteLatestFrame,
   getLatestFrame,
 } from "../ai-sessions/latest-ai-frame.store";
-import type {
-  ListStreamSessionsQuery,
-  StartStreamSessionInput,
-  StopStreamSessionInput,
-  UpdateStreamStatusInput,
-} from "./stream.schemas";
+import type { ListStreamSessionsQuery } from "./stream.schemas";
 
 async function assertPatientOwnership(caregiverId: string, patientId: string) {
   const patient = await prisma.patient.findFirst({
@@ -312,13 +313,10 @@ export async function upsertAiSessionFrameStream(input: {
 }
 
 export async function startMobileStreamSession(
-  caregiverId: string,
-  input: StartStreamSessionInput
+  actor: MobileActor,
+  input: MobileStartStreamInput
 ) {
-  const patient = await findPatientForCaregiverDevice(
-    caregiverId,
-    input.deviceId
-  );
+  const patient = await resolveMobilePatient(actor, input.deviceId);
 
   if (input.helpEventId) {
     await assertHelpEventForPatient(input.helpEventId, patient.id);
@@ -342,13 +340,10 @@ export async function startMobileStreamSession(
 }
 
 export async function stopMobileStreamSession(
-  caregiverId: string,
-  input: StopStreamSessionInput
+  actor: MobileActor,
+  input: MobileStopStreamInput
 ) {
-  const patient = await findPatientForCaregiverDevice(
-    caregiverId,
-    input.deviceId
-  );
+  const patient = await resolveMobilePatient(actor, input.deviceId);
   const session = await assertStreamSessionForPatient(
     input.streamSessionId,
     patient.id
@@ -380,13 +375,10 @@ export async function stopMobileStreamSession(
 }
 
 export async function updateMobileStreamStatus(
-  caregiverId: string,
-  input: UpdateStreamStatusInput
+  actor: MobileActor,
+  input: MobileUpdateStreamStatusInput
 ) {
-  const patient = await findPatientForCaregiverDevice(
-    caregiverId,
-    input.deviceId
-  );
+  const patient = await resolveMobilePatient(actor, input.deviceId);
   const session = await assertStreamSessionForPatient(
     input.streamSessionId,
     patient.id

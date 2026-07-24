@@ -1,6 +1,7 @@
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../middleware/error.middleware";
-import { findPatientForCaregiverDevice } from "../patients/patient.service";
+import { resolveMobilePatient } from "../patients/patient.service";
+import type { MobileActor } from "../mobile/mobile-auth.service";
 import { SCRIPTED_MESSAGES, determineNextAiMessage } from "./ai-session.messages";
 import { validateTransition, AiSessionStatus } from "./ai-session.state-machine";
 import {
@@ -13,8 +14,8 @@ import type {
   AiSessionConcludeCallbackInput,
   AiSessionEscalationCallbackInput,
   AiSessionFrameCallbackInput,
-  StartAiSessionInput,
 } from "./ai-session.schemas";
+import type { MobileStartAiSessionInput } from "../mobile/mobile.schemas";
 import {
   acceptLatestFrame,
   deleteLatestFrame,
@@ -186,7 +187,7 @@ function mapTranscriptSenderType(role: string) {
 }
 
 function normalizeRequestVitals(
-  vitals: StartAiSessionInput["vitals"]
+  vitals: MobileStartAiSessionInput["vitals"]
 ): AiAgentVitalPayload | null {
   if (!vitals) return null;
 
@@ -208,7 +209,7 @@ function normalizeDbVitals(vitalEvent: PatientVitalEvent): AiAgentVitalPayload {
 }
 
 function normalizeRequestBeacons(
-  beacons: StartAiSessionInput["beacons"] | undefined
+  beacons: MobileStartAiSessionInput["beacons"] | undefined
 ): AiAgentBeaconPayload[] {
   return (beacons ?? []).map((beacon) => ({
     room: beacon.room,
@@ -287,7 +288,7 @@ function buildPatientNotes(patient: PatientContext) {
 function buildAiAgentStartPayload(
   sessionId: string,
   patient: PatientContext,
-  input: StartAiSessionInput
+  input: MobileStartAiSessionInput
 ): AiAgentStartPayload {
   const activeHelpContact = patient.helpContacts?.[0];
   const latestDbVitals = patient.vitalEvents?.[0];
@@ -494,16 +495,17 @@ async function supersedePreviousSessions(patientId: string, newSessionId: string
 }
 
 export async function startAiSession(
-  input: StartAiSessionInput,
-  caregiverId: string
+  input: MobileStartAiSessionInput,
+  actor: MobileActor
 ) {
-  const ownedPatient = await findPatientForCaregiverDevice(
-    caregiverId,
-    input.deviceId
-  );
+  const ownedPatient = await resolveMobilePatient(actor, input.deviceId);
 
+  // Look the full context up by the already-authorized patient id. For a
+  // patient actor there is no trustworthy deviceId to key on, and for a
+  // caregiver actor this resolves to the same record the ownership check
+  // returned.
   const patient = (await prisma.patient.findUnique({
-    where: { deviceId: input.deviceId },
+    where: { id: ownedPatient.id },
     select: {
       id: true,
       name: true,
@@ -928,10 +930,10 @@ export async function recordFrameCallback(
 
 export async function getMobileSession(
   sessionId: string,
-  deviceId: string,
-  caregiverId: string
+  deviceId: string | undefined,
+  actor: MobileActor
 ) {
-  const patient = await findPatientForCaregiverDevice(caregiverId, deviceId);
+  const patient = await resolveMobilePatient(actor, deviceId);
   const session = await prisma.aiSession.findUnique({
     where: { id: sessionId },
     include: { patient: true, messages: { orderBy: { createdAt: 'asc' } } }
@@ -953,11 +955,11 @@ export async function getMobileSession(
 
 export async function handlePatientMessage(
   sessionId: string,
-  deviceId: string,
+  deviceId: string | undefined,
   messageText: string,
-  caregiverId: string
+  actor: MobileActor
 ) {
-  const patient = await findPatientForCaregiverDevice(caregiverId, deviceId);
+  const patient = await resolveMobilePatient(actor, deviceId);
   const session = await prisma.aiSession.findUnique({
     where: { id: sessionId },
     include: { patient: true, messages: true }
@@ -1015,10 +1017,10 @@ export async function handlePatientMessage(
 
 export async function resolveSession(
   sessionId: string,
-  deviceId: string,
-  caregiverId: string
+  deviceId: string | undefined,
+  actor: MobileActor
 ) {
-  const patient = await findPatientForCaregiverDevice(caregiverId, deviceId);
+  const patient = await resolveMobilePatient(actor, deviceId);
   const session = await prisma.aiSession.findUnique({
     where: { id: sessionId },
     include: { patient: true }
@@ -1078,11 +1080,11 @@ export async function resolveSession(
 
 export async function acknowledgeEmergency(
   sessionId: string,
-  deviceId: string,
+  deviceId: string | undefined,
   action: "call_initiated" | "dismissed",
-  caregiverId: string
+  actor: MobileActor
 ) {
-  const patient = await findPatientForCaregiverDevice(caregiverId, deviceId);
+  const patient = await resolveMobilePatient(actor, deviceId);
   const session = await prisma.aiSession.findUnique({
     where: { id: sessionId },
     include: { patient: true }

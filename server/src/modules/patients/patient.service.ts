@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../middleware/error.middleware";
 import type { CreatePatientInput, UpdatePatientInput, ListPatientsQuery } from "./patient.schemas";
+import type { MobileActor } from "../mobile/mobile-auth.service";
 export { getPatientOverview } from "./patient-overview.service";
 
 export async function listPatients(caregiverId: string, query: ListPatientsQuery) {
@@ -61,6 +62,44 @@ export async function findPatientForCaregiverDevice(
   }
 
   return patient;
+}
+
+/**
+ * Single resolution path for every authenticated mobile route.
+ *
+ * Caregiver actors keep the existing `caregiverId + deviceId` ownership check
+ * unchanged. Patient actors resolve straight from the verified token subject —
+ * a client-supplied `deviceId` is never consulted for a patient actor, so
+ * "Patient A's token + Patient B's deviceId" can never reach Patient B.
+ *
+ * A missing patient is reported with the same generic message used by the
+ * caregiver device lookup, so a caller never learns whether the id exists.
+ */
+export async function resolveMobilePatient(
+  actor: MobileActor,
+  deviceId?: string
+) {
+  if (actor.actorType === "patient") {
+    const patient = await prisma.patient.findUnique({
+      where: { id: actor.patientId },
+      select: { id: true, name: true, deviceId: true },
+    });
+
+    if (!patient) {
+      throw new AppError(404, "No patient found for this device", "NOT_FOUND");
+    }
+
+    return patient;
+  }
+
+  // Caregiver actors must still identify the patient by device. Mobile request
+  // schemas already require `deviceId` for caregiver tokens, so this guard only
+  // backstops a caller that bypasses validation.
+  if (!deviceId) {
+    throw new AppError(400, "deviceId is required", "VALIDATION_ERROR");
+  }
+
+  return findPatientForCaregiverDevice(actor.caregiverId, deviceId);
 }
 
 export async function createPatient(caregiverId: string, input: CreatePatientInput) {

@@ -221,10 +221,25 @@ These commands are safe to run to verify database status or restart services:
 
 ## Mobile Integration & Pairing Guidelines
 
-For successful pairing and integration with the mobile client, ensure the following requirements are met:
+The mobile API accepts two kinds of bearer token. **The patient-facing Android app uses the patient flow.** The caregiver flow below is unchanged and remains available for existing integrations.
+
+### Patient flow (patient-facing Android app)
+
+1. **API URL:** As in the caregiver flow below — never `localhost` on a physical device.
+2. **Login:** The patient enters **their own phone number** in E.164 form and the app calls `POST /api/mobile/patient-login`. The response returns a patient-scoped token and only that patient's `id`.
+3. **No patient selection:** The app must **not** call `GET /api/mobile/patients` — it is caregiver-only and returns `403 CAREGIVER_ONLY` for a patient token. The patient never sees or picks from a patient list.
+4. **No `deviceId`:** The patient token identifies the patient. Sending a `deviceId` is accepted but ignored for identity and can never select a different patient.
+5. **Token handling:** Store the token securely, send it as `Authorization: Bearer <PATIENT_JWT>`, clear it on `401` and return to the login screen, and clear it on local logout/reset. Never store a caregiver JWT in the patient app.
+6. **Demo-only limitation:** Phone-number login is **prototype authentication only** and is not suitable for real production patient data without SMS OTP or a PIN. See `docs/MOBILE_API_CONTRACT.md` → "Security limitations".
+
+See `docs/MOBILE_INTEGRATION_GUIDE.md` for the full app flow and error handling.
+
+### Caregiver flow (existing integrations)
+
+For successful pairing and integration with a caregiver-operated mobile client, ensure the following requirements are met:
 
 1. **API URL:** The phone/mobile app must point to the public backend URL (`http://134.122.115.15:4000`) for remote testing, or the local LAN IP when running locally (do not use `localhost` on a physical device).
 2. **Initial Sync:** The mobile app must authenticate first (login) before making request calls.
-3. **Account Linkage:** The mobile client must fetch the available patient profiles by invoking `GET /api/mobile/patients` using the logged-in token.
+3. **Account Linkage:** The mobile client must fetch the available patient profiles by invoking `GET /api/mobile/patients` using the logged-in caregiver token.
 4. **Dynamic Pairing:** The mobile application must sync and pair using the returned `deviceId` from the server. **Do not hardcode old device IDs** (such as `wewe` or outdated sandbox values) in the mobile client.
 5. **API Errors:** If the mobile app receives a `404 Not Found` with the message `No patient found for this device`, it indicates that the endpoint is functioning correctly, but the requested `deviceId` is not currently registered or assigned to a patient in the database.

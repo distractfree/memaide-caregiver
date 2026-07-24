@@ -1,12 +1,10 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../middleware/error.middleware";
-import { findPatientForCaregiverDevice } from "../patients/patient.service";
-import type {
-  CreateVitalEventMobileInput,
-  ListVitalsQuery,
-  VitalsReportQuery,
-} from "./vital.schemas";
+import { resolveMobilePatient } from "../patients/patient.service";
+import type { MobileActor } from "../mobile/mobile-auth.service";
+import type { MobileVitalEventInput } from "../mobile/mobile.schemas";
+import type { ListVitalsQuery, VitalsReportQuery } from "./vital.schemas";
 
 const VITAL_SOURCE_DEVICES = ["watch", "phone", "system"] as const;
 const VITAL_MOTION_STATES = ["idle", "walking", "active", "unknown"] as const;
@@ -78,13 +76,10 @@ function mostCommonMotionState(counts: Record<string, number>) {
 }
 
 export async function createMobileVitalEvent(
-  caregiverId: string,
-  input: CreateVitalEventMobileInput
+  actor: MobileActor,
+  input: MobileVitalEventInput
 ) {
-  const patient = await findPatientForCaregiverDevice(
-    caregiverId,
-    input.deviceId
-  );
+  const patient = await resolveMobilePatient(actor, input.deviceId);
 
   return prisma.vitalEvent.create({
     data: {

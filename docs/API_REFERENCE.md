@@ -449,13 +449,29 @@ This document provides a developer-facing reference for all implemented backend 
 
 ## Mobile Sync (Overview)
 
-Every `/api/mobile/*` endpoint requires `Authorization: Bearer <caregiver JWT>`. The app must send the raw login JWT only to the GuardiaNova API; it must not send that JWT to Anthony's WebSocket.
+Every `/api/mobile/*` endpoint except `POST /api/mobile/patient-login` requires a bearer token. The app must send the raw JWT only to the GuardiaNova API; it must not send that JWT to Anthony's WebSocket.
 
-`GET /api/mobile/patients` returns the logged-in caregiver's patients with only `id`, `name`, and `deviceId`. For every remaining mobile route, `deviceId` is still required (as a query parameter for GET requests or in the JSON body for POST requests), and the backend verifies that it belongs to the authenticated caregiver before reading or writing data.
+Two token types are accepted:
 
-- `GET /api/mobile/patients`
-- `GET /api/mobile/reminders?deviceId=...`
-- `GET /api/mobile/help-contact?deviceId=...`
-- `GET /api/mobile/beacons?deviceId=...`
+- **Caregiver JWT** (`POST /api/auth/login`) — behavior is unchanged. `deviceId` is still required on every device-based route and is still verified against the authenticated caregiver.
+- **Patient JWT** (`POST /api/mobile/patient-login`) — used by the patient-facing Android app. The token carries the patient id (`sub`) and `typ: "patient"`; `deviceId` is not required and is ignored for identity.
+
+### `POST /api/mobile/patient-login`
+
+- **Auth:** None
+- **Purpose:** Exchange a patient's own phone number for a patient-scoped session token.
+- **Body:** `{ "phoneNumber": "+15550000000" }` — strict E.164 (`^\+[1-9]\d{7,14}$`).
+- **200:** `{ "success": true, "token": "<PATIENT_JWT>", "patient": { "id": "..." } }`
+- **400 `VALIDATION_ERROR`:** missing or malformed number.
+- **404 `PATIENT_LOGIN_NOT_AVAILABLE`:** one generic failure covering no match, multiple matches, and unusable records. `Patient.phoneNumber` is not unique, so the backend requires an exact single match and issues no token when the lookup is ambiguous.
+- **Demo/prototype authentication only** — see `docs/MOBILE_API_CONTRACT.md` → "Security limitations".
+
+`GET /api/mobile/patients` returns the logged-in caregiver's patients with only `id`, `name`, and `deviceId`. It is **caregiver-only**: a patient token receives `403 CAREGIVER_ONLY`, and the patient app has no patient-selection step. Patient tokens are also rejected on the caregiver portal API. A patient token can only ever reach its own patient's data; cross-patient access returns `404 Not Found`.
+
+- `POST /api/mobile/patient-login` (unauthenticated)
+- `GET /api/mobile/patients` (caregiver token only)
+- `GET /api/mobile/reminders?deviceId=...` (`deviceId` omitted for patient tokens)
+- `GET /api/mobile/help-contact?deviceId=...` (`deviceId` omitted for patient tokens)
+- `GET /api/mobile/beacons?deviceId=...` (`deviceId` omitted for patient tokens)
 
 The mobile AI-session start response retains the same `websocketUrl` and `helloMessage`. Anthony's WebSocket hello remains `{ "type": "hello", "session_id": "..." }` and uses no caregiver JWT.

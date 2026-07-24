@@ -14,7 +14,7 @@ export const createMobileVitalEvent = asyncHandler(
   async (req: Request, res: Response) => {
     const input = createVitalEventMobileSchema.parse(req.body);
     const event = await vitalService.createMobileVitalEvent(
-      req.caregiverId!,
+      { actorType: "caregiver", caregiverId: req.caregiverId! },
       input
     );
     res.status(201).json({ success: true, data: event });

@@ -1,6 +1,11 @@
 import { Request, Response, NextFunction } from "express";
 import * as aiSessionService from "./ai-session.service";
 import * as schemas from "./ai-session.schemas";
+import * as mobileSchemas from "../mobile/mobile.schemas";
+import {
+  mobileActorFor,
+  schemaForActor,
+} from "../mobile/mobile-request";
 
 // CAREGIVER CONTROLLERS
 export const listCaregiverSessions = async (req: Request, res: Response, next: NextFunction) => {
@@ -115,11 +120,13 @@ export const handleFrameCallback = async (req: Request, res: Response, next: Nex
 // MOBILE CONTROLLERS
 export const startMobileSession = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const validatedData = schemas.startAiSessionSchema.parse(req.body);
-    const data = await aiSessionService.startAiSession(
-      validatedData,
-      req.caregiverId!
-    );
+    const actor = mobileActorFor(req);
+    const validatedData = schemaForActor(
+      actor,
+      schemas.startAiSessionSchema,
+      mobileSchemas.patientStartAiSessionSchema
+    ).parse(req.body);
+    const data = await aiSessionService.startAiSession(validatedData, actor);
     res.status(200).json(data);
   } catch (error) {
     if (error instanceof aiSessionService.AiAgentSessionStartError) {
@@ -148,16 +155,19 @@ export const startMobileSession = async (req: Request, res: Response, next: Next
 export const getMobileSession = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
+    const actor = mobileActorFor(req);
     const { deviceId } = req.query;
-    
-    if (!deviceId || typeof deviceId !== 'string') {
+
+    // A patient token identifies its own patient, so `deviceId` is optional for
+    // patient actors and still required for caregiver actors.
+    if (actor.actorType === "caregiver" && (!deviceId || typeof deviceId !== "string")) {
       return res.status(400).json({ status: "error", message: "deviceId query parameter is required", code: "VALIDATION_ERROR" });
     }
 
     const data = await aiSessionService.getMobileSession(
       id,
-      deviceId,
-      req.caregiverId!
+      typeof deviceId === "string" ? deviceId : undefined,
+      actor
     );
     res.json({ success: true, data });
   } catch (error) {
@@ -168,13 +178,18 @@ export const getMobileSession = async (req: Request, res: Response, next: NextFu
 export const handleMobileMessage = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const validatedData = schemas.addAiSessionMessageSchema.parse(req.body);
-    
+    const actor = mobileActorFor(req);
+    const validatedData = schemaForActor(
+      actor,
+      schemas.addAiSessionMessageSchema,
+      mobileSchemas.patientAiSessionMessageSchema
+    ).parse(req.body);
+
     const data = await aiSessionService.handlePatientMessage(
       id,
       validatedData.deviceId,
       validatedData.message,
-      req.caregiverId!
+      actor
     );
     res.json({ success: true, data });
   } catch (error) {
@@ -185,12 +200,17 @@ export const handleMobileMessage = async (req: Request, res: Response, next: Nex
 export const resolveMobileSession = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const validatedData = schemas.resolveAiSessionSchema.parse(req.body);
-    
+    const actor = mobileActorFor(req);
+    const validatedData = schemaForActor(
+      actor,
+      schemas.resolveAiSessionSchema,
+      mobileSchemas.patientResolveAiSessionSchema
+    ).parse(req.body);
+
     const data = await aiSessionService.resolveSession(
       id,
       validatedData.deviceId,
-      req.caregiverId!
+      actor
     );
     res.json({ success: true, data });
   } catch (error) {
@@ -201,13 +221,18 @@ export const resolveMobileSession = async (req: Request, res: Response, next: Ne
 export const emergencySuggestionAck = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const validatedData = schemas.emergencySuggestionAckSchema.parse(req.body);
-    
+    const actor = mobileActorFor(req);
+    const validatedData = schemaForActor(
+      actor,
+      schemas.emergencySuggestionAckSchema,
+      mobileSchemas.patientEmergencyAckSchema
+    ).parse(req.body);
+
     const data = await aiSessionService.acknowledgeEmergency(
       id,
       validatedData.deviceId,
       validatedData.action,
-      req.caregiverId!
+      actor
     );
     res.json({ success: true, data });
   } catch (error) {

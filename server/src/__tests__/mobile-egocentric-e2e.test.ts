@@ -109,7 +109,9 @@ describe("mobile JWT and egocentric frame lifecycle", () => {
         : null;
     });
     p.patient.findUnique.mockImplementation(async ({ where }: any) =>
-      where?.deviceId === DEVICE_ID ? patientContext : null
+      where?.deviceId === DEVICE_ID || where?.id === PATIENT_ID
+        ? patientContext
+        : null
     );
 
     p.aiSession.create.mockImplementation(async ({ data }: any) => {

@@ -56,13 +56,17 @@ C:\MemAide\
 ## Security Model
 - **Caregiver Auth:** Standard JWT bearer token mechanism for the caregiver web portal.
 - **Ownership Enforcement:** Strict caregiver ownership enforcement on all patient data. Cross-caregiver access attempts return `404 Not Found`.
-- **Mobile Endpoints:** Every `/api/mobile/*` route requires `Authorization: Bearer <caregiver JWT>`. Device-based requests also verify that the `deviceId` belongs to that authenticated caregiver; cross-caregiver attempts return `404 Not Found`.
+- **Mobile Endpoints:** Every `/api/mobile/*` route except `POST /api/mobile/patient-login` requires a bearer token, and accepts either a caregiver JWT or a patient JWT.
+  - **Caregiver token:** unchanged. Device-based requests verify that the `deviceId` belongs to that authenticated caregiver; cross-caregiver attempts return `404 Not Found`. Caregiver tokens issued before this feature (no `typ` claim) are still accepted.
+  - **Patient token:** issued by `POST /api/mobile/patient-login`, carries `typ: "patient"` and the patient id in `sub`. The patient is resolved from the verified token; a client-supplied `deviceId` is ignored for identity and can never select a different patient. Cross-patient access returns `404 Not Found`.
+  - **`GET /api/mobile/patients` is caregiver-only** (`403 CAREGIVER_ONLY` for patient tokens), so the patient app never sees or selects a patient list. Patient tokens are also rejected on the caregiver portal API.
+- **Patient Login Limitation:** Phone-number login is **demo/prototype authentication only** and is not suitable for real production patient data without SMS OTP, a PIN, or another factor. There is no rate limiting on the login route yet. See `docs/MOBILE_API_CONTRACT.md` → "Security limitations".
 - **Anthony Callback:** `POST /api/ai-sessions/:sessionId/frames` accepts only `X-Api-Key: <AI_CALLBACK_API_KEY>`. It does not accept a caregiver JWT.
 - **WebSocket Boundary:** The caregiver JWT must never be sent to `wss://ai.guardianova.com`. The WebSocket hello is only `{ "type": "hello", "session_id": "..." }`.
 
 ## Production Integration
 - **Portal and API base URL:** `https://caregiver.guardianova.com`
-- **AI session start:** The mobile app posts its owned `deviceId` to `/api/mobile/ai-sessions/start`; the response returns the Anthony WebSocket URL and the minimal hello payload.
+- **AI session start:** The mobile app starts a session at `/api/mobile/ai-sessions/start` — a caregiver token posts its owned `deviceId`, a patient token posts no `deviceId`. The response returns the Anthony WebSocket URL and the minimal hello payload.
 - **Frame path:** Arian glasses/phone → Anthony AI server → keyed frame callback → Koko latest-frame cache → authenticated caregiver Stream Status viewer.
 - **Viewer:** The portal renders the latest JPEG in its embedded Stream Status frame viewer; it never connects directly to Anthony.
 

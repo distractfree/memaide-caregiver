@@ -1,13 +1,24 @@
 import { Router } from "express";
-import { authMiddleware } from "../../middleware/auth.middleware";
+import {
+  mobileAuthMiddleware,
+  requireCaregiverActor,
+} from "../../middleware/mobile-auth.middleware";
 import * as mobileController from "./mobile.controller";
 import * as aiSessionController from "../ai-sessions/ai-session.controller";
 
 const router = Router();
 
-router.use(authMiddleware);
+// Unauthenticated: this is how a patient-operated app obtains its token.
+// Must stay declared before the authenticated mobile middleware below.
+router.post("/patient-login", mobileController.patientLogin);
 
-router.get("/patients", mobileController.getPatients);
+// Everything below accepts either a caregiver token or a patient token.
+router.use(mobileAuthMiddleware);
+
+// Caregiver-only: returns a caregiver's patient list. A patient token must
+// never be able to see or select another patient.
+router.get("/patients", requireCaregiverActor, mobileController.getPatients);
+
 router.get("/reminders", mobileController.getReminders);
 router.post("/reminder-events", mobileController.createReminderEvent);
 router.get("/help-contact", mobileController.getMobileHelpContact);

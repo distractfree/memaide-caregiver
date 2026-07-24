@@ -1,14 +1,17 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../middleware/error.middleware";
-import { findPatientForCaregiverDevice } from "../patients/patient.service";
+import { resolveMobilePatient } from "../patients/patient.service";
+import type { MobileActor } from "../mobile/mobile-auth.service";
+import type {
+  MobileBeaconEventInput,
+  MobileBeaconsInput,
+} from "../mobile/mobile.schemas";
 import type {
   BeaconReportQuery,
-  CreateBeaconEventMobileInput,
   CreateBeaconInput,
   ListBeaconEventsQuery,
   ListBeaconsQuery,
-  MobileBeaconsQuery,
   UpdateBeaconInput,
 } from "./beacon.schemas";
 
@@ -285,13 +288,10 @@ export async function getBeaconReport(
 }
 
 export async function getMobileBeacons(
-  caregiverId: string,
-  query: MobileBeaconsQuery
+  actor: MobileActor,
+  query: MobileBeaconsInput
 ) {
-  const patient = await findPatientForCaregiverDevice(
-    caregiverId,
-    query.deviceId
-  );
+  const patient = await resolveMobilePatient(actor, query.deviceId);
 
   const beacons = await prisma.beacon.findMany({
     where: { patientId: patient.id, active: true },
@@ -312,13 +312,10 @@ export async function getMobileBeacons(
 }
 
 export async function createMobileBeaconEvent(
-  caregiverId: string,
-  input: CreateBeaconEventMobileInput
+  actor: MobileActor,
+  input: MobileBeaconEventInput
 ) {
-  const patient = await findPatientForCaregiverDevice(
-    caregiverId,
-    input.deviceId
-  );
+  const patient = await resolveMobilePatient(actor, input.deviceId);
 
   const beacon = await prisma.beacon.findFirst({
     where: { id: input.beaconId, patientId: patient.id },

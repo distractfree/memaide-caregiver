@@ -11,7 +11,133 @@ This document outlines the API contract for the mobile application integration (
 
 ---
 
-## Auth / Login
+## Two mobile actors
+
+The mobile API accepts two different kinds of bearer token. Pick one per app.
+
+| Actor | Token from | Identifies the patient by | Used by |
+| --- | --- | --- | --- |
+| **Patient** | `POST /api/mobile/patient-login` | the token itself (`typ: "patient"`, `sub` = patient id) | the patient-facing Android app |
+| **Caregiver** | `POST /api/auth/login` | the `deviceId` sent on each request | caregiver-operated tooling, existing integrations |
+
+The patient-facing Android app must use the **patient** token and must never
+call `GET /api/mobile/patients`. Existing caregiver token behavior is
+unchanged, including caregiver tokens issued before this feature existed.
+
+---
+
+## Patient Login (patient-facing Android app)
+
+> **Demo/prototype authentication only.**
+> Possession of a patient's phone number is sufficient to obtain that patient's
+> session. This is **not** suitable for real production patient data without an
+> added verification factor such as an SMS OTP or a PIN. See
+> [Security limitations](#security-limitations).
+
+* **Path:** `/api/mobile/patient-login`
+* **Method:** `POST`
+* **Auth Required:** No — this is how the app obtains its token.
+* **Headers:**
+  * `Content-Type: application/json`
+* **Request Body (JSON):**
+  ```json
+  {
+    "phoneNumber": "+15550000000"
+  }
+  ```
+
+### Phone number format
+
+Strictly E.164-like, matching `^\+[1-9]\d{7,14}$`:
+
+* must begin with `+`;
+* the country code cannot start with `0`;
+* digits only after the `+`;
+* 8 to 15 digits in total.
+
+Surrounding whitespace is trimmed. These are **rejected** with `400`, and a
+local-format number is never guessed at:
+
+```text
+5550000000          (no country code)
+555-000-0000        (separators)
+(555) 000-0000      (separators)
++1 555 000 0000     (internal spaces)
++0555000000         (country code starts with 0)
+letters, empty strings, missing field
+```
+
+* **Success Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "token": "<PATIENT_JWT>",
+    "patient": {
+      "id": "<patient-id>"
+    }
+  }
+  ```
+
+  The response deliberately contains nothing else: no patient list, no name,
+  no phone number, no `deviceId`, no caregiver information, and no secrets.
+  After login the app fetches its configuration with the patient token from
+  `GET /api/mobile/reminders`, `/api/mobile/help-contact`, and
+  `/api/mobile/beacons`.
+
+* **Error Response (400 Bad Request — malformed or missing phone number):**
+  ```json
+  {
+    "status": "error",
+    "message": "Validation failed",
+    "code": "VALIDATION_ERROR",
+    "details": {
+      "phoneNumber": ["A valid phone number is required."]
+    }
+  }
+  ```
+
+* **Error Response (404 Not Found — one generic failure):**
+  ```json
+  {
+    "status": "error",
+    "message": "Unable to sign in with the provided information.",
+    "code": "PATIENT_LOGIN_NOT_AVAILABLE"
+  }
+  ```
+
+  This single response covers **all** of: no matching patient, more than one
+  matching patient, and an unusable patient record. The response never reveals
+  whether a number exists, whether several records matched, or which caregiver
+  a patient belongs to. `Patient.phoneNumber` is not unique in the database, so
+  the backend requires an exact single match and refuses to sign a token when
+  the lookup is ambiguous.
+
+* **Error Response (500 Internal Server Error):** returned only for unexpected
+  server failures, with no Prisma, JWT, or connection details in the body.
+
+### Patient token
+
+```json
+{
+  "sub": "<patient-id>",
+  "typ": "patient",
+  "iat": 0,
+  "exp": 0
+}
+```
+
+Send it on every authenticated mobile request:
+
+```http
+Authorization: Bearer <PATIENT_JWT>
+```
+
+The patient token is rejected on the caregiver portal API (`/api/patients/*`
+and friends) and on `GET /api/mobile/patients`.
+
+---
+
+## Auth / Login (caregiver)
 Caregivers log in using this endpoint to retrieve an access token. All mobile sync, telemetry, AI-session, and stream endpoints require that bearer token and an owned `deviceId` where the endpoint accepts one.
 
 * **Path:** `/api/auth/login`
@@ -69,13 +195,58 @@ Caregivers log in using this endpoint to retrieve an access token. All mobile sy
 ---
 
 ## Authorization Header
-For protected endpoints, including every `/api/mobile/*` endpoint, include the retrieved JWT in the request headers:
+For protected endpoints, including every `/api/mobile/*` endpoint except
+`POST /api/mobile/patient-login`, include the retrieved JWT in the request headers:
 
 ```http
 Authorization: Bearer <JWT_TOKEN>
 ```
 
 For each mobile request with a `deviceId`, the backend confirms that device belongs to the JWT's caregiver before reading or writing data. A device owned by another caregiver is returned as `404 Not Found`.
+
+### Which token each route accepts
+
+| Route | Caregiver token | Patient token |
+| --- | --- | --- |
+| `POST /api/mobile/patient-login` | n/a (unauthenticated) | n/a (unauthenticated) |
+| `GET /api/mobile/patients` | ✅ | ❌ `403 CAREGIVER_ONLY` |
+| `GET /api/mobile/reminders` | ✅ (`deviceId` required) | ✅ (`deviceId` not needed) |
+| `GET /api/mobile/help-contact` | ✅ (`deviceId` required) | ✅ (`deviceId` not needed) |
+| `GET /api/mobile/beacons` | ✅ (`deviceId` required) | ✅ (`deviceId` not needed) |
+| `POST /api/mobile/reminder-events` | ✅ (`deviceId` required) | ✅ (`deviceId` not needed) |
+| `POST /api/mobile/help-events` | ✅ (`deviceId` required) | ✅ (`deviceId` not needed) |
+| `POST /api/mobile/beacon-events` | ✅ (`deviceId` required) | ✅ (`deviceId` not needed) |
+| `POST /api/mobile/vital-events` | ✅ (`deviceId` required) | ✅ (`deviceId` not needed) |
+| `POST /api/mobile/stream/start\|stop\|status` | ✅ (`deviceId` required) | ✅ (`deviceId` not needed) |
+| `POST /api/mobile/ai-sessions/start` | ✅ (`deviceId` required) | ✅ (`deviceId` not needed) |
+| `GET /api/mobile/ai-sessions/:id` | ✅ (`deviceId` required) | ✅ (`deviceId` not needed) |
+| `POST /api/mobile/ai-sessions/:id/messages\|resolve\|emergency-suggestion-ack` | ✅ (`deviceId` required) | ✅ (`deviceId` not needed) |
+
+### How the patient is resolved
+
+* **Caregiver token:** the patient is resolved from `caregiverId + deviceId`,
+  exactly as before. `deviceId` remains **required**; omitting it is still a
+  `400 VALIDATION_ERROR` returned before any database lookup.
+* **Patient token:** the patient is resolved from the verified token subject.
+  `deviceId` is **optional and ignored for identity**. A patient app that still
+  sends one is accepted, but the value can never select a different patient —
+  "Patient A's token + Patient B's `deviceId`" always operates on Patient A.
+
+Every downstream resource (reminders, beacons, help contacts, events, streams,
+AI sessions) is scoped to the resolved patient, so a patient token cannot read
+or modify another patient's data. Cross-patient access returns `404 Not Found`
+without revealing that the other record exists.
+
+### Authentication errors
+
+| Status | Code | Meaning |
+| --- | --- | --- |
+| `401` | `MISSING_TOKEN` | no `Authorization: Bearer …` header |
+| `401` | `INVALID_TOKEN` | malformed, tampered, expired, wrongly signed, or an unrecognized `typ` |
+| `403` | `CAREGIVER_ONLY` | a patient token called a caregiver-only route |
+| `404` | `NOT_FOUND` | the resolved patient or the requested resource is not accessible to this actor |
+
+On any `401`, the app must clear its stored token and return to the login screen.
 
 Never send this caregiver JWT to `wss://ai.guardianova.com`. The Anthony WebSocket hello contains only the session identifier documented below.
 
@@ -533,6 +704,42 @@ Arian glasses/phone → Anthony AI server → POST /api/ai-sessions/:sessionId/f
 
 ---
 
+## Security limitations
+
+`POST /api/mobile/patient-login` is **demo/prototype authentication only. It is
+not suitable for real production patient data without SMS OTP, a PIN, or
+another verification factor.**
+
+A phone number is an identifier, not a secret. Anyone who knows or guesses a
+patient's number can obtain a session for that patient. The team has accepted
+this for the student demonstration.
+
+The protections that *are* implemented:
+
+* strict E.164-like format validation before any lookup;
+* exact single-record matching — a duplicated number signs no token;
+* one generic failure response for every unusable outcome, so registered
+  numbers cannot be enumerated;
+* no patient list, patient name, or caregiver data in any login response;
+* patient identity taken from the verified token, never from a client-supplied
+  `deviceId`;
+* patient tokens rejected on caregiver-only routes;
+* no phone numbers, patient data, or raw tokens written to logs.
+
+Deliberately **not** included (out of scope unless the team asks):
+
+* SMS/WhatsApp OTP delivery, and any second factor;
+* rate limiting on the login route — recommended before any real deployment,
+  since nothing currently throttles phone-number guessing;
+* refresh tokens, token revocation, a blacklist, or a persistent session store.
+  A patient token stays valid until it expires (`JWT_EXPIRES_IN`, default `7d`);
+  logout is client-side only.
+* a `@unique` constraint on `Patient.phoneNumber`. The column is still
+  nullable, non-unique, and non-normalized. Exact-single-match at login is what
+  prevents a wrong-patient session today. A production version would need a
+  unique or normalized indexed column, added only after auditing existing data
+  for duplicates and nulls.
+
 ## Not Implemented / TODO, if any
 
-* **`GET /api/mobile/patient-config`** is **NOT** implemented in the backend router. Use `GET /api/mobile/reminders`, `GET /api/mobile/beacons`, and `GET /api/mobile/help-contact` to sync settings individually.
+* **`GET /api/mobile/patient-config`** is **NOT** implemented in the backend router. Use `GET /api/mobile/reminders`, `GET /api/mobile/beacons`, and `GET /api/mobile/help-contact` to sync settings individually. A patient token gets exactly the same three calls, without needing a `deviceId`.

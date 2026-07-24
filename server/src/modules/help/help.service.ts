@@ -1,11 +1,14 @@
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../middleware/error.middleware";
-import { findPatientForCaregiverDevice } from "../patients/patient.service";
+import { resolveMobilePatient } from "../patients/patient.service";
+import type { MobileActor } from "../mobile/mobile-auth.service";
+import type {
+  MobileHelpContactInput,
+  MobileHelpEventInput,
+} from "../mobile/mobile.schemas";
 import type {
   CreateHelpContactInput,
-  CreateHelpEventMobileInput,
   ListHelpEventsQuery,
-  MobileHelpContactQuery,
 } from "./help.schemas";
 
 async function verifyPatientOwnership(patientId: string, caregiverId: string) {
@@ -112,13 +115,10 @@ export async function listHelpEvents(
 }
 
 export async function getMobileHelpContact(
-  caregiverId: string,
-  query: MobileHelpContactQuery
+  actor: MobileActor,
+  query: MobileHelpContactInput
 ) {
-  const patient = await findPatientForCaregiverDevice(
-    caregiverId,
-    query.deviceId
-  );
+  const patient = await resolveMobilePatient(actor, query.deviceId);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const helpContact = await (prisma as any).helpContact.findFirst({
@@ -143,13 +143,10 @@ export async function getMobileHelpContact(
 }
 
 export async function createMobileHelpEvent(
-  caregiverId: string,
-  input: CreateHelpEventMobileInput
+  actor: MobileActor,
+  input: MobileHelpEventInput
 ) {
-  const patient = await findPatientForCaregiverDevice(
-    caregiverId,
-    input.deviceId
-  );
+  const patient = await resolveMobilePatient(actor, input.deviceId);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const hc = (prisma as any).helpContact;

@@ -12,7 +12,7 @@ export const startMobileStreamSession = asyncHandler(
   async (req: Request, res: Response) => {
     const input = startStreamSessionSchema.parse(req.body);
     const session = await streamService.startMobileStreamSession(
-      req.caregiverId!,
+      { actorType: "caregiver", caregiverId: req.caregiverId! },
       input
     );
     res.status(201).json({ success: true, data: session });
@@ -23,7 +23,7 @@ export const stopMobileStreamSession = asyncHandler(
   async (req: Request, res: Response) => {
     const input = stopStreamSessionSchema.parse(req.body);
     const session = await streamService.stopMobileStreamSession(
-      req.caregiverId!,
+      { actorType: "caregiver", caregiverId: req.caregiverId! },
       input
     );
     res.status(200).json({ success: true, data: session });
@@ -34,7 +34,7 @@ export const updateMobileStreamStatus = asyncHandler(
   async (req: Request, res: Response) => {
     const input = updateStreamStatusSchema.parse(req.body);
     const session = await streamService.updateMobileStreamStatus(
-      req.caregiverId!,
+      { actorType: "caregiver", caregiverId: req.caregiverId! },
       input
     );
     res.status(200).json({ success: true, data: session });

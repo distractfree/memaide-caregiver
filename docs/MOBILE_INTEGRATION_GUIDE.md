@@ -8,11 +8,83 @@ During local development, point your mobile app's networking client to the backe
 
 Production portal and API base URL: `https://caregiver.guardianova.com`
 
-## Authentication / Device Identification
+## Which flow are you building?
+
+There are two authentication flows. **The patient-facing Android app uses the
+patient flow.** The caregiver flow is documented after it for existing
+integrations and is unchanged.
+
+---
+
+## Patient flow (patient-facing Android app)
+
+The patient enters **their own phone number**. The app never shows a patient
+list and never asks the patient to choose a patient.
+
+> **Demo/prototype authentication only.** A phone number is not a secret.
+> Not suitable for real production patient data without SMS OTP or a PIN.
+> See `docs/MOBILE_API_CONTRACT.md` → "Security limitations".
+
+### App flow
+
+```text
+App starts
+→ read stored patient token
+→ if a token exists, call a patient endpoint (e.g. GET /api/mobile/reminders)
+   → accepted        → continue into the app
+   → 401             → clear the stored token, show the login screen
+→ if no token        → show the login screen
+→ patient enters their phone number in E.164 form (e.g. +15550000000)
+→ POST /api/mobile/patient-login
+→ store the returned token securely
+→ fetch reminders / help contact / beacons using the patient token
+```
+
+### Login request
+
+- **POST** `/api/mobile/patient-login` — no `Authorization` header.
+  ```json
+  { "phoneNumber": "+15550000000" }
+  ```
+- **200 OK:**
+  ```json
+  {
+    "success": true,
+    "token": "<PATIENT_JWT>",
+    "patient": { "id": "<patient-id>" }
+  }
+  ```
+- **400 `VALIDATION_ERROR`** — the number is missing or not E.164
+  (`^\+[1-9]\d{7,14}$`). Prompt the patient to re-enter it.
+- **404 `PATIENT_LOGIN_NOT_AVAILABLE`** — show the generic message
+  *"Unable to sign in with the provided information."* The backend
+  intentionally does not distinguish "unknown number" from "duplicate number",
+  so the app must not try to explain which happened.
+
+### Using the patient token
+
+- Send `Authorization: Bearer <PATIENT_JWT>` on every authenticated mobile request.
+- **Do not send a `deviceId`.** The token identifies the patient. If the app
+  still sends one it is accepted but ignored for identity — it can never select
+  a different patient.
+- **Do not call `GET /api/mobile/patients`.** It returns `403 CAREGIVER_ONLY`
+  for a patient token.
+- **Do not store a caregiver JWT** in the patient app.
+- On any `401`, clear the stored token and return to the login screen.
+- On local logout/reset, clear the stored token.
+- Never send this token to `wss://ai.guardianova.com`, never send the callback
+  API key from the app, and never include raw tokens in logs or screenshots.
+
+Everything else in this guide works identically with a patient token — just
+omit the `deviceId` query parameter or body field.
+
+---
+
+## Caregiver flow (existing integrations — unchanged)
 Every `/api/mobile/*` endpoint requires the logged-in caregiver's bearer JWT.
 - Send `Authorization: Bearer <JWT_TOKEN>` on every mobile request, including telemetry and stream updates.
-- `GET /api/mobile/patients` returns the logged-in caregiver's patient `deviceId` values.
-- Send the `deviceId` with every `deviceId`-based request.
+- `GET /api/mobile/patients` returns the logged-in caregiver's patient `deviceId` values. This route remains caregiver-only.
+- Send the `deviceId` with every `deviceId`-based request. It is still required for caregiver tokens.
 - For `GET` requests, append it as a query parameter: `?deviceId=android-demo-001`
 - For `POST` requests, include it in the JSON body: `{ "deviceId": "android-demo-001", ... }`
 - The backend verifies that the supplied device belongs to the authenticated caregiver before reading or writing data. A cross-caregiver device is returned as `404 Not Found`.
@@ -23,11 +95,13 @@ Every `/api/mobile/*` endpoint requires the logged-in caregiver's bearer JWT.
 Fetch configuration and settings that the caregiver has set up in the web portal.
 Every endpoint in this guide requires `Authorization: Bearer <JWT_TOKEN>` in addition to the documented `deviceId` input where applicable.
 
-### Lookup Patients After Login
+### Lookup Patients After Login (caregiver tokens only)
 - **GET** `/api/mobile/patients`
-- **Headers:** `Authorization: Bearer <JWT_TOKEN>`
+- **Headers:** `Authorization: Bearer <CAREGIVER_JWT>`
 - **Purpose:** Retrieve the logged-in caregiver's patients with `id`, `name`, and `deviceId`.
 - **Flow:** After login, call this endpoint, choose the correct patient/deviceId, then use that `deviceId` with `/api/mobile/reminders?deviceId=...`.
+- **The patient-facing app must not call this.** A patient token receives
+  `403 CAREGIVER_ONLY`; the patient app has no patient-selection step at all.
 - **Example Response:**
   ```json
   {
