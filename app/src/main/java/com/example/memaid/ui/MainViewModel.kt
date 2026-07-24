@@ -53,9 +53,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
     val patientName: StateFlow<String> = _patientName.asStateFlow()
 
-    private val _patients = MutableStateFlow(FakeDataRepository.getFakePatients())
-    val patients: StateFlow<List<Patient>> = _patients.asStateFlow()
-
     private val _loginError = MutableStateFlow<String?>(null)
     val loginError: StateFlow<String?> = _loginError.asStateFlow()
 
@@ -152,18 +149,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // TODO: send to backend via repository in live mode (Week 8 integration)
     }
 
-    fun login(email: String, password: String, onSuccess: () -> Unit) {
-        if (email.isBlank() || password.isBlank()) {
-            _loginError.value = "Please enter your email and password."
+    // Patient login: phone number only, no password. The phone must include a leading "+"
+    // and country code (e.g. "+11234567890"). On success we store the token (used as the
+    // Bearer credential for every api/mobile/* call) and the patient id; the patient's name
+    // is filled in later from the first reminders fetch.
+    fun loginWithPhone(phoneNumber: String, onSuccess: () -> Unit) {
+        // Send clean E.164: leading "+" then digits only. Strip spaces, dashes, and parens
+        // the user may have typed so "+1 (415) 555-0100" becomes "+14155550100".
+        val phone = phoneNumber.trim().replace(Regex("[\\s()\\-.]"), "")
+        if (phone.isBlank()) {
+            _loginError.value = "Please enter your phone number."
+            return
+        }
+        if (!phone.startsWith("+")) {
+            _loginError.value = "Include your country code, e.g. +1 415 555 0100."
             return
         }
 
         viewModelScope.launch {
-            val result = ReminderRepository.login(email, password)
+            val result = ReminderRepository.patientLogin(phone)
             result.fold(
                 onSuccess = { response ->
                     sessionManager.saveToken(response.token)
-                    sessionManager.saveCaregiverName(response.name)
+                    sessionManager.savePatientId(response.patient.id)
                     _loginError.value = null
                     onSuccess()
                 },
@@ -172,15 +180,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             )
         }
-    }
-
-    fun selectPatient(patient: Patient, onSuccess: () -> Unit) {
-        sessionManager.saveSelectedPatient(patient.patientId, patient.name)
-        println("💾 Selecting patient: ${patient.name}, deviceId=${patient.deviceId}")
-        // Save the real device ID so reminders load for THIS patient
-        patient.deviceId?.let { sessionManager.saveDeviceId(it) }
-        _patientName.value = patient.name
-        onSuccess()
     }
 
     fun logout() {
@@ -198,14 +197,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         setStatus(reminderId, ReminderStatus.ACKNOWLEDGED)
 
         viewModelScope.launch {
-            val deviceId = sessionManager.getDeviceId()
-            if (deviceId == null) {
+            if (!sessionManager.isLoggedIn()) {
                 setStatus(reminderId, previousStatus)
-                println("⚠️ No patient selected — ack not sent")
+                println("⚠️ Not logged in — ack not sent")
                 return@launch
             }
             val result = ReminderRepository.sendAck(
-                deviceId, reminderId, sourceDevice, reminder.timeOfDay
+                reminderId, sourceDevice, reminder.timeOfDay
             )
             result.fold(
                 onSuccess = {
@@ -237,31 +235,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendHelpEvent(sourceDevice: String = "phone") {
         viewModelScope.launch {
-            val deviceId = sessionManager.getDeviceId()
-            if (deviceId == null) {
-                println("⚠️ No patient selected — help event not sent")
+            if (!sessionManager.isLoggedIn()) {
+                println("⚠️ Not logged in — help event not sent")
                 return@launch
             }
             val whatsapp = FakeDataRepository.CAREGIVER_WHATSAPP_NUMBER.let { "+$it" }
-            val result = ReminderRepository.sendHelp(deviceId, sourceDevice, whatsapp)
+            val result = ReminderRepository.sendHelp(sourceDevice, whatsapp)
             result.fold(
                 onSuccess = { println("✅ Help event sent") },
                 onFailure = { error -> println("⚠️ Help failed: ${error.message}") }
-            )
-        }
-    }
-
-    fun loadPatients() {
-        viewModelScope.launch {
-            val result = ReminderRepository.getPatients()
-            result.fold(
-                onSuccess = { patientList ->
-                    _patients.value = patientList
-                    println("✅ Loaded ${patientList.size} patients")
-                },
-                onFailure = { error ->
-                    println("⚠️ Failed to load patients: ${error.message}")
-                }
             )
         }
     }
@@ -298,18 +280,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadRemindersFromBackend() {
         viewModelScope.launch {
-            val deviceId = sessionManager.getDeviceId()
-            if (deviceId == null) {
-                println("⚠️ No patient selected — not loading reminders")
+            if (!sessionManager.isLoggedIn()) {
+                println("⚠️ Not logged in — not loading reminders")
                 return@launch
             }
-            println("📋 Loading reminders for deviceId=$deviceId")
-            val result = ReminderRepository.getRemindersWithPatient(deviceId)
+            println("📋 Loading reminders for the logged-in patient")
+            // Patient is resolved from the Bearer token; no deviceId is passed.
+            val result = ReminderRepository.getRemindersWithPatient()
             result.fold(
                 onSuccess = { (patientName, serverReminders) ->
-                    // Save and show the real patient name from the backend
+                    // Save and show the real patient name that the backend returns.
                     if (patientName.isNotBlank()) {
-                        sessionManager.saveSelectedPatient(deviceId, patientName)
+                        val patientId = sessionManager.getPatientId() ?: ""
+                        sessionManager.saveSelectedPatient(patientId, patientName)
                         _patientName.value = patientName
                     }
                     val acknowledgedIds = sessionManager.getAcknowledgedIds()

@@ -37,8 +37,12 @@ object ApiClient {
     // restarts (services can fire before any login flow runs).
     private val authInterceptor = Interceptor { chain ->
         val original = chain.request()
+        // patient-login is the call that MINTS the token — it must never carry an
+        // Authorization header. A stale token left in prefs (from a prior login/demo run)
+        // would otherwise be attached here and the backend rejects the login with 401.
+        val isLogin = original.url.encodedPath.endsWith("/api/mobile/patient-login")
         val token = appContext?.let { SessionManager(it).getToken() }
-        val request = if (!token.isNullOrBlank()) {
+        val request = if (!isLogin && !token.isNullOrBlank()) {
             original.newBuilder()
                 .header("Authorization", "Bearer $token")
                 .build()

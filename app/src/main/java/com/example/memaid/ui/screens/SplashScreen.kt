@@ -17,15 +17,16 @@ import kotlinx.coroutines.delay
 fun SplashScreen(
     viewModel: MainViewModel,
     onNavigateToLogin: () -> Unit,
-    onNavigateToPatientSelect: () -> Unit,
     onNavigateToHome: () -> Unit
 ) {
     LaunchedEffect(Unit) {
         delay(1000)
-        when {
-            !viewModel.sessionManager.isLoggedIn() -> onNavigateToLogin()
-            !viewModel.sessionManager.hasSelectedPatient() -> onNavigateToPatientSelect()
-            else -> onNavigateToHome()
+        // The token (saved at phone login) is all we need — it identifies the patient, so a
+        // logged-in patient goes straight to their reminders.
+        if (viewModel.sessionManager.isLoggedIn()) {
+            onNavigateToHome()
+        } else {
+            onNavigateToLogin()
         }
     }
 

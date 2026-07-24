@@ -92,11 +92,6 @@ fun MemAideNavigation(viewModel: MainViewModel, openReminderId: String? = null) 
                         popUpTo(Screen.Splash.route) { inclusive = true }
                     }
                 },
-                onNavigateToPatientSelect = {
-                    navController.navigate(Screen.PatientSelect.route) {
-                        popUpTo(Screen.Splash.route) { inclusive = true }
-                    }
-                },
                 onNavigateToHome = {
                     navController.navigate(Screen.Home.route) {
                         popUpTo(Screen.Splash.route) { inclusive = true }
@@ -109,22 +104,10 @@ fun MemAideNavigation(viewModel: MainViewModel, openReminderId: String? = null) 
             LoginScreen(
                 viewModel = viewModel,
                 onLoginSuccess = {
-                    navController.navigate(Screen.PatientSelect.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
-                    }
-                }
-            )
-        }
-
-        composable(Screen.PatientSelect.route) {
-            LaunchedEffect(Unit) {
-                viewModel.loadPatients()
-            }
-            PatientSelectScreen(
-                viewModel = viewModel,
-                onPatientSelected = {
+                    // Phone login already identified the patient (via the token), so go
+                    // straight to their reminders — no patient-select step.
                     navController.navigate(Screen.Home.route) {
-                        popUpTo(Screen.PatientSelect.route) { inclusive = true }
+                        popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 }
             )

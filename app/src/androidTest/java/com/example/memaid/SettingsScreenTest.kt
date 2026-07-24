@@ -34,7 +34,7 @@ class SettingsScreenTest {
     fun keptControls_areDisplayed() {
         setSettings()
         composeRule.onNodeWithText("Register Glasses").assertIsDisplayed()
-        composeRule.onNodeWithText("Device ID").assertIsDisplayed()
+        composeRule.onNodeWithText("Patient ID").assertIsDisplayed()
         composeRule.onNodeWithText("Logout").assertIsDisplayed()
     }
 

@@ -3,7 +3,6 @@ package com.example.memaid.navigation
 sealed class Screen(val route: String) {
     object Splash : Screen("splash")
     object Login : Screen("login")
-    object PatientSelect : Screen("patient_select")
 
     object Home : Screen("home")
     object ReminderList : Screen("reminder_list")
