@@ -120,6 +120,7 @@ class PhoneListenerService : WearableListenerService() {
 
     private val channelScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val voiceBridge = VoiceBridge()
+    private var glassesJob: kotlinx.coroutines.Job? = null
 
     override fun onChannelOpened(channel: ChannelClient.Channel) {
         if (channel.path != "/help_audio_stream") return
@@ -207,6 +208,14 @@ class PhoneListenerService : WearableListenerService() {
             )
         }
 
+        // Auto-include glasses vision on the watch-started session too, when Meta glasses are
+        // connected to the phone over Bluetooth. GlassesCapture degrades gracefully if the stream
+        // can't open, so audio is unaffected.
+        if (GlassesBluetooth.glassesConnected(applicationContext)) {
+            Log.d("PhoneListener", "glasses connected — attaching vision to watch session")
+            glassesJob = GlassesCapture.start(applicationContext, voiceBridge, channelScope)
+        }
+
         // STEP 3: Read watch audio and forward to the WebSocket
         channelScope.launch {
             var total = 0L
@@ -269,6 +278,8 @@ class PhoneListenerService : WearableListenerService() {
         appSpecificErrorCode: Int
     ) {
         if (channel.path == "/help_audio_stream") {
+            glassesJob?.cancel()
+            glassesJob = null
             HelpSessionManager.release(HelpSessionManager.Owner.WATCH)
             Log.d("PhoneListener", "Audio channel closed, reason=$closeReason")
         }
