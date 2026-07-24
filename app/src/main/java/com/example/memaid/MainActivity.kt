@@ -162,13 +162,9 @@ fun MemAideNavigation(viewModel: MainViewModel, openReminderId: String? = null) 
                 onReminderClick = { reminderId ->
                     navController.navigate(Screen.ReminderDetail.createRoute(reminderId))
                 },
-                onHelpClick = {
-                    navController.navigate(Screen.Help.route)
-                },
                 onSettingClick = {
                     navController.navigate(Screen.Settings.route)
                 },
-
             )
         }
 
@@ -189,13 +185,6 @@ fun MemAideNavigation(viewModel: MainViewModel, openReminderId: String? = null) 
             val reminderId = backStackEntry.arguments?.getString("reminderId") ?: ""
             ReminderDetailScreen(
                 reminderId = reminderId,
-                viewModel = viewModel,
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(Screen.Help.route) {
-            HelpScreen(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() }
             )
