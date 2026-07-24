@@ -39,11 +39,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Nothing is pushed to the watch until the real list has been loaded at least once.
     private var remindersLoaded = false
 
-    private val _currentRoom = MutableStateFlow("Unknown")
+    private val _currentRoom = MutableStateFlow("Kitchen")
     val currentRoom: StateFlow<String> = _currentRoom.asStateFlow()
 
     private val _watchConnected = MutableStateFlow(false)
     val watchConnected: StateFlow<Boolean> = _watchConnected.asStateFlow()
+
+    private val _glassesConnected = MutableStateFlow(false)
+    val glassesConnected: StateFlow<Boolean> = _glassesConnected.asStateFlow()
 
     private val _patientName = MutableStateFlow(
         sessionManager.getPatientName() ?: "Patient"
@@ -87,6 +90,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 } catch (e: Exception) {
                     false
                 }
+                // Same cheap poll for the glasses link (Bluetooth), so the UI reflects it.
+                _glassesConnected.value =
+                    com.example.memaid.data.GlassesBluetooth.glassesConnected(getApplication())
                 delay(5_000)
             }
         }

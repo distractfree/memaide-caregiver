@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -44,6 +45,7 @@ fun HomeScreen(
     val reminders by viewModel.reminders.collectAsState()
     val currentRoom by viewModel.currentRoom.collectAsState()
     val watchConnected by viewModel.watchConnected.collectAsState()
+    val glassesConnected by viewModel.glassesConnected.collectAsState()
     val patientName by viewModel.patientName.collectAsState()
 
     val context = LocalContext.current
@@ -178,6 +180,13 @@ fun HomeScreen(
                         label = "Watch",
                         value = if (watchConnected) "Connected" else "Not Connected",
                         valueColor = if (watchConnected) Color(0xFF2E7D32) else Color(0xFFC62828)
+                    )
+                    StatusCard(
+                        modifier = Modifier.weight(1f),
+                        icon = { Icon(Icons.Default.Visibility, contentDescription = null) },
+                        label = "Glasses",
+                        value = if (glassesConnected) "Connected" else "Not Connected",
+                        valueColor = if (glassesConnected) Color(0xFF2E7D32) else Color(0xFFC62828)
                     )
                 }
             }
