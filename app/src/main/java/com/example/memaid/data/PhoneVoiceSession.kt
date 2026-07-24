@@ -6,13 +6,10 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
 import android.util.Log
-import com.example.memaid.video.FrameEncoder
-import com.example.memaid.video.GlassesFrameSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 // Phone-only voice test session: starts an AI session via the backend (same call the watch
@@ -88,7 +85,7 @@ object PhoneVoiceSession {
                         """{"type":"${session.helloMessage.type}","session_id":"${session.helloMessage.session_id}"}"""
                     voiceBridge.connectWithHello(session.websocketUrl, helloJson)
 
-                    if (withGlasses) startGlassesCapture(appCtx)
+                    if (withGlasses) framesJob = GlassesCapture.start(appCtx, voiceBridge, scope)
 
                     val endpointer = SpeechEndpointer()
                     mic = PhoneMicStreamer { buf, n ->
@@ -107,37 +104,6 @@ object PhoneVoiceSession {
             )
         }
         return true
-    }
-
-    // Meta glasses camera -> JPEG data-URL -> same session WebSocket (server vision pipeline).
-    // Needs one-time registration (Settings > Register Glasses) + the Wearables CAMERA permission;
-    // GlassesFrameSource throws if not ready, which we log and swallow so audio keeps running.
-    private fun startGlassesCapture(appCtx: Context) {
-        framesJob = scope.launch {
-            try {
-                Log.d("PhoneVoice", "starting glasses frame capture")
-                val encoder = FrameEncoder()
-                val source = GlassesFrameSource(appCtx)
-                var frameCount = 0
-                encoder.encode(source.frames()).collect { dataUrl ->
-                    frameCount++
-                    // First frame + every 30th: confirms capture is producing frames and whether
-                    // the WS is up to receive them (sendFrame no-ops while disconnected).
-                    if (frameCount == 1 || frameCount % 30 == 0) {
-                        Log.d(
-                            "PhoneVoice",
-                            "glasses frame #$frameCount wsConnected=${voiceBridge.isConnected} bytes=${dataUrl.length}"
-                        )
-                    }
-                    voiceBridge.sendFrame(dataUrl)
-                }
-                Log.w("PhoneVoice", "glasses frame flow ended after $frameCount frame(s)")
-            } catch (e: Exception) {
-                // Full stack: this is where "no video frames" originates — session/stream setup
-                // in GlassesFrameSource (not-registered, session never STARTED, addStream failure).
-                Log.e("PhoneVoice", "glasses capture FAILED: ${e.message}", e)
-            }
-        }
     }
 
     fun stop() {
