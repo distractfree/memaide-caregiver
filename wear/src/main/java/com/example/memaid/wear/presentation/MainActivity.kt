@@ -141,6 +141,17 @@ fun WearApp(vitals: VitalsSensorManager) {
             }
         }
 
+        // The phone's "Call Caregiver" asked us to end our session before it dials.
+        val endSignals by WatchSessionStatus.endSignals.collectAsState()
+        LaunchedEffect(endSignals) {
+            if (endSignals > 0) {
+                Log.d("WatchMain", "end signal #$endSignals - tearing down stream")
+                audioStreamer.stopStream()
+                streaming = false
+                helpStatus = "Session ended"
+            }
+        }
+
         AppScaffold {
             val listState = rememberTransformingLazyColumnState()
 
@@ -234,7 +245,7 @@ fun WearApp(vitals: VitalsSensorManager) {
                         Button(
                             onClick = {
                                 if (!streaming) {
-                                    helpStatus = "Help request sent"
+                                    helpStatus = null
                                     scope.launch {
                                         WatchMessenger.sendMessage(context, "/help", "help_pressed")
                                     }
@@ -264,6 +275,16 @@ fun WearApp(vitals: VitalsSensorManager) {
                     item {
                         Button(
                             onClick = {
+                                // End any open session first: stop our own stream (if any) and tell
+                                // the phone to end a session it might own, then dial.
+                                if (streaming) {
+                                    audioStreamer.stopStream()
+                                    streaming = false
+                                }
+                                scope.launch {
+                                    WatchMessenger.sendMessage(context, "/end_session", "call_caregiver")
+                                }
+                                helpStatus = "Calling caregiver"
                                 val number = "+16614370992" // caregiver number
                                 val callIntent = android.content.Intent(
                                     android.content.Intent.ACTION_CALL,

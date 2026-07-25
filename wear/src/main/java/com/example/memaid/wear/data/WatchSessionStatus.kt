@@ -15,4 +15,13 @@ object WatchSessionStatus {
     fun signalBusy() {
         _busySignals.value = _busySignals.value + 1
     }
+
+    // One-shot signal that the phone asked us to end our session (its "Call Caregiver" was
+    // pressed). Handled like busy — the UI tears its stream down — but with a neutral status.
+    private val _endSignals = MutableStateFlow(0)
+    val endSignals: StateFlow<Int> = _endSignals.asStateFlow()
+
+    fun signalEnd() {
+        _endSignals.value = _endSignals.value + 1
+    }
 }

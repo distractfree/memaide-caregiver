@@ -1,9 +1,13 @@
 package com.example.memaid.ui.screens
 
 import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,7 +27,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.memaid.data.FakeDataRepository
 import com.example.memaid.data.GlassesBluetooth
+import com.example.memaid.data.HelpSessionController
 import com.example.memaid.data.PhoneVoiceSession
 import com.example.memaid.data.Reminder
 import com.example.memaid.data.ReminderStatus
@@ -57,7 +63,45 @@ fun HomeScreen(
     var sessionBusy by remember { mutableStateOf(false) }
     var glassesNotice by remember { mutableStateOf<String?>(null) }
     var useGlasses by remember { mutableStateOf(false) }
-    var helpSent by remember { mutableStateOf(false) }
+    var callStatus by remember { mutableStateOf<String?>(null) }
+
+    fun placeCaregiverCall(direct: Boolean) {
+        val action = if (direct) Intent.ACTION_CALL else Intent.ACTION_DIAL
+        try {
+            context.startActivity(
+                Intent(action, Uri.parse("tel:${FakeDataRepository.CAREGIVER_PHONE_NUMBER}"))
+            )
+        } catch (e: Exception) {
+            Log.e("HomeScreen", "caregiver call failed: ${e.message}")
+        }
+    }
+
+    // CALL_PHONE lets us dial directly (like the watch). If denied, fall back to the dialer.
+    val callPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            callStatus = "Calling caregiver"
+            placeCaregiverCall(direct = true)
+        } else {
+            callStatus = "Call permission needed"
+            placeCaregiverCall(direct = false)
+        }
+    }
+
+    fun onCallCaregiver() {
+        // End any open AI session (phone- or watch-owned) before dialing.
+        HelpSessionController.endAll(context)
+        sessionActive = false
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            callStatus = "Calling caregiver"
+            placeCaregiverCall(direct = true)
+        } else {
+            callPermission.launch(Manifest.permission.CALL_PHONE)
+        }
+    }
 
     // Glasses camera access is a Wearables permission (granted via the Meta AI app), separate
     // from Android CAMERA. Requested only when glasses are actually connected.
@@ -218,14 +262,11 @@ fun HomeScreen(
                 }
             }
 
-            // Call Caregiver posts the backend help event (neutral styling to distinguish it
-            // from the red HELP toggle).
+            // Call Caregiver ends any open AI session, then calls the caregiver (neutral styling
+            // to distinguish it from the red HELP toggle).
             item {
                 Button(
-                    onClick = {
-                        viewModel.sendHelpEvent(sourceDevice = "phone")
-                        helpSent = true
-                    },
+                    onClick = { onCallCaregiver() },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(64.dp)
@@ -251,16 +292,9 @@ fun HomeScreen(
                 }
             }
 
-            if (helpSent) {
+            callStatus?.let { status ->
                 item {
-                    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))) {
-                        Text(
-                            text = "Help request sent to your caregiver.",
-                            modifier = Modifier.padding(16.dp),
-                            textAlign = TextAlign.Center,
-                            color = Color(0xFFE65100)
-                        )
-                    }
+                    DismissibleNotice(text = status, onDismiss = { callStatus = null })
                 }
             }
 

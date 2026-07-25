@@ -26,6 +26,12 @@ class DataLayerListenerService : WearableListenerService() {
             Log.d("WatchDataLayer", "/session_busy received - signaling busy to UI")
             WatchSessionStatus.signalBusy()
         }
+
+        // The phone's "Call Caregiver" asks us to end our session before it dials.
+        if (path == "/end_session") {
+            Log.d("WatchDataLayer", "/end_session received - signaling end to UI")
+            WatchSessionStatus.signalEnd()
+        }
     }
 
     override fun onDataChanged(events: DataEventBuffer) {

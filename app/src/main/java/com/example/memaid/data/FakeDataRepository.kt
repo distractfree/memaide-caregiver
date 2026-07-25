@@ -16,6 +16,9 @@ object FakeDataRepository {
     const val PATIENT_ID = "p123"
     const val CAREGIVER_WHATSAPP_NUMBER = "11234567890"
 
+    // Dialed by "Call Caregiver" (ACTION_CALL). E.164 with leading "+". Matches the watch.
+    const val CAREGIVER_PHONE_NUMBER = "+16614370992"
+
     // Your two physical KBeacons, mapped to rooms.
     // Same UUID, distinguished by Minor.
     const val BEACON_UUID = "E2C56DB5-DFFB-48D2-B060-D0F5A71096E0"

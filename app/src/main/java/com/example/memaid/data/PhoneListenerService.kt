@@ -57,6 +57,13 @@ class PhoneListenerService : WearableListenerService() {
                 }
             }
 
+            "/end_session" -> {
+                // The watch's "Call Caregiver" asks us to end any phone-owned session before it
+                // dials. No-op if the phone isn't running one.
+                Log.d("PhoneListener", "🛑 End session requested from watch")
+                PhoneVoiceSession.stop()
+            }
+
             "/reminder_ack" -> {
                 // payload format: "reminderId|timeOfDay" e.g. "cmqlub367...|08:00"
                 val parts = data.split("|")
