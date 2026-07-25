@@ -139,6 +139,50 @@ describe('AiSessionsSection', () => {
     expect(screen.queryByRole('button', { name: 'Join session' })).not.toBeInTheDocument()
   })
 
+  it('renders the caregiver summary the AI conclude callback stored', async () => {
+    // Exactly what the backend persists when Anthony's conclude callback ships
+    // its optional `summary` field, rather than the generated fallback line.
+    const aiSummary =
+      'Rose could not find her pills and stayed calm; her caregiver was notified and confirmed she is safe.'
+    listAiSessions.mockResolvedValue([
+      makeSession({
+        id: 's-concluded',
+        status: 'resolved',
+        endedAt: '2026-07-13T04:05:00.000Z',
+        summary: aiSummary,
+        isJoinable: false,
+        displayStatus: 'Resolved',
+      }),
+    ])
+
+    render(<AiSessionsSection patientId="patient-1" />)
+
+    expect(await screen.findByText(aiSummary)).toBeInTheDocument()
+    // The placeholder belongs only to sessions with no summary at all.
+    expect(screen.queryByText('No summary recorded yet.')).not.toBeInTheDocument()
+  })
+
+  it('shows the no-summary placeholder only for sessions without a summary', async () => {
+    listAiSessions.mockResolvedValue([
+      makeSession({
+        id: 's-with-summary',
+        status: 'resolved',
+        endedAt: '2026-07-13T04:05:00.000Z',
+        summary: 'AI session concluded with outcome patient_ended. Final scene: kitchen.',
+        isJoinable: false,
+        displayStatus: 'Resolved',
+      }),
+      makeSession({ id: 's-no-summary', summary: null, displayStatus: 'Active' }),
+    ])
+
+    render(<AiSessionsSection patientId="patient-1" />)
+
+    await screen.findByText(
+      'AI session concluded with outcome patient_ended. Final scene: kitchen.',
+    )
+    expect(screen.getAllByText('No summary recorded yet.')).toHaveLength(1)
+  })
+
   it('switching the history range refetches with a wider query', async () => {
     listAiSessions.mockResolvedValue([
       makeSession({ id: 's-resolved', status: 'resolved', isJoinable: false, displayStatus: 'Resolved' }),

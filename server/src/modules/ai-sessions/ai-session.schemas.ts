@@ -231,6 +231,22 @@ export const aiSessionConcludeCallbackSchema = z.object({
   escalated: z.boolean(),
   status: z.string().trim().min(1),
   outcome: z.string().trim().min(1),
+  // Optional caregiver-facing summary produced by the AI backend from the
+  // patient conversation. It lands in the same AiSession.summary column as a
+  // caregiver-entered resolution summary, so it reuses that column's single
+  // authoritative length cap instead of introducing a second limit. Absent and
+  // explicitly null both mean "no summary"; a blank/whitespace-only string is
+  // rejected rather than silently persisted as an empty summary.
+  summary: z
+    .string()
+    .trim()
+    .min(1, "summary cannot be empty")
+    .max(
+      CAREGIVER_RESOLVE_SUMMARY_MAX_LENGTH,
+      `summary must be at most ${CAREGIVER_RESOLVE_SUMMARY_MAX_LENGTH} characters`
+    )
+    .nullable()
+    .optional(),
 });
 
 export type StartAiSessionInput = z.infer<typeof startAiSessionSchema>;

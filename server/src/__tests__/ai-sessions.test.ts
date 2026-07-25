@@ -62,6 +62,7 @@ import {
   getLatestFrame,
   resetLatestFrameStoreForTests,
 } from "../modules/ai-sessions/latest-ai-frame.store";
+import { CAREGIVER_RESOLVE_SUMMARY_MAX_LENGTH } from "../modules/ai-sessions/ai-session.schemas";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const p = prisma as any;
@@ -130,6 +131,13 @@ const concludeBody = {
   status: "ended",
   outcome: "patient_ended",
 };
+
+// Optional caregiver summary Anthony may attach to a conclude callback, and the
+// generated line the backend still stores when that field is absent or null.
+const caregiverSummary =
+  "Rose could not find her pills and stayed calm; her caregiver was notified and confirmed she is safe.";
+const fallbackConcludeSummary =
+  "AI session concluded with outcome patient_ended. Final scene: kitchen.";
 
 const patientContext = {
   id: patientId,
@@ -1231,6 +1239,256 @@ describe("AI Sessions (Backend Implementation)", () => {
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ success: true });
       expect(p.aiSessionMessage.create).not.toHaveBeenCalled();
+    });
+
+    it("conclude callback stores an AI-provided caregiver summary verbatim", async () => {
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        patientId,
+        status: "active",
+        endedAt: null,
+        metadata: { sourceDevice: "phone" },
+      });
+      p.aiSessionMessage.create.mockResolvedValue({});
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/conclude`)
+        .set("X-Api-Key", aiCallbackApiKey)
+        .send({ ...concludeBody, summary: caregiverSummary });
+
+      expect(res.status).toBe(200);
+      expect(p.aiSession.updateMany).toHaveBeenCalledWith({
+        where: { id: aiSessionId, status: "active", endedAt: null },
+        // Persisted exactly as sent — never rewritten into the generated line.
+        data: expect.objectContaining({ summary: caregiverSummary }),
+      });
+    });
+
+    it("conclude callback trims a padded caregiver summary before persisting", async () => {
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        patientId,
+        status: "active",
+        endedAt: null,
+        metadata: null,
+      });
+      p.aiSessionMessage.create.mockResolvedValue({});
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/conclude`)
+        .set("X-Api-Key", aiCallbackApiKey)
+        .send({ ...concludeBody, summary: `  ${caregiverSummary}\n` });
+
+      expect(res.status).toBe(200);
+      expect(p.aiSession.updateMany).toHaveBeenCalledWith({
+        where: { id: aiSessionId, status: "active", endedAt: null },
+        data: expect.objectContaining({ summary: caregiverSummary }),
+      });
+    });
+
+    it.each([
+      ["omitted", undefined],
+      ["explicitly null", null],
+    ])(
+      "conclude callback keeps the generated fallback summary when summary is %s",
+      async (_label, summaryValue) => {
+        p.aiSession.findUnique.mockResolvedValue({
+          id: aiSessionId,
+          patientId,
+          status: "active",
+          endedAt: null,
+          metadata: null,
+        });
+        p.aiSessionMessage.create.mockResolvedValue({});
+
+        const body =
+          summaryValue === undefined
+            ? concludeBody
+            : { ...concludeBody, summary: summaryValue };
+
+        const res = await request(app)
+          .post(`/api/ai-sessions/${aiSessionId}/conclude`)
+          .set("X-Api-Key", aiCallbackApiKey)
+          .send(body);
+
+        expect(res.status).toBe(200);
+        expect(p.aiSession.updateMany).toHaveBeenCalledWith({
+          where: { id: aiSessionId, status: "active", endedAt: null },
+          data: expect.objectContaining({
+            summary: fallbackConcludeSummary,
+          }),
+        });
+      }
+    );
+
+    it.each([
+      ["blank", "   "],
+      ["empty", ""],
+    ])("conclude callback rejects a %s summary with 400", async (_label, summaryValue) => {
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        patientId,
+        status: "active",
+        endedAt: null,
+        metadata: null,
+      });
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/conclude`)
+        .set("X-Api-Key", aiCallbackApiKey)
+        .send({ ...concludeBody, summary: summaryValue });
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe("VALIDATION_ERROR");
+      // A rejected payload must never touch the session or its transcript.
+      expect(p.aiSession.updateMany).not.toHaveBeenCalled();
+      expect(p.aiSessionMessage.create).not.toHaveBeenCalled();
+    });
+
+    it("conclude callback rejects an over-length summary with 400", async () => {
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        patientId,
+        status: "active",
+        endedAt: null,
+        metadata: null,
+      });
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/conclude`)
+        .set("X-Api-Key", aiCallbackApiKey)
+        .send({
+          ...concludeBody,
+          summary: "x".repeat(CAREGIVER_RESOLVE_SUMMARY_MAX_LENGTH + 1),
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe("VALIDATION_ERROR");
+      expect(p.aiSession.updateMany).not.toHaveBeenCalled();
+      expect(p.aiSessionMessage.create).not.toHaveBeenCalled();
+    });
+
+    it("conclude callback accepts a summary at exactly the maximum length", async () => {
+      const maxLengthSummary = "x".repeat(CAREGIVER_RESOLVE_SUMMARY_MAX_LENGTH);
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        patientId,
+        status: "active",
+        endedAt: null,
+        metadata: null,
+      });
+      p.aiSessionMessage.create.mockResolvedValue({});
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/conclude`)
+        .set("X-Api-Key", aiCallbackApiKey)
+        .send({ ...concludeBody, summary: maxLengthSummary });
+
+      expect(res.status).toBe(200);
+      expect(p.aiSession.updateMany).toHaveBeenCalledWith({
+        where: { id: aiSessionId, status: "active", endedAt: null },
+        data: expect.objectContaining({ summary: maxLengthSummary }),
+      });
+    });
+
+    it("repeated conclude never overwrites the first stored caregiver summary", async () => {
+      // A prior conclude already recorded aiConclusion and stored its summary.
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        patientId,
+        status: "resolved",
+        endedAt: new Date("2026-07-08T02:14:32+00:00"),
+        metadata: { aiConclusion: { anthony_session_id: "abc-123" } },
+      });
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/conclude`)
+        .set("X-Api-Key", aiCallbackApiKey)
+        .send({ ...concludeBody, summary: "A different, later summary." });
+
+      expect(res.status).toBe(200);
+      // No write path runs at all, so the stored summary cannot be replaced.
+      expect(p.aiSession.updateMany).not.toHaveBeenCalled();
+      expect(p.aiSession.update).not.toHaveBeenCalled();
+      expect(p.aiSessionMessage.create).not.toHaveBeenCalled();
+    });
+
+    it("a concurrent conclude loser carrying a summary writes nothing", async () => {
+      p.aiSession.findUnique
+        .mockResolvedValueOnce({
+          id: aiSessionId,
+          patientId,
+          status: "active",
+          endedAt: null,
+          metadata: null,
+        })
+        .mockResolvedValueOnce({
+          metadata: { aiConclusion: { received_at: "2026-07-08T02:14:32.000Z" } },
+        });
+      // The guarded transition matched no row: the winning callback already
+      // stored its summary and this one must not replace it.
+      p.aiSession.updateMany.mockResolvedValue({ count: 0 });
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/conclude`)
+        .set("X-Api-Key", aiCallbackApiKey)
+        .send({ ...concludeBody, summary: "Losing racer summary." });
+
+      expect(res.status).toBe(200);
+      expect(p.aiSession.update).not.toHaveBeenCalled();
+      expect(p.aiSessionMessage.create).not.toHaveBeenCalled();
+    });
+
+    it("conclude with a summary still ends linked streams and clears the frame", async () => {
+      p.aiSession.findUnique.mockResolvedValue({
+        id: aiSessionId,
+        patientId,
+        status: "active",
+        endedAt: null,
+        metadata: null,
+      });
+      p.aiSessionMessage.create.mockResolvedValue({});
+      p.streamSession.findMany.mockResolvedValue([
+        {
+          id: "glasses-stream-with-summary",
+          status: "active",
+          endedAt: null,
+          metadata: { aiSessionId, lastFrameSeq: 21 },
+        },
+      ]);
+      acceptLatestFrame({
+        aiSessionId,
+        patientId,
+        seq: 21,
+        capturedAt: "2026-07-08T02:14:00.000Z",
+        receivedAt: "2026-07-08T02:14:01.000Z",
+        image: null,
+        vision: { description: null, label: null, flags: [], advisoryFlags: [] },
+      });
+
+      const res = await request(app)
+        .post(`/api/ai-sessions/${aiSessionId}/conclude`)
+        .set("X-Api-Key", aiCallbackApiKey)
+        .send({ ...concludeBody, summary: caregiverSummary });
+
+      expect(res.status).toBe(200);
+      // Transcript persistence is unchanged by the new field.
+      expect(p.aiSessionMessage.create).toHaveBeenCalledTimes(2);
+      expect(p.streamSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "glasses-stream-with-summary" },
+          data: expect.objectContaining({
+            status: "ended",
+            endedAt: new Date("2026-07-08T02:14:32+00:00"),
+            metadata: expect.objectContaining({
+              endReason: "ai_session_concluded",
+              endedBy: "anthony_conclude_callback",
+              frameAvailable: false,
+            }),
+          }),
+        })
+      );
+      expect(getLatestFrame(aiSessionId)).toBeNull();
     });
 
     it("rejects escalation for a terminal session without writing an event", async () => {

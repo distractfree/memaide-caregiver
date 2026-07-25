@@ -274,6 +274,35 @@ This document provides a developer-facing reference for all implemented backend 
 - **Validation:** missing / empty / whitespace-only / oversized `summary` → `400`.
 - **Idempotency:** if the session is already `resolved`, the call ends any still-active associated stream and returns `200` **without** overwriting the existing summary.
 
+### `POST /api/ai-sessions/:sessionId/conclude`
+- **Auth:** `X-Api-Key: <AI_CALLBACK_API_KEY>`; server-to-server only, never a caregiver JWT.
+- **Purpose:** Anthony's AI backend concludes the session: it persists the transcript, transitions the session to `resolved` (or `error` when `status` is `"error"`/`"failed"`), ends any associated StreamSession, and clears the cached egocentric frame.
+- **Body:**
+  ```json
+  {
+    "id": "anthony-internal-session-id",
+    "patient_id": "guardianova-patient-id",
+    "related_caretaker_id": "caretaker-id-or-null",
+    "started_at": "2026-07-15T10:30:00+00:00",
+    "ended_at": "2026-07-15T10:45:00+00:00",
+    "handoff_at": null,
+    "handoff_type": "patient_ended",
+    "transcript": [
+      { "role": "agent", "text": "Hello, how can I help?", "ts": "2026-07-15T10:31:00+00:00", "scene_label": "kitchen" }
+    ],
+    "final_scene_label": "kitchen",
+    "escalated": false,
+    "status": "ended",
+    "outcome": "patient_ended",
+    "summary": "A concise 1–2 sentence caregiver summary based on the patient conversation."
+  }
+  ```
+  - `summary` — **optional**, nullable string, trimmed, min 1 char, max 2000 chars (the same authoritative cap as the caregiver resolve summary). When present on the **first** conclude callback it is persisted **verbatim** to `AiSession.summary` and is what the caregiver portal displays.
+  - When `summary` is omitted or `null`, the backend stores its generated fallback: `AI session concluded with outcome <outcome>. Final scene: <final_scene_label|unknown>.`
+- **Validation:** empty / whitespace-only / oversized `summary` → `400`; `patient_id` not matching the session → `400` (`CALLBACK_PATIENT_MISMATCH`). Neither case modifies the session.
+- **Idempotency:** if the session already carries `aiConclusion` metadata, the call ends any still-active associated stream, clears the frame, and returns `200` **without** rewriting the status, transcript, or the summary already stored. A summary sent on a repeat callback is ignored — send it with the first conclude.
+- **Errors:** `401` bad API key · `404` unknown session · `409` terminal session with no prior `aiConclusion` metadata.
+
 ---
 
 ## Beacons

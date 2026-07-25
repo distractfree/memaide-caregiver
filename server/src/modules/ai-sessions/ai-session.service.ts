@@ -771,6 +771,15 @@ export async function recordConcludeCallback(
     received_at: concludedAt.toISOString(),
   };
 
+  // The AI backend may include a caregiver-facing summary of the conversation.
+  // Persist it verbatim (the schema already trimmed and length-bounded it) and
+  // fall back to the generated line only when the field is absent or null.
+  // This value is applied exclusively by the guarded first-conclude transition
+  // below, so a repeated callback never overwrites an already stored summary.
+  const summary =
+    input.summary ??
+    `AI session concluded with outcome ${input.outcome}. Final scene: ${input.final_scene_label ?? "unknown"}.`;
+
   const alreadyConcluded = Boolean(existingMetadata.aiConclusion);
   if (alreadyConcluded) {
     await prisma.$transaction((tx) =>
@@ -797,7 +806,7 @@ export async function recordConcludeCallback(
       data: {
         status: nextStatus,
         endedAt,
-        summary: `AI session concluded with outcome ${input.outcome}. Final scene: ${input.final_scene_label ?? "unknown"}.`,
+        summary,
         metadata: {
           ...existingMetadata,
           aiConclusion: conclusionMetadata,
