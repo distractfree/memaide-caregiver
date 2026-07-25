@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from memaide import config
 from memaide.agent.brain import AgentBrain
+from memaide.agent.summarizer import SessionSummarizer
 from memaide.audio.stt import SpeechToText
 from memaide.audio.tts import TextToSpeech
 from memaide.io.openai_client import OpenAIClient
@@ -74,6 +75,7 @@ def build_components(client):
         registry=registry,
         reporter=reporter,
         notifier=notifier,
+        summarizer=SessionSummarizer(client),
     )
     return app, ws_deps, registry
 

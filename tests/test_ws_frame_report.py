@@ -1,5 +1,6 @@
 """The ws ``sink`` streams each described frame to koko via ``reporter.frame``."""
 
+import asyncio
 import json
 
 from memaide.audio.stt import STTEvent, StubSpeechToText
@@ -9,8 +10,18 @@ from memaide.server.ws import ServerDeps, handle
 
 
 class FakeWS:
-    def __init__(self, messages):
+    """Feeds canned messages, optionally waiting for each frame to be described first.
+
+    Without that wait the frames queue up together and the pipeline (correctly) drops the
+    backlog to describe only the newest one — see
+    test_vision_pipeline.test_pipeline_describes_newest_frame_and_drops_backlog. Gating on the
+    describer keeps "one report per described frame" testable without sleeping on wall time.
+    """
+
+    def __init__(self, messages, gate=None):
         self._it = iter(messages)
+        self._gate = gate
+        self._prev_was_frame = False
         self.sent = []
 
     def __aiter__(self):
@@ -18,23 +29,36 @@ class FakeWS:
 
     async def __anext__(self):
         try:
-            return next(self._it)
+            msg = next(self._it)
         except StopIteration:
             raise StopAsyncIteration
+        if self._gate is not None and self._prev_was_frame:
+            await self._gate.wait_for_describe()
+        self._prev_was_frame = json.loads(msg).get("type") == "frame"
+        return msg
 
     async def send(self, msg):
         self.sent.append(json.loads(msg))
 
 
 class _StubDescriber:
+    def __init__(self):
+        self._described = asyncio.Event()
+
     async def describe(self, frame):
+        self._described.set()
         return VisionContext(
             description="a kitchen", label="kitchen", advisory_flags=["tv_on"]
         )
 
+    async def wait_for_describe(self):
+        """Block until the frame handed over last has reached describe()."""
+        await asyncio.wait_for(self._described.wait(), timeout=1.0)
+        self._described.clear()
+
 
 class _StubBrain:
-    async def respond(self, transcript, vision=None):
+    async def respond(self, transcript, vision=None, extra_context=None, vision_pending=False):
         return AgentDecision(reply_text="I'm here.")
 
 
@@ -50,7 +74,7 @@ class _FrameReporter:
     async def escalation(self, session_id, decision):
         pass
 
-    async def conclude(self, session_id, record, outcome):
+    async def conclude(self, session_id, record, outcome, summary=None):
         pass
 
 
@@ -78,8 +102,11 @@ def _frame():
 
 async def test_sink_reports_each_described_frame_with_incrementing_seq():
     rep = _FrameReporter()
-    ws = FakeWS([_hello(), _frame(), _frame(), json.dumps({"type": "bye"})])
-    await handle(ws, _deps(reporter=rep))
+    describer = _StubDescriber()
+    ws = FakeWS(
+        [_hello(), _frame(), _frame(), json.dumps({"type": "bye"})], gate=describer
+    )
+    await handle(ws, _deps(reporter=rep, describer=describer))
 
     assert len(rep.frames) == 2
     assert [f[0] for f in rep.frames] == ["s1", "s1"]

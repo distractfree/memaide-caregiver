@@ -14,6 +14,15 @@ VISION_MODEL = "gpt-4o-mini"
 REALTIME_MODEL = "gpt-4o-mini-realtime-preview"  # DEPRECATED (M2): superseded by the STT->brain->TTS pipeline; kept, not wired.
 JUDGE_MODEL = "claude-opus-4-8"
 
+# --- Caregiver session summary (posted with the conclude callback) ---
+SUMMARY_MODEL = BRAIN_MODEL
+# The summarize call happens during session teardown, so it gets a short leash: past this the
+# summary is dropped rather than holding the conclude POST open.
+SUMMARY_TIMEOUT_SECONDS = 5.0
+# Hard cap on the stored summary. The prompt asks for two sentences (~300 chars); this is the
+# ceiling above which the text is trimmed back to a whole sentence or dropped.
+SUMMARY_MAX_CHARS = 400
+
 # --- Conversation ---
 OPENING_LINE = "Hi, I'm here to help. Can you tell me what's wrong?"
 EMERGENCY_SUGGESTION = "I'm going to call emergency services (911) for you now."

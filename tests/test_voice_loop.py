@@ -13,7 +13,7 @@ class StubBrain:
         self.decision = AgentDecision(reply_text=reply)
         self.seen_vision = "unset"
 
-    async def respond(self, transcript, vision=None):
+    async def respond(self, transcript, vision=None, extra_context=None, vision_pending=False):
         self.seen_vision = vision
         return self.decision
 

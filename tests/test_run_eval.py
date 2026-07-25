@@ -19,7 +19,7 @@ class StubBrain:
     def __init__(self, decision):
         self.decision = decision
 
-    async def respond(self, transcript, vision=None):
+    async def respond(self, transcript, vision=None, extra_context=None, vision_pending=False):
         return self.decision
 
 

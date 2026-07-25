@@ -86,12 +86,12 @@ session end it POSTs the transcript. Env vars (documented here, **not** in a com
 | Var | Purpose |
 | --- | --- |
 | `AI_AGENT_API_KEY` | Shared secret koko sends as `X-Api-Key` on inbound `/infer` and `/session/start`. Unset → inbound auth is disabled (dev only). |
-| `KOKO_BASE_URL` | Base URL my server POSTs escalation (`/ai-sessions/:id/escalation`) and conclude (`/ai-sessions/:id/conclude`) callbacks to. Unset → those callbacks become logged no-ops (standalone dev). |
+| `KOKO_BASE_URL` | Base URL my server POSTs escalation (`/api/ai-sessions/:id/escalation`) and conclude (`/api/ai-sessions/:id/conclude`) callbacks to. Unset → those callbacks become logged no-ops (standalone dev). |
 | `KOKO_API_KEY` | Secret my server sends to koko as `X-Api-Key` on the callbacks above. Symmetric to `AI_AGENT_API_KEY`. |
 
 Needs `OPENAI_API_KEY` (brain + vision + STT/TTS) and the `websockets` + `uvicorn` packages.
 
-#### Frame stream callback (`/ai-sessions/:id/frames`)
+#### Frame stream callback (`/api/ai-sessions/:id/frames`)
 
 Alongside escalation/conclude, my server streams **each described glasses frame** to koko so
 the caregiver UI can show a live frame-by-frame view. One `POST` per described frame (~1 every
@@ -100,7 +100,7 @@ is logged on my side and dropped — it never blocks or backpressures the live s
 `X-Api-Key` auth as the other callbacks; a no-op when `KOKO_BASE_URL` is unset.
 
 ```
-POST {KOKO_BASE_URL}/ai-sessions/{session_id}/frames
+POST {KOKO_BASE_URL}/api/ai-sessions/{session_id}/frames
 Header: X-Api-Key: {KOKO_API_KEY}
 Content-Type: application/json
 ```
@@ -130,6 +130,26 @@ Content-Type: application/json
   render directly in an `<img>`.
 - `vision.flags` — resolved rule-based flags for the scene; `vision.advisory_flags` — the
   describer's raw advisory flags.
+
+#### Caregiver summary on the conclude callback
+
+The conclude body carries one extra field beyond the `SessionRecord` + `outcome`:
+
+```json
+{
+  "summary": "The patient pressed help because she woke up not knowing where she was. I told her she was at home in her bedroom and kept her sitting until her caregiver could come."
+}
+```
+
+Written by `SessionSummarizer` (`src/memaide/agent/summarizer.py`) from the finished
+transcript, the final scene label, and the escalation flag — nothing else, so the patient
+profile can't be embellished into it. Two sentences, capped at `SUMMARY_MAX_CHARS`.
+
+`summary` is **omitted** whenever a trustworthy one can't be produced: no patient speech in
+the transcript, a model error, a timeout past `SUMMARY_TIMEOUT_SECONDS`, a malformed reply, or
+output too long to trim at a sentence break. An absent field is koko's signal to keep his own
+outcome-derived template — a generic summary is preferable to a confident wrong one. koko
+stores the field verbatim when present; a caregiver-entered resolution summary supersedes it.
 
 ### Glasses vision trace + live preview (Part A)
 

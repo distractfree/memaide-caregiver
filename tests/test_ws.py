@@ -39,7 +39,7 @@ class _StubDescriber:
 
 
 class _StubBrain:
-    async def respond(self, transcript, vision=None):
+    async def respond(self, transcript, vision=None, extra_context=None, vision_pending=False):
         return AgentDecision(reply_text="I'm here.")
 
 
@@ -279,8 +279,8 @@ class FakeReporter:
     async def escalation(self, session_id, decision):
         self.escalations.append((session_id, decision))
 
-    async def conclude(self, session_id, record, outcome):
-        self.concludes.append((session_id, record, outcome))
+    async def conclude(self, session_id, record, outcome, summary=None):
+        self.concludes.append((session_id, record, outcome, summary))
 
 
 def _hello_id_only(sid="s1"):
@@ -315,7 +315,7 @@ async def test_bye_concludes_with_patient_ended_and_drops_context():
     ws = FakeWS([_hello_id_only("s1"), _frame(), json.dumps({"type": "bye"})])
     await handle(ws, _deps(registry=reg, reporter=rep))
     assert len(rep.concludes) == 1
-    sid, record, outcome = rep.concludes[0]
+    sid, record, outcome, _summary = rep.concludes[0]
     assert sid == "s1" and outcome == "patient_ended"
     assert record.handoff_type.value == "patient_ended"
     assert await reg.wait_context("s1", timeout=0.01) is None  # dropped
@@ -328,3 +328,42 @@ async def test_disconnect_without_bye_concludes_with_disconnected():
     await handle(ws, _deps(registry=reg, reporter=rep))
     assert rep.concludes[0][2] == "disconnected"
     assert rep.concludes[0][1].handoff_type is None
+
+
+class FakeSummarizer:
+    def __init__(self, summary="She asked for help and I stayed with her."):
+        self.calls = []
+        self._summary = summary
+
+    async def summarize(self, record, outcome):
+        self.calls.append((record, outcome))
+        return self._summary
+
+
+async def test_conclude_carries_the_generated_caregiver_summary():
+    reg = _registry_with("s1")
+    rep = FakeReporter()
+    summarizer = FakeSummarizer()
+    ws = FakeWS([_hello_id_only("s1"), _frame(), json.dumps({"type": "bye"})])
+    await handle(ws, _deps(registry=reg, reporter=rep, summarizer=summarizer))
+    assert rep.concludes[0][3] == "She asked for help and I stayed with her."
+    # Summarized from the finished record, so the whole transcript is in scope.
+    record, outcome = summarizer.calls[0]
+    assert outcome == "patient_ended"
+    assert record.id == "s1"
+
+
+async def test_conclude_sends_no_summary_when_summarizer_declines():
+    reg = _registry_with("s1")
+    rep = FakeReporter()
+    ws = FakeWS([_hello_id_only("s1"), json.dumps({"type": "bye"})])
+    await handle(ws, _deps(registry=reg, reporter=rep, summarizer=FakeSummarizer(None)))
+    assert rep.concludes[0][3] is None
+
+
+async def test_conclude_without_a_summarizer_still_reports():
+    reg = _registry_with("s1")
+    rep = FakeReporter()
+    ws = FakeWS([_hello_id_only("s1"), json.dumps({"type": "bye"})])
+    await handle(ws, _deps(registry=reg, reporter=rep))  # no summarizer
+    assert rep.concludes[0][3] is None

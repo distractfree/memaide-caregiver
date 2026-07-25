@@ -39,7 +39,7 @@ async def test_escalation_posts_reason_and_triggered_by():
     fc = FakeClient()
     rep = KokoReporter(base_url="http://koko:4000", api_key="k", client=fc)
     await rep.escalation("s1", EscalationDecision(escalate=True, reason="fell", triggered_by=["vision"]))
-    assert fc.calls[0]["url"] == "http://koko:4000/ai-sessions/s1/escalation"
+    assert fc.calls[0]["url"] == "http://koko:4000/api/ai-sessions/s1/escalation"
     assert fc.calls[0]["json"] == {"reason": "fell", "triggered_by": ["vision"]}
     assert fc.calls[0]["headers"] == {"X-Api-Key": "k"}
 
@@ -49,10 +49,25 @@ async def test_conclude_posts_record_plus_outcome():
     rep = KokoReporter(base_url="http://koko:4000", client=fc)
     await rep.conclude("s1", _record(), "patient_ended")
     body = fc.calls[0]["json"]
-    assert fc.calls[0]["url"] == "http://koko:4000/ai-sessions/s1/conclude"
+    assert fc.calls[0]["url"] == "http://koko:4000/api/ai-sessions/s1/conclude"
     assert body["outcome"] == "patient_ended"
     assert body["transcript"][0]["text"] == "I fell"
     assert body["escalated"] is True
+
+
+async def test_conclude_includes_caregiver_summary_when_given():
+    fc = FakeClient()
+    rep = KokoReporter(base_url="http://koko:4000", client=fc)
+    await rep.conclude("s1", _record(), "patient_ended", summary="  She fell in the kitchen.  ")
+    assert fc.calls[0]["json"]["summary"] == "She fell in the kitchen."
+
+
+async def test_conclude_omits_summary_when_absent_or_blank():
+    for summary in (None, "", "   "):
+        fc = FakeClient()
+        rep = KokoReporter(base_url="http://koko:4000", client=fc)
+        await rep.conclude("s1", _record(), "patient_ended", summary=summary)
+        assert "summary" not in fc.calls[0]["json"]
 
 
 async def test_no_op_when_disabled_does_not_call_client():
@@ -84,7 +99,7 @@ async def test_frame_posts_image_and_vision():
     rep = KokoReporter(base_url="http://koko:4000", api_key="k", client=fc)
     await rep.frame("s1", _ctx(), "data:image/jpeg;base64,QUJD", 42)
     call = fc.calls[0]
-    assert call["url"] == "http://koko:4000/ai-sessions/s1/frames"
+    assert call["url"] == "http://koko:4000/api/ai-sessions/s1/frames"
     assert call["headers"] == {"X-Api-Key": "k"}
     body = call["json"]
     assert body["seq"] == 42

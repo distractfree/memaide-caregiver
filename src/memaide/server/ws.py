@@ -52,6 +52,9 @@ class ServerDeps:
     # Slice 2: when set, an escalation also sends the caregiver a WhatsApp caregiver alert.
     # Default None -> no WhatsApp (dev / no key). Built by run_session_server.
     notifier: Any = None
+    # When set, the caregiver summary is generated at teardown and sent with the conclude
+    # callback. Default None -> no summary field, and koko falls back to its own template.
+    summarizer: Any = None
 
 
 class _QueueSource:
@@ -317,8 +320,13 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
             cleanup.append(warmup_task)
         await asyncio.gather(*cleanup, return_exceptions=True)
         record = session.stop(_OUTCOME_HANDOFF.get(outcome))
+        summary = None
+        if deps.summarizer is not None:
+            # Returns None on any failure and enforces its own timeout, so teardown can't
+            # stall or die here.
+            summary = await deps.summarizer.summarize(record, outcome)
         if deps.reporter is not None and session_id is not None:
-            await deps.reporter.conclude(session_id, record, outcome)
+            await deps.reporter.conclude(session_id, record, outcome, summary=summary)
         if deps.registry is not None and session_id is not None:
             deps.registry.drop(session_id)
 

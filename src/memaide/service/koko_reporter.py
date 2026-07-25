@@ -37,10 +37,21 @@ class KokoReporter:
         )
 
     async def conclude(
-        self, session_id: str, record: SessionRecord, outcome: str
+        self,
+        session_id: str,
+        record: SessionRecord,
+        outcome: str,
+        summary: str | None = None,
     ) -> None:
+        """POST the finished session. ``summary`` is the caregiver-facing line koko stores.
+
+        Omitted from the body when there is no summary, which is koko's signal to keep its own
+        outcome template rather than show an empty field (see SessionSummarizer).
+        """
         body = record.model_dump(mode="json")
         body["outcome"] = outcome
+        if summary and summary.strip():
+            body["summary"] = summary.strip()
         await self._post(f"/api/ai-sessions/{session_id}/conclude", body)
 
     async def frame(
