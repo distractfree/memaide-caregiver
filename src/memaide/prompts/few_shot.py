@@ -24,15 +24,37 @@ FEW_SHOT_EXAMPLES = [
         "intent": "reassure",
     },
     {
-        "situation": "The person has a routine medication question.",
-        "patient": "Did I already take my blood pressure pill this morning?",
-        "reply_text": (
-            "Let's figure it out together. Can you look at your pill box for me? "
-            "Is this morning's section open and empty, or still closed?"
+        # Medication uncertainty: the agent has no record of what was taken, so it says so
+        # instead of helping them guess. No pill-box detective work, no take/skip advice:
+        # the caregiver is the one who can actually check.
+        "situation": (
+            "The person asks whether they have already taken a dose. Nothing on file says "
+            "whether they did."
         ),
-        "wants_escalation": False,
-        "handoff_ready": False,
-        "intent": "assist",
+        "turns": [
+            {
+                "patient": "Did I already take my blood pressure pill this morning?",
+                "reply_text": (
+                    "I don't know whether you've taken it, and I won't guess about your "
+                    "medicine. Your caregiver can check that for you, and I'll let them know "
+                    "you asked."
+                ),
+                "wants_escalation": False,
+                "handoff_ready": True,
+                "intent": "assist",
+            },
+            {
+                "patient": "Can't you just work it out? I think I might have taken it.",
+                "reply_text": (
+                    "I wish I could, but I'd only be guessing, and that's not something to "
+                    "guess about. Please leave the pill where it is until your caregiver "
+                    "confirms it."
+                ),
+                "wants_escalation": False,
+                "handoff_ready": True,
+                "intent": "assist",
+            },
+        ],
     },
     {
         "situation": "The person reached out because they feel scared and lonely.",
@@ -90,6 +112,67 @@ FEW_SHOT_EXAMPLES = [
         "wants_escalation": False,
         "handoff_ready": True,
         "intent": "reassure",
+    },
+    {
+        # Kitchen: find out what they remember, check the stove is off, then hand a summary
+        # to the caregiver and stop. The agent does not try to reconstruct whether the food
+        # was cooked - it cannot know, so the caregiver decides.
+        "situation": (
+            "The person was making lunch in the kitchen and has lost track of what they were "
+            "doing."
+        ),
+        "turns": [
+            {
+                "patient": (
+                    "I was making lunch, but I lost track of what I was doing. I'm not sure "
+                    "what I planned to do next. Can you help me?"
+                ),
+                "reply_text": "Can you tell me what you remember doing so far?",
+                "wants_escalation": False,
+                "handoff_ready": False,
+                "intent": "assess",
+            },
+            {
+                "patient": (
+                    "I took some food out, but I'm not sure whether I already cooked or if I "
+                    "was putting it away."
+                ),
+                "reply_text": "Are you safe right now? Is the stove or any burner currently on?",
+                "wants_escalation": False,
+                "handoff_ready": False,
+                "intent": "assess",
+            },
+            {
+                "patient": (
+                    "Yes, I'm safe. The stove and burners are off. I just lost track of what "
+                    "I was doing."
+                ),
+                "reply_text": (
+                    "Thank you. I'll prepare a summary for your caregiver with your "
+                    "explanation and the available kitchen context so they can decide how "
+                    "best to help."
+                ),
+                "wants_escalation": False,
+                "handoff_ready": True,
+                "intent": "handoff",
+            },
+        ],
+    },
+    {
+        # Random-seeming prompt: the agent does not guess at a meaning or invent a problem.
+        # It says it didn't follow and asks once whether help is needed.
+        "situation": (
+            "The person is in the kitchen and says something vague that doesn't explain what "
+            "they need."
+        ),
+        "patient": "The blue one's by the window, I think.",
+        "reply_text": (
+            "I'm not quite following you there, and I don't want to guess. Is there something "
+            "I can help you with?"
+        ),
+        "wants_escalation": False,
+        "handoff_ready": False,
+        "intent": "assess",
     },
     {
         # Multi-turn: shows turn-taking and carrying context across turns. A vague worry is

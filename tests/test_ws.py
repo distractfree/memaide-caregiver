@@ -237,9 +237,15 @@ async def test_handle_defaults_to_no_recording(tmp_path):
 class FakeNotifier:
     def __init__(self):
         self.calls = []
+        self.session_ends = []
 
-    async def notify(self, session_id, patient_name, caregiver, decision):
-        self.calls.append((session_id, patient_name, caregiver, decision))
+    async def notify(
+        self, session_id, patient_name, caregiver, decision, transcript=None, scene=None
+    ):
+        self.calls.append((session_id, patient_name, caregiver, decision, transcript, scene))
+
+    async def notify_session_end(self, session_id, patient_name, caregiver, summary):
+        self.session_ends.append((session_id, patient_name, caregiver, summary))
 
 
 async def test_escalation_invokes_notifier_with_caregiver():
@@ -264,11 +270,47 @@ async def test_escalation_invokes_notifier_with_caregiver():
     await handle(ws, deps)
 
     assert len(notifier.calls) == 1
-    session_id, patient_name, caregiver, decision = notifier.calls[0]
+    session_id, patient_name, caregiver, decision, transcript, _scene = notifier.calls[0]
     assert session_id == "s1"
     assert patient_name == "Rose"
     assert caregiver.name == "Anthony"
     assert decision.escalate is True
+    # the live transcript rides along so the alert can describe this situation
+    assert any(t.text == "I can't breathe" for t in transcript)
+
+
+async def test_every_session_notifies_the_caregiver_at_teardown():
+    """Not only escalations: a calm session still ends with a caregiver WhatsApp."""
+
+    class _Summarizer:
+        async def summarize(self, record, outcome):
+            return "Rose felt lonely and we talked until she settled."
+
+    reg = _registry_with("s1")
+    notifier = FakeNotifier()
+    ws = FakeWS([_hello_id_only(), _audio(), json.dumps({"type": "bye"})])
+    deps = _deps(
+        stt=StubSpeechToText([STTEvent("final", "I just wanted some company")]),
+        registry=reg,
+        notifier=notifier,
+        summarizer=_Summarizer(),
+    )
+    await handle(ws, deps)
+
+    assert notifier.calls == []  # nothing escalated
+    assert len(notifier.session_ends) == 1
+    session_id, patient_name, _caregiver, summary = notifier.session_ends[0]
+    assert session_id == "s1"
+    assert patient_name == "Rose"
+    assert summary == "Rose felt lonely and we talked until she settled."
+
+
+async def test_session_end_notify_sends_none_summary_when_unavailable():
+    reg = _registry_with("s1")
+    notifier = FakeNotifier()
+    ws = FakeWS([_hello_id_only(), json.dumps({"type": "bye"})])
+    await handle(ws, _deps(registry=reg, notifier=notifier))  # no summarizer wired
+    assert notifier.session_ends[0][3] is None
 
 
 class FakeReporter:

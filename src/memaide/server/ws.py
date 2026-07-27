@@ -49,7 +49,8 @@ class ServerDeps:
     # (patient carried in hello, no koko callbacks) so the bridge tester app still works.
     registry: Any = None
     reporter: Any = None
-    # Slice 2: when set, an escalation also sends the caregiver a WhatsApp caregiver alert.
+    # Slice 2: when set, an escalation sends the caregiver a WhatsApp alert, and every
+    # session sends a wrap-up at teardown.
     # Default None -> no WhatsApp (dev / no key). Built by run_session_server.
     notifier: Any = None
     # When set, the caregiver summary is generated at teardown and sent with the conclude
@@ -254,7 +255,16 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
             if deps.reporter is not None:
                 await deps.reporter.escalation(session_id, decision)
             if deps.notifier is not None:
-                await deps.notifier.notify(session_id, patient.name, caregiver, decision)
+                # Transcript + latest scene let the notifier describe THIS situation in the
+                # alert instead of a canned phrase. Copied: the session keeps appending.
+                await deps.notifier.notify(
+                    session_id,
+                    patient.name,
+                    caregiver,
+                    decision,
+                    transcript=list(session.transcript),
+                    scene=latest["scene"],
+                )
 
     frame_source = WebSocketFrameSource()
     audio_source = WebSocketAudioSource()
@@ -327,6 +337,12 @@ async def handle(websocket: Any, deps: ServerDeps) -> None:
             summary = await deps.summarizer.summarize(record, outcome)
         if deps.reporter is not None and session_id is not None:
             await deps.reporter.conclude(session_id, record, outcome, summary=summary)
+        if deps.notifier is not None and session_id is not None:
+            # Every help session ends with a caregiver WhatsApp, not only escalations. An
+            # escalated session sends twice on purpose: the alert, then how it ended.
+            await deps.notifier.notify_session_end(
+                session_id, patient.name, caregiver, summary
+            )
         if deps.registry is not None and session_id is not None:
             deps.registry.drop(session_id)
 

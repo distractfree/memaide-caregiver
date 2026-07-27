@@ -37,10 +37,11 @@ from memaide.vision.describer import VisionDescriber
 _log = logging.getLogger("memaide.session")
 
 
-def _build_notifier():
-    """Build the WhatsApp escalation notifier, or None when no token is configured."""
+def _build_notifier(client):
+    """Build the WhatsApp caregiver notifier, or None when no token is configured."""
     if not config.WHATSAPP_TOKEN or not config.WHATSAPP_PHONE_NUMBER_ID:
         return None
+    from memaide.notify.alert_summary import SituationSummarizer
     from memaide.notify.escalation_alert import EscalationNotifier
     from memaide.notify.whatsapp import WhatsAppSender
 
@@ -52,6 +53,7 @@ def _build_notifier():
         portal_base_url=config.CAREGIVER_PORTAL_BASE_URL,
         session_path=config.CAREGIVER_SESSION_PATH,
         fallback_to=config.WHATSAPP_TO,
+        situation_summarizer=SituationSummarizer(client),
     )
 
 
@@ -63,7 +65,7 @@ def build_components(client):
     """
     registry = SessionRegistry()
     reporter = KokoReporter(config.KOKO_BASE_URL, config.KOKO_API_KEY)
-    notifier = _build_notifier()
+    notifier = _build_notifier(client)
     app = create_app(
         ServiceDeps(make_brain=lambda p: AgentBrain(client, p), registry=registry)
     )

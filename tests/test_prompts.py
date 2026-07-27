@@ -101,6 +101,62 @@ def test_system_prompt_skips_inactive_medications():
     assert "OldDrug" not in prompt
 
 
+def test_system_prompt_refuses_to_guess_about_medicine():
+    prompt = build_system_prompt(PatientContext(patient_id="p", name="A")).lower()
+    assert "medicine (never guess)" in prompt
+    assert "no record of what the person has actually taken" in prompt
+    assert "pill boxes" in prompt                      # no working it out with them
+    assert "take, skip, or repeat a dose" in prompt
+    assert "caregiver can check" in prompt
+
+
+def test_system_prompt_covers_kitchen_and_vague_prompts():
+    prompt = build_system_prompt(PatientContext(patient_id="p", name="A")).lower()
+    assert "cooking" in prompt
+    assert "remember doing so far" in prompt           # ask before checking anything
+    assert "stove and burners are off" in prompt       # then the safety check
+    assert "summary for their caregiver" in prompt     # then hand off and stop
+    assert "vague" in prompt                           # ask, don't guess at what they meant
+
+
+def test_few_shot_medicine_example_says_it_does_not_know():
+    med = [ex for ex in FEW_SHOT_EXAMPLES if "dose" in ex["situation"].lower()]
+    assert med, "expected a medication-uncertainty example"
+    turns = _turns(med[0])
+    first = turns[0]["reply_text"].lower()
+    assert "don't know" in first
+    assert "guess" in first
+    # the question goes to the caregiver, and it never becomes an emergency
+    assert all(t["handoff_ready"] for t in turns)
+    assert not any(t["wants_escalation"] for t in turns)
+    # and it must not walk them through working it out themselves
+    assert "pill box" not in " ".join(t["reply_text"].lower() for t in turns)
+
+
+def test_few_shot_kitchen_example_checks_the_stove_then_hands_off():
+    kitchen = [ex for ex in FEW_SHOT_EXAMPLES if "kitchen" in ex["situation"].lower()
+               and "lunch" in ex["situation"].lower()]
+    assert kitchen, "expected a lost-track-while-cooking example"
+    turns = _turns(kitchen[0])
+    replies = [t["reply_text"].lower() for t in turns]
+    # asks what they remember before checking anything
+    assert "remember doing so far" in replies[0]
+    # the safety check names both the stove and the burners
+    assert any("stove" in r and "burner" in r for r in replies)
+    # and it ends on a caregiver summary, not on more digging
+    assert "summary for your caregiver" in replies[-1]
+    assert turns[-1]["handoff_ready"] is True
+    assert not any(t["wants_escalation"] for t in turns)
+
+
+def test_few_shot_has_a_vague_prompt_example():
+    vague = [ex for ex in FEW_SHOT_EXAMPLES if "vague" in ex["situation"].lower()]
+    assert vague, "expected a vague/random-prompt example"
+    turn = _turns(vague[0])[0]
+    assert "help you with" in turn["reply_text"].lower()
+    assert not turn["wants_escalation"]
+
+
 def test_few_shot_has_a_dementia_redirect_example():
     dementia = [ex for ex in FEW_SHOT_EXAMPLES if "dementia" in ex["situation"].lower()]
     assert dementia, "expected a dementia example"

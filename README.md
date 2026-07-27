@@ -170,17 +170,32 @@ The preview is a dependency-free page (stdlib `http.server`) that polls `latest.
 the minimal `MainActivity` (register glasses → Start), which runs `MediaBridgeService` with
 `EXTRA_AUDIO_ENABLED=false` (camera only, no mic). Needs `OPENAI_API_KEY`; WhatsApp is optional.
 
-### WhatsApp escalation notify (Cloud API)
+### WhatsApp caregiver notify (Cloud API)
 
-`scripts/send_whatsapp.py` sends a test message; the bridge server sends the same on escalation.
+`scripts/send_whatsapp.py` sends a test message; the session server sends the caregiver two
+kinds of message on the same `caregiver_alert` template:
+
+- **On escalation.** `{{3}}` says what is actually happening. `SituationSummarizer`
+  (`notify/alert_summary.py`) writes it from the live transcript plus the last scene: one
+  phrase, at most 15 words, transcript-only so nothing from the patient profile can leak. On
+  a timeout (3s), a model error, or a vision-only escalation with no patient speech, it falls
+  back to the static phrase mapped from the trigger code (e.g. "a possible fall").
+- **After every session.** At teardown, escalated or not, carrying the same summary koko's
+  portal shows. Missing summary falls back to `config.SESSION_SUMMARY_FALLBACK`. An escalated
+  session therefore sends twice: the alert, then how it ended.
+
+The template body reads "…is seeking immediate help. We are detecting signs of `{{3}}`", which
+suits the alert better than the wrap-up. A separate approved template for the wrap-up would
+read more naturally; switching to one only means a second template name in `_build_notifier`.
+
 Server-side vars (documented here, **not** in a committed `.env`):
 
 | Var | Purpose |
 | --- | --- |
 | `WHATSAPP_TOKEN` | Meta Cloud API token (24h test token or a permanent System User token). |
 | `WHATSAPP_PHONE_NUMBER_ID` | The sending test number's phone-number ID (stable). |
-| `WHATSAPP_TO` | Verified recipient (E.164, e.g. `+15551234567`). |
-| `WHATSAPP_TEMPLATE` | Escalation template name; defaults to `hello_world` until the custom `caregiver_alert` is used. |
+| `WHATSAPP_TO` | Verified recipient (E.164, e.g. `+15551234567`), used when koko's `/session/start` payload carries no caregiver phone. |
+| `WHATSAPP_TEMPLATE` | Caregiver template name; defaults to `hello_world` until the custom `caregiver_alert` is used. |
 | `WHATSAPP_LANG` | Template language code (default `en_US`; the `caregiver_alert` template is `en`, not `en_US`). |
 
 Free-form `send_text` only delivers within 24h of the recipient messaging the business number,

@@ -23,6 +23,21 @@ SUMMARY_TIMEOUT_SECONDS = 5.0
 # ceiling above which the text is trimmed back to a whole sentence or dropped.
 SUMMARY_MAX_CHARS = 400
 
+# --- Caregiver WhatsApp alert ({{3}} situation line) ---
+ALERT_SUMMARY_MODEL = BRAIN_MODEL
+# This one runs mid-session on the escalation path, so it gets a shorter leash than the
+# conclude summary: past this the static trigger phrase is sent instead.
+ALERT_SUMMARY_TIMEOUT_SECONDS = 3.0
+# Cap for the {{3}} variable. The prompt asks for at most 15 words; longer is cut back to a
+# whole word. Well under Meta's per-variable limit.
+ALERT_SUMMARY_MAX_CHARS = 140
+# Cap for {{3}} on the end-of-session message, which carries the same summary koko's portal
+# shows. Longer than the alert phrase because it is a whole sentence or two.
+SESSION_SUMMARY_MAX_CHARS = 280
+# {{3}} when a session ends with no usable summary (no patient speech, or the summarizer
+# returned nothing).
+SESSION_SUMMARY_FALLBACK = "a help session that has now ended"
+
 # --- Conversation ---
 OPENING_LINE = "Hi, I'm here to help. Can you tell me what's wrong?"
 EMERGENCY_SUGGESTION = "I'm going to call emergency services (911) for you now."
